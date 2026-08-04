@@ -1,4 +1,4 @@
-# loveCatz: All in One WooCommerce Complement
+# 🐱 loveCatz: All in One WooCommerce Complement
 
 **A powerful WooCommerce extension** that streamlines user management, membership handling, and shipping — all in one plugin.
 
