@@ -1,12 +1,12 @@
 <?php
 /**
  * Plugin Name: LoveCatz WooCommerce Complement
- * Plugin URI:  https://example.com/
- * Description: A comprehensive complement for WooCommerce including multilanguage support, currency conversion, and courier integrations (starting with J&T Express).
+ * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
+ * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
  * Version:     1.0.0
- * Author:      Your Name
- * Author URI:  https://example.com/
- * Text Domain: lovecatz-wc
+ * Author:      Fitra Fadilana
+ * Author URI:  https://fitrafadilana.my.id
+ * Text Domain: lovecatz-woocommerce-complement
  * Domain Path: /languages
  * Requires at least: 5.8
  * Requires PHP: 7.4
