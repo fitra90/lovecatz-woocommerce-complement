@@ -430,7 +430,6 @@ class LWC_Admin_Settings {
 			<?php wp_nonce_field( 'lwc_import_users_action', 'lwc_import_users_nonce' ); ?>
 			<p><?php esc_html_e( 'Upload an Excel (.xlsx) or CSV file. All imported users will receive the Customer role.', 'lovecatz-wc' ); ?></p>
 			<input type="file" name="lwc_import_file" accept=".csv,.xlsx" required />
-			<p class="description"><?php esc_html_e( 'Supported columns: ID_PELANGGAN, First Name, Last Name, Email or E-Mail Address, Phone, Street Address/Street Adress, City, State/Region, Postal Code, and Country.', 'lovecatz-wc' ); ?></p>
 			<?php submit_button( __( 'Import Members', 'lovecatz-wc' ), 'primary', 'lwc_import_users_submit' ); ?>
 		</form>
 		<?php
@@ -554,6 +553,23 @@ class LWC_Admin_Settings {
 			wp_die( esc_html__( 'You do not have permission to download this template.', 'lovecatz-wc' ) );
 		}
 
+		$template_path = $this->get_member_import_template_source_path();
+		if ( $template_path ) {
+			$template_name = basename( $template_path );
+			$extension     = strtolower( pathinfo( $template_name, PATHINFO_EXTENSION ) );
+			$mime_type     = 'application/vnd.ms-excel';
+			if ( 'xlsx' === $extension ) {
+				$mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+			}
+
+			nocache_headers();
+			header( 'Content-Type: ' . $mime_type );
+			header( 'Content-Disposition: attachment; filename="' . $template_name . '"' );
+			header( 'Content-Length: ' . filesize( $template_path ) );
+			readfile( $template_path );
+			exit;
+		}
+
 		if ( ! class_exists( 'ZipArchive' ) ) {
 			wp_die( esc_html__( 'The PHP ZIP extension is required to generate the Excel template.', 'lovecatz-wc' ) );
 		}
@@ -586,14 +602,34 @@ class LWC_Admin_Settings {
 	}
 
 	/**
+	 * Resolve a project-root CRM workbook to use as the template when available.
+	 *
+	 * @return string
+	 */
+	private function get_member_import_template_source_path() {
+		$candidates = array(
+			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xls',
+			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xlsx',
+		);
+
+		foreach ( $candidates as $candidate ) {
+			if ( is_file( $candidate ) && is_readable( $candidate ) ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Build the minimal XLSX package used by the download template.
 	 *
 	 * @return array
 	 */
 	private function get_member_import_template_files() {
 		$headers   = array(
-			'ID_PELANGGAN', 'First Name', 'Last Name', 'E-Mail Address', 'Phone', 'Street Address', 'City',
-			'State/Region', 'Postal Code', 'Country',
+			'External ID', 'Name', 'Company Name', 'Contact Name', 'Email', 'Job Position', 'Phone', 'Mobile',
+			'Street', 'Street2', 'City', 'State', 'Zip', 'Country', 'Website', 'Notes',
 		);
 		$cells     = array();
 		foreach ( $headers as $index => $header ) {
@@ -899,35 +935,40 @@ class LWC_Admin_Settings {
 		$imported = 0;
 		$skipped   = 0;
 		$errors    = array();
-
+ 
 		foreach ( $rows as $row ) {
-			// The last duplicate "ID" column in the legacy CSV export contains
-			// the customer ID, so it remains supported as a safe fallback.
-			$main_id = sanitize_text_field( $this->get_row_value( $row, array( 'id_pelanggan', 'customer_id', 'id_customer', 'id' ) ) );
+			// FIX: added 'external_id' so it matches the "External ID" column
+			// used by the current .xlsx template (Odoo-style CRM export),
+			// while still supporting the legacy CSV column names.
+			$main_id = sanitize_text_field( $this->get_row_value( $row, array( 'id_pelanggan', 'customer_id', 'id_customer', 'external_id', 'id' ) ) );
 			$email   = $this->get_row_value( $row, array( 'email', 'e_mail_address', 'email_address', 'user_email' ) );
 			if ( '' === $main_id ) {
 				$skipped++;
-				$errors[] = __( 'Skipped a row because ID_PELANGGAN is required.', 'lovecatz-wc' );
+				$errors[] = __( 'Skipped a row because an ID (External ID / ID_PELANGGAN) is required.', 'lovecatz-wc' );
 				continue;
 			}
-
+ 
 			$username = sanitize_user( $main_id, true );
 			if ( '' === $username ) {
 				$skipped++;
 				$errors[] = sprintf( __( 'Skipped customer ID %s because it cannot be used as a login.', 'lovecatz-wc' ), $main_id );
 				continue;
 			}
-
+ 
 			if ( '' === $email || ! is_email( $email ) ) {
 				$email = $this->get_placeholder_email( '' !== $main_id ? $main_id : $username );
 			}
-
+ 
 			if ( username_exists( $username ) || email_exists( $email ) ) {
 				$skipped++;
 				$errors[] = sprintf( __( 'Skipped %s because the user already exists.', 'lovecatz-wc' ), $username );
 				continue;
 			}
-
+ 
+			// FIX: the current template only has a single "Name" (or "Contact
+			// Name") column instead of separate First/Last Name columns.
+			// Try explicit first/last name columns first (legacy support),
+			// then fall back to splitting a single full-name column.
 			$first_name = isset( $row['first_name'] ) ? sanitize_text_field( $row['first_name'] ) : '';
 			$last_name  = isset( $row['last_name'] ) ? sanitize_text_field( $row['last_name'] ) : '';
 			if ( '' === $first_name ) {
@@ -936,24 +977,45 @@ class LWC_Admin_Settings {
 			if ( '' === $last_name ) {
 				$last_name = $this->get_row_value( $row, array( 'last_name', 'last', 'nama_belakang' ) );
 			}
+ 
+			if ( '' === $first_name && '' === $last_name ) {
+				$full_name = $this->get_row_value( $row, array( 'name', 'contact_name' ) );
+				if ( '' !== $full_name ) {
+					$name_parts = preg_split( '/\s+/', trim( $full_name ), 2 );
+					$first_name = $name_parts[0];
+					$last_name  = isset( $name_parts[1] ) ? $name_parts[1] : '';
+				}
+			}
+			$company_name = sanitize_text_field( $this->get_row_value( $row, array( 'company_name' ) ) );
+			if ( '' === $first_name && '' === $last_name && '' !== $company_name ) {
+				$first_name = $company_name;
+			}
 			$first_name = sanitize_text_field( $first_name );
 			$last_name  = sanitize_text_field( $last_name );
-
+ 
 			// This import belongs to the Store Members feature, so imported users
 			// always receive WooCommerce's customer role regardless of file contents.
 			$role = 'customer';
-
+ 
 			// Imported members use their customer ID as the initial password so
 			// they can sign in with ID_PELANGGAN for both login fields.
 			$password = $main_id;
-
-			$street   = sanitize_text_field( $this->get_row_value( $row, array( 'street_adress', 'street_address', 'address', 'address_1' ) ) );
+ 
+			// FIX: added 'street' so it matches the "Street" column used by
+			// the current .xlsx template, while still supporting legacy names.
+			$street   = sanitize_text_field( $this->get_row_value( $row, array( 'street_adress', 'street_address', 'street', 'address', 'address_1' ) ) );
+			$street2  = sanitize_text_field( $this->get_row_value( $row, array( 'street2' ) ) );
+			if ( '' !== $street2 ) {
+				$street = trim( $street . ' ' . $street2 );
+			}
 			$city     = sanitize_text_field( $this->get_row_value( $row, array( 'city' ) ) );
 			$state    = sanitize_text_field( $this->get_row_value( $row, array( 'state_region', 'state', 'region' ) ) );
 			$postcode = sanitize_text_field( $this->get_row_value( $row, array( 'postal_code', 'postcode', 'zip' ) ) );
 			$country  = sanitize_text_field( $this->get_row_value( $row, array( 'country' ) ) );
+			// FIX: fall back to "mobile" if "phone" is empty, since the
+			// template provides both columns and either may be filled in.
 			$phone    = sanitize_text_field( $this->get_row_value( $row, array( 'phone', 'phone_number', 'mobile', 'nomor_hp' ) ) );
-
+ 
 			$user_data = array(
 				'user_login'   => $username,
 				'user_email'   => $email,
@@ -963,7 +1025,7 @@ class LWC_Admin_Settings {
 				'role'         => $role,
 				'display_name' => trim( $first_name . ' ' . $last_name ),
 			);
-
+ 
 			$user_id = wp_insert_user( $user_data );
 			if ( is_wp_error( $user_id ) ) {
 				$skipped++;
@@ -972,7 +1034,7 @@ class LWC_Admin_Settings {
 				if ( '' !== $main_id ) {
 					update_user_meta( $user_id, 'lwc_customer_id', $main_id );
 				}
-
+ 
 				if ( '' !== $first_name ) {
 					update_user_meta( $user_id, 'billing_first_name', $first_name );
 					update_user_meta( $user_id, 'shipping_first_name', $first_name );
@@ -981,7 +1043,11 @@ class LWC_Admin_Settings {
 					update_user_meta( $user_id, 'billing_last_name', $last_name );
 					update_user_meta( $user_id, 'shipping_last_name', $last_name );
 				}
-
+				if ( '' !== $company_name ) {
+					update_user_meta( $user_id, 'billing_company', $company_name );
+					update_user_meta( $user_id, 'shipping_company', $company_name );
+				}
+ 
 				if ( '' !== $street ) {
 					update_user_meta( $user_id, 'billing_address_1', $street );
 					update_user_meta( $user_id, 'shipping_address_1', $street );
@@ -1005,16 +1071,16 @@ class LWC_Admin_Settings {
 				if ( '' !== $phone ) {
 					update_user_meta( $user_id, 'billing_phone', $phone );
 				}
-
+ 
 				$imported++;
 			}
 		}
-
+ 
 		$message = sprintf( __( 'Imported %d user(s). Skipped %d row(s).', 'lovecatz-wc' ), $imported, $skipped );
 		if ( ! empty( $errors ) ) {
 			$message .= ' ' . implode( ' ', array_slice( $errors, 0, 5 ) );
 		}
-
+ 
 		return array(
 			'success' => $imported > 0,
 			'message' => $message,
