@@ -25,6 +25,7 @@ class LWC_Admin_Settings {
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_init', array( $this, 'handle_user_import' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 		add_action( 'admin_post_lwc_print_member_card', array( $this, 'print_member_card' ) );
 		add_action( 'admin_post_lwc_print_own_member_card', array( $this, 'print_own_member_card' ) );
 		add_action( 'admin_post_lwc_delete_store_member', array( $this, 'delete_store_member' ) );
@@ -36,33 +37,50 @@ class LWC_Admin_Settings {
 	 * Add the settings page to the admin menu.
 	 */
 	public function add_settings_page() {
+		$menu_title = get_option( 'lwc_menu_title', __( 'LoveCatz', 'lovecatz-wc' ) );
+		$menu_icon  = get_option( 'lwc_menu_icon', 'dashicons-pets' );
+
 		add_menu_page(
 			__( 'LoveCatz', 'lovecatz-wc' ),
-			__( 'LoveCatz', 'lovecatz-wc' ),
+			$menu_title,
 			'manage_woocommerce',
 			'lovecatz-wc',
 			array( $this, 'render_settings_page' ),
-			'dashicons-pets',
+			$menu_icon,
 			56
 		);
+	}
+
+	/**
+	 * Enqueue admin scripts and styles for the plugin settings page.
+	 */
+	public function enqueue_admin_assets( $hook ) {
+		if ( get_current_screen() && 'toplevel_page_lovecatz-wc' !== get_current_screen()->id ) {
+			return;
+		}
+
+		wp_enqueue_style( 'dashicons' );
+		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.css', array(), LWC_VERSION );
+		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
 	}
 
 	/**
 	 * Render the settings page with tabs.
 	 */
 	public function render_settings_page() {
-		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'couriers';
+		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings';
 		if ( 'import-users' === $active_tab ) {
 			$active_tab = 'store-members';
 		}
-		if ( ! in_array( $active_tab, array( 'couriers', 'currency', 'store-members' ), true ) ) {
-			$active_tab = 'couriers';
+		if ( ! in_array( $active_tab, array( 'settings', 'couriers', 'currency', 'store-members' ), true ) ) {
+			$active_tab = 'settings';
 		}
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
 
 			<h2 class="nav-tab-wrapper">
+				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo $active_tab === 'store-members' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=couriers" class="nav-tab <?php echo $active_tab === 'couriers' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Couriers', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo $active_tab === 'currency' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
@@ -70,7 +88,15 @@ class LWC_Admin_Settings {
 
 			<?php $this->render_import_result_notice(); ?>
 
-			<?php if ( 'couriers' === $active_tab ) : ?>
+			<?php if ( 'settings' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php
+					settings_fields( 'lwc_general_options' );
+					do_settings_sections( 'lwc_general_options' );
+					submit_button();
+					?>
+				</form>
+			<?php elseif ( 'couriers' === $active_tab ) : ?>
 				<form method="post" action="options.php">
 					<?php
 					settings_fields( 'lwc_couriers_options' );
@@ -128,6 +154,33 @@ class LWC_Admin_Settings {
 			'lwc_couriers_options',
 			'lwc_couriers_section_jt'
 		);
+
+		// General Settings for admin menu customizations.
+		register_setting( 'lwc_general_options', 'lwc_menu_title', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_general_options', 'lwc_menu_icon', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+
+		add_settings_section(
+			'lwc_general_section_menu',
+			__( 'Admin Menu Appearance', 'lovecatz-wc' ),
+			array( $this, 'render_menu_section_intro' ),
+			'lwc_general_options'
+		);
+
+		add_settings_field(
+			'lwc_menu_title',
+			__( 'Sidebar Name', 'lovecatz-wc' ),
+			array( $this, 'render_menu_title_field' ),
+			'lwc_general_options',
+			'lwc_general_section_menu'
+		);
+
+		add_settings_field(
+			'lwc_menu_icon',
+			__( 'Sidebar Icon', 'lovecatz-wc' ),
+			array( $this, 'render_menu_icon_field' ),
+			'lwc_general_options',
+			'lwc_general_section_menu'
+		);
 	}
 
 	/**
@@ -160,6 +213,48 @@ class LWC_Admin_Settings {
 		$value = get_option( 'lwc_jt_test_mode', 'no' );
 		$checked = 'yes' === $value ? 'checked' : '';
 		echo '<input type="checkbox" name="lwc_jt_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+	}
+
+	/**
+	 * Render introductory text for the general settings section.
+	 */
+	public function render_menu_section_intro() {
+		echo '<p>' . esc_html__( 'Customize the sidebar name and icon shown for the LoveCatz admin menu. Choose a Dashicon from the official WordPress reference below.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Render the menu title field.
+	 */
+	public function render_menu_title_field() {
+		$value = get_option( 'lwc_menu_title', __( 'LoveCatz', 'lovecatz-wc' ) );
+		echo '<input type="text" name="lwc_menu_title" value="' . esc_attr( $value ) . '" class="regular-text" />';
+	}
+
+	/**
+	 * Render the menu icon field.
+	 */
+	public function render_menu_icon_field() {
+		$value = get_option( 'lwc_menu_icon', 'dashicons-pets' );
+		echo '<input type="text" id="lwc_menu_icon_class" name="lwc_menu_icon" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<p class="description">' . esc_html__( 'Enter a Dashicons class such as dashicons-admin-home, dashicons-store, or dashicons-heart. See the full list at the official WordPress Dashicons page.', 'lovecatz-wc' ) . ' <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener noreferrer">' . esc_html__( 'View Dashicons', 'lovecatz-wc' ) . '</a></p>';
+		echo '<div class="lwc-dashicon-choices">';
+		$icons = array(
+			'dashicons-admin-home',
+			'dashicons-store',
+			'dashicons-heart',
+			'dashicons-cart',
+			'dashicons-groups',
+			'dashicons-universal-access',
+			'dashicons-star-filled',
+			'dashicons-awards',
+			'dashicons-admin-site',
+			'dashicons-admin-tools',
+		);
+		foreach ( $icons as $icon ) {
+			$selected = $value === $icon ? ' selected' : '';
+			echo '<button type="button" class="lwc-dashicon-choice' . $selected . '" data-icon="' . esc_attr( $icon ) . '"><span class="dashicons ' . esc_attr( $icon ) . '"></span><span class="dashicon-label">' . esc_html( str_replace( 'dashicons-', '', $icon ) ) . '</span></button>';
+		}
+		echo '</div>';
 	}
 
 	/**
