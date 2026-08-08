@@ -293,10 +293,10 @@ class LWC_Admin_Settings {
 		}
 
 		$extension = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
-		if ( ! in_array( $extension, array( 'csv', 'xlsx' ), true ) ) {
+		if ( ! in_array( $extension, array( 'csv', 'xlsx', 'xls' ), true ) ) {
 			$this->last_import_result = array(
 				'success' => false,
-				'message' => __( 'Only CSV and .xlsx files are supported.', 'lovecatz-wc' ),
+				'message' => __( 'Only CSV, .xls and .xlsx files are supported.', 'lovecatz-wc' ),
 			);
 			return;
 		}
@@ -313,7 +313,7 @@ class LWC_Admin_Settings {
 		$rows = array();
 		if ( 'csv' === $extension ) {
 			$rows = $this->parse_csv_file( $file['tmp_name'] );
-		} else {
+		} elseif ( 'xlsx' === $extension ) {
 			if ( ! class_exists( 'ZipArchive' ) ) {
 				$this->last_import_result = array(
 					'success' => false,
@@ -323,6 +323,16 @@ class LWC_Admin_Settings {
 				return;
 			}
 			$rows = $this->parse_xlsx_file( $file['tmp_name'] );
+		} else {
+			$rows = $this->parse_xls_file( $file['tmp_name'] );
+			if ( empty( $rows ) ) {
+				$this->last_import_result = array(
+					'success' => false,
+					'message' => __( 'The uploaded .xls file could not be parsed. Please save it as .xlsx or CSV if the file is not in a supported format.', 'lovecatz-wc' ),
+				);
+				@unlink( $file['tmp_name'] );
+				return;
+			}
 		}
 
 		if ( empty( $rows ) ) {
@@ -428,8 +438,8 @@ class LWC_Admin_Settings {
 		<p><a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=lwc_download_member_import_template' ), 'lwc_download_member_import_template' ) ); ?>"><?php esc_html_e( 'Download Excel Template', 'lovecatz-wc' ); ?></a></p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=lovecatz-wc&tab=store-members' ) ); ?>" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'lwc_import_users_action', 'lwc_import_users_nonce' ); ?>
-			<p><?php esc_html_e( 'Upload an Excel (.xlsx) or CSV file. All imported users will receive the Customer role.', 'lovecatz-wc' ); ?></p>
-			<input type="file" name="lwc_import_file" accept=".csv,.xlsx" required />
+			<p><?php esc_html_e( 'Upload an Excel (.xls/.xlsx) or CSV file. All imported users will receive the Customer role.', 'lovecatz-wc' ); ?></p>
+			<input type="file" name="lwc_import_file" accept=".csv,.xls,.xlsx" required />
 			<?php submit_button( __( 'Import Members', 'lovecatz-wc' ), 'primary', 'lwc_import_users_submit' ); ?>
 		</form>
 		<?php
@@ -500,30 +510,87 @@ class LWC_Admin_Settings {
 		$member      = get_userdata( $user_id );
 		$customer_id = get_user_meta( $user_id, 'lwc_customer_id', true );
 		$phone       = get_user_meta( $user_id, 'billing_phone', true );
+		$logo_url    = LWC_PLUGIN_URL . 'assets/logo.webp';
+		$product_url = LWC_PLUGIN_URL . 'assets/product.png';
+		$qr_url      = $this->get_qr_code_url( 'https://ddistillers.com/my-account' );
 		?>
-		<!doctype html>
-		<html <?php language_attributes(); ?>>
+		<!DOCTYPE html>
+		<html lang="en">
 		<head>
-			<meta charset="<?php bloginfo( 'charset' ); ?>">
-			<title><?php esc_html_e( 'Member Card', 'lovecatz-wc' ); ?></title>
-			<style>
-				body { margin: 0; font-family: Arial, sans-serif; background: #f0f0f1; }
-				.card { box-sizing: border-box; width: 86mm; min-height: 54mm; margin: 24px auto; padding: 16px; color: #fff; border-radius: 10px; background: linear-gradient(135deg, #3a186e, #a33bab); }
-				.card h1 { margin: 0 0 22px; font-size: 22px; } .label { font-size: 11px; opacity: .8; text-transform: uppercase; } .value { margin: 3px 0 13px; font-size: 15px; font-weight: 700; }
-				@media print { body { background: transparent; } .card { margin: 0; } }
-			</style>
+		<meta charset="<?php bloginfo( 'charset' ); ?>">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title><?php esc_html_e( 'Member Card', 'lovecatz-wc' ); ?></title>
+		<style>
+		@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap');
+		*{margin:0;padding:0;box-sizing:border-box;}
+		body{background:#111;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:'Manrope',sans-serif;color:#1d5d63;}
+		.card{width:1120px;height:740px;background:linear-gradient(135deg,#fbfaf6,#f5eddc,#fffaf1);border-radius:36px;overflow:hidden;position:relative;padding:40px;box-shadow:0 20px 45px rgba(0,0,0,.18);}
+		.card::after{content:"";position:absolute;top:0;right:0;width:48%;height:48%;background:radial-gradient(circle at top right, rgba(0,88,104,.14), transparent 50%);opacity:.18;}
+		.header{display:flex;justify-content:space-between;align-items:center;gap:20px;}
+		.logo{width:240px;height:72px;background:transparent;border-radius:22px;display:flex;align-items:center;justify-content:flex-start;padding-left:12px;}
+		.logo img{max-width:100%;max-height:100%;object-fit:contain;}
+		.club{font-family:'Cormorant Garamond',serif;font-size:34px;color:#005868;font-weight:700;letter-spacing:1px;line-height:1.1;}
+		.content{display:flex;margin-top:30px;height:590px;gap:30px;}
+		.left{flex:0.6;display:flex;flex-direction:column;justify-content:space-between;}
+		.name{color:#005868;font-family:'Cormorant Garamond',serif;font-size:62px;font-weight:700;line-height:1.05;max-width:100%;}
+		.member{width:100%;max-width:560px;height:72px;border:3px solid #c9a45b;border-radius:36px;display:flex;align-items:center;padding-left:30px;font-size:34px;color:#295e65;font-family:'Manrope',sans-serif;}
+		.member-title{margin-top:18px;font-family:'Cormorant Garamond',serif;font-size:28px;color:#1d5d63;font-weight:500;}
+		.bottom{display:flex;align-items:flex-start;gap:24px;}
+		.qr{width:190px;height:190px;background:#fff;border-radius:28px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.08);}
+		.qr img{width:100%;height:100%;object-fit:cover;display:block;}
+		.gift{color:#005868;font-family:'Manrope',sans-serif;max-width:320px;}
+		.gift h2{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;margin-bottom:10px;}
+		.gift p{font-size:20px;line-height:1.35;margin:0;}
+		.icon{font-size:60px;color:#c9a45b;margin-left:10px;}
+		.right{flex:0.4;display:flex;justify-content:center;align-items:center;}
+		.product{width:100%;height:100%;background:rgba(0,88,104,.08);border-radius:32px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+		.product img{width:100%;height:100%;object-fit:cover;display:block;}
+		@media(max-width:900px){.card{width:95%;height:auto;padding:24px;}.content{flex-direction:column;}.member{width:100%;}.right{width:100%;justify-content:center;margin-top:30px;}.product{width:100%;height:320px;}.name{font-size:42px;}}
+		@media print { body {background:#fff;} .card { box-shadow:none; margin:0; width:auto; height:auto; } }
+		</style>
 		</head>
-		<body onload="window.print()">
-			<div class="card">
-				<h1><?php esc_html_e( 'MEMBER CARD', 'lovecatz-wc' ); ?></h1>
-				<div class="label"><?php esc_html_e( 'Name', 'lovecatz-wc' ); ?></div><div class="value"><?php echo esc_html( $member->display_name ); ?></div>
-				<div class="label"><?php esc_html_e( 'Customer ID', 'lovecatz-wc' ); ?></div><div class="value"><?php echo esc_html( $customer_id ); ?></div>
-				<div class="label"><?php esc_html_e( 'Phone Number', 'lovecatz-wc' ); ?></div><div class="value"><?php echo esc_html( $phone ); ?></div>
+		<body>
+		<div class="card">
+			<div class="header">
+				<div class="logo"><img src="<?php echo esc_url( $logo_url ); ?>" alt="DD Distillers" /></div>
+				<div class="club"><?php esc_html_e( 'MEMBERSHIP CLUB', 'lovecatz-wc' ); ?></div>
 			</div>
+			<div class="content">
+				<div class="left">
+					<div>
+						<div class="name"><?php echo esc_html( $member->display_name ); ?></div>
+						<div class="member"><?php echo esc_html( $customer_id ); ?></div>
+						<div class="member-title"><?php esc_html_e( 'ID PELANGGAN (Nomor Anggota)', 'lovecatz-wc' ); ?></div>
+					</div>
+					<div class="bottom">
+						<div class="qr"><img src="<?php echo esc_url( $qr_url ); ?>" alt="QR Code" /></div>
+						<div class="gift">
+							<h2><?php esc_html_e( 'DAPATKAN GIFT DI:', 'lovecatz-wc' ); ?></h2>
+							<p><?php esc_html_e( 'www.ddistillers.com', 'lovecatz-wc' ); ?></p>
+						</div>
+						<div class="icon">🎁</div>
+					</div>
+				</div>
+				<div class="right">
+					<div class="product"><img src="<?php echo esc_url( $product_url ); ?>" alt="Product" /></div>
+				</div>
+			</div>
+		</div>
 		</body>
 		</html>
 		<?php
 		exit;
+	}
+
+	/**
+	 * Get a QR code image URL for the supplied data.
+	 *
+	 * @param string $data QR payload.
+	 * @return string
+	 */
+	private function get_qr_code_url( $data ) {
+		$encoded = rawurlencode( $data );
+		return 'https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=' . $encoded . '&margin=10';
 	}
 
 	/**
@@ -704,11 +771,12 @@ class LWC_Admin_Settings {
 		if ( $shared_strings_xml ) {
 			$shared_strings_dom = $this->load_xlsx_xml( $shared_strings_xml );
 			if ( $shared_strings_dom ) {
+				$shared_strings_dom->registerXPathNamespace( 'main', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' );
 				$shared_strings_items = $shared_strings_dom->xpath( '//main:si' );
 				if ( $shared_strings_items ) {
 					foreach ( $shared_strings_items as $string_item ) {
 						$text = '';
-						$text_nodes = $string_item->xpath( './main:t' );
+						$text_nodes = $string_item->xpath( './/main:t' );
 						foreach ( $text_nodes as $text_node ) {
 							$text .= (string) $text_node;
 						}
@@ -764,12 +832,18 @@ class LWC_Admin_Settings {
 		$sheet->registerXPathNamespace( 'main', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' );
 		$sheet_rows = $sheet->xpath( '//main:sheetData/main:row' );
 		if ( empty( $sheet_rows ) ) {
+			$sheet_rows = $sheet->xpath( '//row' );
+		}
+		if ( empty( $sheet_rows ) ) {
 			return array();
 		}
 
 		foreach ( $sheet_rows as $row ) {
 			$values = array();
 			$cell_nodes = $row->xpath( './main:c' );
+			if ( empty( $cell_nodes ) ) {
+				$cell_nodes = $row->xpath( './c' );
+			}
 			foreach ( $cell_nodes as $cell ) {
 				$column_index = $this->get_xlsx_column_index( (string) $cell['r'] );
 				while ( count( $values ) <= $column_index ) {
@@ -794,6 +868,138 @@ class LWC_Admin_Settings {
 			$rows[] = $values;
 		}
 
+		return $this->normalize_rows( $rows );
+	}
+
+	/**
+	 * Parse an Excel .xls file into rows.
+	 *
+	 * @param string $file_path File path.
+	 * @return array
+	 */
+	private function parse_xls_file( $file_path ) {
+		if ( ! is_readable( $file_path ) ) {
+			return array();
+		}
+
+		$file_contents = file_get_contents( $file_path );
+		if ( false === $file_contents ) {
+			return array();
+		}
+
+		$trimmed = ltrim( $file_contents );
+		if ( 0 === stripos( $trimmed, '<?xml' ) ) {
+			return $this->parse_xml_spreadsheet( $file_contents );
+		}
+
+		if ( class_exists( 'COM' ) ) {
+			return $this->parse_xls_file_with_com( $file_path );
+		}
+
+		return array();
+	}
+
+	/**
+	 * Parse an XML Spreadsheet (.xls saved as XML) into rows.
+	 *
+	 * @param string $xml XML content.
+	 * @return array
+	 */
+	private function parse_xml_spreadsheet( $xml ) {
+		$document = simplexml_load_string( $xml, 'SimpleXMLElement', LIBXML_NOCDATA );
+		if ( ! $document ) {
+			return array();
+		}
+
+		$worksheets = array();
+		if ( isset( $document->Worksheet ) ) {
+			$worksheets = $document->Worksheet;
+		} elseif ( isset( $document->Workbook ) && isset( $document->Workbook->Worksheet ) ) {
+			$worksheets = $document->Workbook->Worksheet;
+		}
+
+		if ( empty( $worksheets ) ) {
+			return array();
+		}
+
+		$rows = array();
+		foreach ( $worksheets as $worksheet ) {
+			if ( ! isset( $worksheet->Table ) ) {
+				continue;
+			}
+
+			foreach ( $worksheet->Table->Row as $row ) {
+				$values = array();
+				$column_index = 0;
+				foreach ( $row->Cell as $cell ) {
+					$cell_index = $column_index;
+					$cell_attrs = $cell->attributes();
+					if ( isset( $cell_attrs->Index ) ) {
+						$cell_index = (int) $cell_attrs->Index - 1;
+					}
+
+					while ( count( $values ) < $cell_index ) {
+						$values[] = '';
+					}
+
+					$data = $cell->Data;
+					$values[ $cell_index ] = isset( $data ) ? (string) $data : '';
+					$column_index = $cell_index + 1;
+				}
+
+				$rows[] = $values;
+			}
+			break;
+		}
+
+		return $this->normalize_rows( $rows );
+	}
+
+	/**
+	 * Parse a .xls file with COM if available on Windows.
+	 *
+	 * @param string $file_path File path.
+	 * @return array
+	 */
+	private function parse_xls_file_with_com( $file_path ) {
+		$excel = @new COM( 'Excel.Application' );
+		if ( ! $excel ) {
+			return array();
+		}
+
+		$excel->Visible = false;
+		$excel->DisplayAlerts = false;
+
+		$file_path = realpath( $file_path );
+		if ( false === $file_path ) {
+			$excel->Quit();
+			return array();
+		}
+
+		try {
+			$workbook = $excel->Workbooks->Open( $file_path, 0, true );
+			$sheet = $workbook->Worksheets(1);
+			$used_range = $sheet->UsedRange;
+			$row_count = (int) $used_range->Rows->Count;
+			$col_count = (int) $used_range->Columns->Count;
+
+			$rows = array();
+			for ( $row_index = 1; $row_index <= $row_count; $row_index++ ) {
+				$row_values = array();
+				for ( $col_index = 1; $col_index <= $col_count; $col_index++ ) {
+					$cell = $used_range->Item( $row_index, $col_index );
+					$row_values[] = is_object( $cell ) ? (string) $cell->Value2 : '';
+				}
+				$rows[] = $row_values;
+			}
+
+			$workbook->Close( false );
+			$excel->Quit();
+		} catch ( Exception $e ) {
+			$rows = array();
+		}
+
+		unset( $sheet, $used_range, $workbook, $excel );
 		return $this->normalize_rows( $rows );
 	}
 
