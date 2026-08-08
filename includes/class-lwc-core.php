@@ -27,8 +27,18 @@ class LWC_Core {
 	private function includes() {
 		LWC_Logger::log( 'Including plugin classes.', 'info' );
 
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-admin-settings.php';
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-shipping-jt.php';
+		// Prefer feature folders; fall back to legacy includes/ paths for safety.
+		if ( file_exists( LWC_PLUGIN_DIR . 'membership/class-lwc-admin-settings.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'membership/class-lwc-admin-settings.php';
+		} else {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-admin-settings.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-jt.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-jt.php';
+		} else {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-shipping-jt.php';
+		}
 	}
 
 	/**
