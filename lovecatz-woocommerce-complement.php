@@ -51,8 +51,41 @@ function lwc_init() {
 	$core->init();
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
-
+register_activation_hook( __FILE__, 'lwc_activate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
+
+/**
+ * Initialize plugin data on activation.
+ */
+function lwc_activate() {
+	if ( ! defined( 'ABSPATH' ) ) {
+		return;
+	}
+
+	if ( ! function_exists( 'lwc_is_woocommerce_active' ) ) {
+		return;
+	}
+
+	if ( ! lwc_is_woocommerce_active() ) {
+		return;
+	}
+
+	if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
+	}
+
+	if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
+	}
+
+	if ( class_exists( 'LWC_FedEx_Account' ) ) {
+		LWC_FedEx_Account::create_table();
+	}
+
+	if ( class_exists( 'LWC_JT_Account' ) ) {
+		LWC_JT_Account::create_table();
+	}
+}
 
 /**
  * Clean up plugin data on uninstall.
