@@ -52,6 +52,28 @@ function lwc_init() {
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
 
+register_uninstall_hook( __FILE__, 'lwc_uninstall' );
+
+/**
+ * Clean up plugin data on uninstall.
+ */
+function lwc_uninstall() {
+	if ( ! defined( 'ABSPATH' ) ) {
+		return;
+	}
+
+	global $wpdb;
+
+	$tables = array(
+		$wpdb->prefix . 'lwc_fedex_accounts',
+		$wpdb->prefix . 'lwc_jt_accounts',
+	);
+
+	foreach ( $tables as $table ) {
+		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+	}
+}
+
 /**
  * Admin notice if WooCommerce is not active.
  */

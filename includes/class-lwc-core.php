@@ -46,19 +46,30 @@ class LWC_Core {
 		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php';
 		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
+		}
 	}
 
 	/**
 	 * Initialize hooks.
 	 */
 	private function init_hooks() {
-		// Initialize admin settings.
 		if ( is_admin() ) {
 			$admin_settings = new LWC_Admin_Settings();
 			$admin_settings->init();
 		}
 
-		// Register shipping methods.
+		if ( function_exists( 'is_admin' ) && is_admin() ) {
+			LWC_FedEx_Account::create_table();
+			LWC_JT_Account::create_table();
+		}
+
 		add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_methods' ) );
 	}
 

@@ -63,7 +63,7 @@ class LWC_Shipping_FedEx extends LWC_Shipping_Provider {
 	}
 
 	public function get_api_base_url() {
-		$test_mode = get_option( 'lwc_fedex_test_mode', 'no' );
+		$test_mode = LWC_FedEx_Account::get_option_value( 'lwc_fedex_test_mode', 'no' );
 		if ( 'yes' === $test_mode ) {
 			return 'https://apis-sandbox.fedex.com';
 		}
