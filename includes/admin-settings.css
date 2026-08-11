@@ -39,3 +39,36 @@
 	line-height: 1.2;
 	text-align: center;
 }
+
+.lwc-fedex-connection-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	margin: 8px 0 4px;
+	border-radius: 999px;
+	font-weight: 600;
+	border: 1px solid #d0d5dd;
+	background: #f8fafc;
+	color: #475467;
+}
+
+.lwc-fedex-connection-status[data-status="connected"] {
+	background: #ecfdf3;
+	border-color: #a7f3d0;
+	color: #067647;
+}
+
+.lwc-fedex-connection-status[data-status="partial"] {
+	background: #fff7ed;
+	border-color: #fdba74;
+	color: #c2410c;
+}
+
+.lwc-fedex-status-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: currentColor;
+	flex-shrink: 0;
+}

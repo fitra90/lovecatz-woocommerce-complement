@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin settings class for LoveCatz WooCommerce Complement.
+ * Member management for LoveCatz WooCommerce Complement.
  *
  * @package LoveCatzWC
  */
@@ -9,349 +9,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class LWC_Admin_Settings {
+class LWC_Admin_Members {
 
 	/**
 	 * Store the latest import result for display on the page.
 	 *
 	 * @var array
 	 */
-	private $last_import_result = array();
+	protected $last_import_result = array();
 
 	/**
-	 * Initialize admin hooks.
+	 * Initialize member hooks.
 	 */
 	public function init() {
-		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
-		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_init', array( $this, 'handle_user_import' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 		add_action( 'admin_post_lwc_print_member_card', array( $this, 'print_member_card' ) );
 		add_action( 'admin_post_lwc_print_own_member_card', array( $this, 'print_own_member_card' ) );
 		add_action( 'admin_post_lwc_delete_store_member', array( $this, 'delete_store_member' ) );
 		add_action( 'admin_post_lwc_download_member_import_template', array( $this, 'download_member_import_template' ) );
 		add_action( 'woocommerce_account_dashboard', array( $this, 'render_customer_member_card_button' ) );
-	}
-
-	/**
-	 * Add the settings page to the admin menu.
-	 */
-	public function add_settings_page() {
-		$menu_title = get_option( 'lwc_menu_title', __( 'LoveCatz', 'lovecatz-wc' ) );
-		$menu_icon  = get_option( 'lwc_menu_icon', 'dashicons-pets' );
-
-		add_menu_page(
-			__( 'LoveCatz', 'lovecatz-wc' ),
-			$menu_title,
-			'manage_woocommerce',
-			'lovecatz-wc',
-			array( $this, 'render_settings_page' ),
-			$menu_icon,
-			56
-		);
-	}
-
-	/**
-	 * Enqueue admin scripts and styles for the plugin settings page.
-	 */
-	public function enqueue_admin_assets( $hook ) {
-		if ( get_current_screen() && 'toplevel_page_lovecatz-wc' !== get_current_screen()->id ) {
-			return;
-		}
-
-		wp_enqueue_style( 'dashicons' );
-		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
-	}
-
-	/**
-	 * Render the settings page with tabs.
-	 */
-	public function render_settings_page() {
-		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings';
-		if ( 'import-users' === $active_tab ) {
-			$active_tab = 'store-members';
-		}
-		if ( 'couriers' === $active_tab ) {
-			$active_tab = 'shipping';
-		}
-		if ( ! in_array( $active_tab, array( 'settings', 'shipping', 'currency', 'store-members' ), true ) ) {
-			$active_tab = 'settings';
-		}
-
-		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'jt';
-		if ( ! in_array( $provider, array( 'jt', 'fedex' ), true ) ) {
-			$provider = 'jt';
-		}
-		?>
-		<div class="wrap">
-			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
-
-			<h2 class="nav-tab-wrapper">
-				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo $active_tab === 'store-members' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo $active_tab === 'shipping' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo $active_tab === 'currency' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
-			</h2>
-
-			<?php $this->render_import_result_notice(); ?>
-
-			<?php if ( 'settings' === $active_tab ) : ?>
-				<form method="post" action="options.php">
-					<?php
-					settings_fields( 'lwc_general_options' );
-					do_settings_sections( 'lwc_general_options' );
-					submit_button();
-					?>
-				</form>
-			<?php elseif ( 'shipping' === $active_tab ) : ?>
-				<div style="margin: 15px 0;">
-					<a href="?page=lovecatz-wc&tab=shipping&provider=jt" class="button <?php echo 'jt' === $provider ? 'button-primary' : 'button-secondary'; ?>">
-						<?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?>
-					</a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="button <?php echo 'fedex' === $provider ? 'button-primary' : 'button-secondary'; ?>">
-						<?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?>
-					</a>
-				</div>
-
-				<?php if ( 'jt' === $provider ) : ?>
-					<form method="post" action="options.php">
-						<?php
-						settings_fields( 'lwc_shipping_jt_options' );
-						do_settings_sections( 'lwc_shipping_jt_options' );
-						submit_button();
-						?>
-					</form>
-				<?php else : ?>
-					<div class="notice notice-info inline">
-						<p><?php esc_html_e( 'FedEx will be available for international shipments where the destination country is outside Indonesia.', 'lovecatz-wc' ); ?></p>
-					</div>
-					<form method="post" action="options.php">
-						<?php
-						settings_fields( 'lwc_shipping_fedex_options' );
-						do_settings_sections( 'lwc_shipping_fedex_options' );
-						submit_button();
-						?>
-					</form>
-				<?php endif; ?>
-			<?php elseif ( 'currency' === $active_tab ) : ?>
-				<p><?php esc_html_e( 'Currency settings coming soon.', 'lovecatz-wc' ); ?></p>
-			<?php else : ?>
-				<?php $this->render_store_members(); ?>
-			<?php endif; ?>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Register plugin settings.
-	 */
-	public function register_settings() {
-		LWC_Logger::log( 'Registering admin settings.', 'info' );
-
-		// Shipping provider settings.
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_key' );
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_secret' );
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_test_mode' );
-
-		add_settings_section(
-			'lwc_shipping_jt_section',
-			__( 'J&T Express Settings', 'lovecatz-wc' ),
-			array( $this, 'render_jt_section_intro' ),
-			'lwc_shipping_jt_options'
-		);
-
-		add_settings_field(
-			'lwc_jt_api_key',
-			__( 'API Key', 'lovecatz-wc' ),
-			array( $this, 'render_jt_api_key_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
-
-		add_settings_field(
-			'lwc_jt_api_secret',
-			__( 'API Secret', 'lovecatz-wc' ),
-			array( $this, 'render_jt_api_secret_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
-
-		add_settings_field(
-			'lwc_jt_test_mode',
-			__( 'Enable Test Mode', 'lovecatz-wc' ),
-			array( $this, 'render_jt_test_mode_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
-
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key' );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret' );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_test_mode' );
-
-		add_settings_section(
-			'lwc_shipping_fedex_section',
-			__( 'FedEx Settings', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_section_intro' ),
-			'lwc_shipping_fedex_options'
-		);
-
-		add_settings_field(
-			'lwc_fedex_api_key',
-			__( 'API Key', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_api_key_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
-
-		add_settings_field(
-			'lwc_fedex_api_secret',
-			__( 'API Secret', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_api_secret_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
-
-		add_settings_field(
-			'lwc_fedex_test_mode',
-			__( 'Enable Test Mode', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_test_mode_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
-
-		// General Settings for admin menu customizations.
-		register_setting( 'lwc_general_options', 'lwc_menu_title', array( 'sanitize_callback' => 'sanitize_text_field' ) );
-		register_setting( 'lwc_general_options', 'lwc_menu_icon', array( 'sanitize_callback' => 'sanitize_text_field' ) );
-
-		add_settings_section(
-			'lwc_general_section_menu',
-			__( 'Admin Menu Appearance', 'lovecatz-wc' ),
-			array( $this, 'render_menu_section_intro' ),
-			'lwc_general_options'
-		);
-
-		add_settings_field(
-			'lwc_menu_title',
-			__( 'Sidebar Name', 'lovecatz-wc' ),
-			array( $this, 'render_menu_title_field' ),
-			'lwc_general_options',
-			'lwc_general_section_menu'
-		);
-
-		add_settings_field(
-			'lwc_menu_icon',
-			__( 'Sidebar Icon', 'lovecatz-wc' ),
-			array( $this, 'render_menu_icon_field' ),
-			'lwc_general_options',
-			'lwc_general_section_menu'
-		);
-	}
-
-	/**
-	 * Render introductory text for the J&T section.
-	 */
-	public function render_jt_section_intro() {
-		echo '<p>' . esc_html__( 'Enter your J&T Express API credentials below.', 'lovecatz-wc' ) . '</p>';
-	}
-
-	/**
-	 * Render the API key field.
-	 */
-	public function render_jt_api_key_field() {
-		$value = get_option( 'lwc_jt_api_key', '' );
-		echo '<input type="text" name="lwc_jt_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
-	}
-
-	/**
-	 * Render the API secret field.
-	 */
-	public function render_jt_api_secret_field() {
-		$value = get_option( 'lwc_jt_api_secret', '' );
-		echo '<input type="password" name="lwc_jt_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
-	}
-
-	/**
-	 * Render the test mode field.
-	 */
-	public function render_jt_test_mode_field() {
-		$value = get_option( 'lwc_jt_test_mode', 'no' );
-		$checked = 'yes' === $value ? 'checked' : '';
-		echo '<input type="checkbox" name="lwc_jt_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
-	}
-
-	/**
-	 * Render introductory text for the FedEx section.
-	 */
-	public function render_fedex_section_intro() {
-		echo '<p>' . esc_html__( 'Enter your FedEx API credentials below. FedEx will appear for international shipments outside Indonesia.', 'lovecatz-wc' ) . '</p>';
-	}
-
-	/**
-	 * Render the FedEx API key field.
-	 */
-	public function render_fedex_api_key_field() {
-		$value = get_option( 'lwc_fedex_api_key', '' );
-		echo '<input type="text" name="lwc_fedex_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
-	}
-
-	/**
-	 * Render the FedEx API secret field.
-	 */
-	public function render_fedex_api_secret_field() {
-		$value = get_option( 'lwc_fedex_api_secret', '' );
-		echo '<input type="password" name="lwc_fedex_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
-	}
-
-	/**
-	 * Render the FedEx test mode field.
-	 */
-	public function render_fedex_test_mode_field() {
-		$value = get_option( 'lwc_fedex_test_mode', 'no' );
-		$checked = 'yes' === $value ? 'checked' : '';
-		echo '<input type="checkbox" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
-	}
-
-	/**
-	 * Render introductory text for the general settings section.
-	 */
-	public function render_menu_section_intro() {
-		echo '<p>' . esc_html__( 'Customize the sidebar name and icon shown for the LoveCatz admin menu. Choose a Dashicon from the official WordPress reference below.', 'lovecatz-wc' ) . '</p>';
-	}
-
-	/**
-	 * Render the menu title field.
-	 */
-	public function render_menu_title_field() {
-		$value = get_option( 'lwc_menu_title', __( 'LoveCatz', 'lovecatz-wc' ) );
-		echo '<input type="text" name="lwc_menu_title" value="' . esc_attr( $value ) . '" class="regular-text" />';
-	}
-
-	/**
-	 * Render the menu icon field.
-	 */
-	public function render_menu_icon_field() {
-		$value = get_option( 'lwc_menu_icon', 'dashicons-pets' );
-		echo '<input type="text" id="lwc_menu_icon_class" name="lwc_menu_icon" value="' . esc_attr( $value ) . '" class="regular-text" />';
-		echo '<p class="description">' . esc_html__( 'Enter a Dashicons class such as dashicons-admin-home, dashicons-store, or dashicons-heart. See the full list at the official WordPress Dashicons page.', 'lovecatz-wc' ) . ' <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener noreferrer">' . esc_html__( 'View Dashicons', 'lovecatz-wc' ) . '</a></p>';
-		echo '<div class="lwc-dashicon-choices">';
-		$icons = array(
-			'dashicons-admin-home',
-			'dashicons-store',
-			'dashicons-heart',
-			'dashicons-cart',
-			'dashicons-groups',
-			'dashicons-universal-access',
-			'dashicons-star-filled',
-			'dashicons-awards',
-			'dashicons-admin-site',
-			'dashicons-admin-tools',
-		);
-		foreach ( $icons as $icon ) {
-			$selected = $value === $icon ? ' selected' : '';
-			echo '<button type="button" class="lwc-dashicon-choice' . $selected . '" data-icon="' . esc_attr( $icon ) . '"><span class="dashicons ' . esc_attr( $icon ) . '"></span><span class="dashicon-label">' . esc_html( str_replace( 'dashicons-', '', $icon ) ) . '</span></button>';
-		}
-		echo '</div>';
 	}
 
 	/**
@@ -548,7 +224,7 @@ class LWC_Admin_Settings {
 	 * @param WP_User|int $user User object or ID.
 	 * @return bool
 	 */
-	private function is_store_member( $user ) {
+	protected function is_store_member( $user ) {
 		if ( is_numeric( $user ) ) {
 			$user = get_userdata( (int) $user );
 		}
@@ -603,10 +279,8 @@ class LWC_Admin_Settings {
 	 * @param int $user_id Member user ID.
 	 */
 	private function render_printable_member_card( $user_id ) {
-
 		$member      = get_userdata( $user_id );
 		$customer_id = get_user_meta( $user_id, 'lwc_customer_id', true );
-		$phone       = get_user_meta( $user_id, 'billing_phone', true );
 		$logo_url    = LWC_PLUGIN_URL . 'assets/logo.webp';
 		$product_url = LWC_PLUGIN_URL . 'assets/product.png';
 		$qr_url      = $this->get_qr_code_url( 'https://ddistillers.com/my-account' );
@@ -791,11 +465,11 @@ class LWC_Admin_Settings {
 	 * @return array
 	 */
 	private function get_member_import_template_files() {
-		$headers   = array(
+		$headers = array(
 			'External ID', 'Name', 'Company Name', 'Contact Name', 'Email', 'Job Position', 'Phone', 'Mobile',
 			'Street', 'Street2', 'City', 'State', 'Zip', 'Country', 'Website', 'Notes',
 		);
-		$cells     = array();
+		$cells   = array();
 		foreach ( $headers as $index => $header ) {
 			$cells[] = '<c r="' . $this->get_excel_column_name( $index + 1 ) . '1" t="inlineStr"><is><t>' . htmlspecialchars( $header, ENT_XML1 | ENT_COMPAT, 'UTF-8' ) . '</t></is></c>';
 		}
@@ -829,7 +503,6 @@ class LWC_Admin_Settings {
 
 		return $column;
 	}
-
 
 	/**
 	 * Parse a CSV file into rows.
@@ -1238,11 +911,8 @@ class LWC_Admin_Settings {
 		$imported = 0;
 		$skipped   = 0;
 		$errors    = array();
- 
+
 		foreach ( $rows as $row ) {
-			// FIX: added 'external_id' so it matches the "External ID" column
-			// used by the current .xlsx template (Odoo-style CRM export),
-			// while still supporting the legacy CSV column names.
 			$main_id = sanitize_text_field( $this->get_row_value( $row, array( 'id_pelanggan', 'customer_id', 'id_customer', 'external_id', 'id' ) ) );
 			$email   = $this->get_row_value( $row, array( 'email', 'e_mail_address', 'email_address', 'user_email' ) );
 			if ( '' === $main_id ) {
@@ -1250,28 +920,24 @@ class LWC_Admin_Settings {
 				$errors[] = __( 'Skipped a row because an ID (External ID / ID_PELANGGAN) is required.', 'lovecatz-wc' );
 				continue;
 			}
- 
+
 			$username = sanitize_user( $main_id, true );
 			if ( '' === $username ) {
 				$skipped++;
 				$errors[] = sprintf( __( 'Skipped customer ID %s because it cannot be used as a login.', 'lovecatz-wc' ), $main_id );
 				continue;
 			}
- 
+
 			if ( '' === $email || ! is_email( $email ) ) {
 				$email = $this->get_placeholder_email( '' !== $main_id ? $main_id : $username );
 			}
- 
+
 			if ( username_exists( $username ) || email_exists( $email ) ) {
 				$skipped++;
 				$errors[] = sprintf( __( 'Skipped %s because the user already exists.', 'lovecatz-wc' ), $username );
 				continue;
 			}
- 
-			// FIX: the current template only has a single "Name" (or "Contact
-			// Name") column instead of separate First/Last Name columns.
-			// Try explicit first/last name columns first (legacy support),
-			// then fall back to splitting a single full-name column.
+
 			$first_name = isset( $row['first_name'] ) ? sanitize_text_field( $row['first_name'] ) : '';
 			$last_name  = isset( $row['last_name'] ) ? sanitize_text_field( $row['last_name'] ) : '';
 			if ( '' === $first_name ) {
@@ -1280,7 +946,7 @@ class LWC_Admin_Settings {
 			if ( '' === $last_name ) {
 				$last_name = $this->get_row_value( $row, array( 'last_name', 'last', 'nama_belakang' ) );
 			}
- 
+
 			if ( '' === $first_name && '' === $last_name ) {
 				$full_name = $this->get_row_value( $row, array( 'name', 'contact_name' ) );
 				if ( '' !== $full_name ) {
@@ -1295,17 +961,10 @@ class LWC_Admin_Settings {
 			}
 			$first_name = sanitize_text_field( $first_name );
 			$last_name  = sanitize_text_field( $last_name );
- 
-			// This import belongs to the Store Members feature, so imported users
-			// always receive WooCommerce's customer role regardless of file contents.
+
 			$role = 'customer';
- 
-			// Imported members use their customer ID as the initial password so
-			// they can sign in with ID_PELANGGAN for both login fields.
 			$password = $main_id;
- 
-			// FIX: added 'street' so it matches the "Street" column used by
-			// the current .xlsx template, while still supporting legacy names.
+
 			$street   = sanitize_text_field( $this->get_row_value( $row, array( 'street_adress', 'street_address', 'street', 'address', 'address_1' ) ) );
 			$street2  = sanitize_text_field( $this->get_row_value( $row, array( 'street2' ) ) );
 			if ( '' !== $street2 ) {
@@ -1315,10 +974,8 @@ class LWC_Admin_Settings {
 			$state    = sanitize_text_field( $this->get_row_value( $row, array( 'state_region', 'state', 'region' ) ) );
 			$postcode = sanitize_text_field( $this->get_row_value( $row, array( 'postal_code', 'postcode', 'zip' ) ) );
 			$country  = sanitize_text_field( $this->get_row_value( $row, array( 'country' ) ) );
-			// FIX: fall back to "mobile" if "phone" is empty, since the
-			// template provides both columns and either may be filled in.
 			$phone    = sanitize_text_field( $this->get_row_value( $row, array( 'phone', 'phone_number', 'mobile', 'nomor_hp' ) ) );
- 
+
 			$user_data = array(
 				'user_login'   => $username,
 				'user_email'   => $email,
@@ -1328,7 +985,7 @@ class LWC_Admin_Settings {
 				'role'         => $role,
 				'display_name' => trim( $first_name . ' ' . $last_name ),
 			);
- 
+
 			$user_id = wp_insert_user( $user_data );
 			if ( is_wp_error( $user_id ) ) {
 				$skipped++;
@@ -1337,7 +994,7 @@ class LWC_Admin_Settings {
 				if ( '' !== $main_id ) {
 					update_user_meta( $user_id, 'lwc_customer_id', $main_id );
 				}
- 
+
 				if ( '' !== $first_name ) {
 					update_user_meta( $user_id, 'billing_first_name', $first_name );
 					update_user_meta( $user_id, 'shipping_first_name', $first_name );
@@ -1350,7 +1007,6 @@ class LWC_Admin_Settings {
 					update_user_meta( $user_id, 'billing_company', $company_name );
 					update_user_meta( $user_id, 'shipping_company', $company_name );
 				}
- 
 				if ( '' !== $street ) {
 					update_user_meta( $user_id, 'billing_address_1', $street );
 					update_user_meta( $user_id, 'shipping_address_1', $street );
@@ -1374,16 +1030,16 @@ class LWC_Admin_Settings {
 				if ( '' !== $phone ) {
 					update_user_meta( $user_id, 'billing_phone', $phone );
 				}
- 
+
 				$imported++;
 			}
 		}
- 
+
 		$message = sprintf( __( 'Imported %d user(s). Skipped %d row(s).', 'lovecatz-wc' ), $imported, $skipped );
 		if ( ! empty( $errors ) ) {
 			$message .= ' ' . implode( ' ', array_slice( $errors, 0, 5 ) );
 		}
- 
+
 		return array(
 			'success' => $imported > 0,
 			'message' => $message,
