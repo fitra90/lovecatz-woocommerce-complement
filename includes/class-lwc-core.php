@@ -54,6 +54,10 @@ class LWC_Core {
 		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
 		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+		}
 	}
 
 	/**

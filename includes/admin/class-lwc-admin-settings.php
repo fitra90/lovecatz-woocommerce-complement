@@ -59,6 +59,14 @@ class LWC_Admin_Settings {
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.css', array(), LWC_VERSION );
 		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_localize_script(
+			'lwc-admin-settings',
+			'lwcFedexSettings',
+			array(
+				'ajax_url' => admin_url( 'admin-ajax.php' ),
+				'nonce'    => wp_create_nonce( 'lwc_fedex_connection_check' ),
+			)
+		);
 	}
 
 	/**

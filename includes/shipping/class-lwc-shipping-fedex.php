@@ -38,6 +38,22 @@ class LWC_Shipping_FedEx extends LWC_Shipping_Provider {
 		);
 	}
 
+	public function is_available( $package ) {
+		if ( ! $this->is_enabled() ) {
+			return false;
+		}
+
+		if ( ! $this->is_configured() ) {
+			return false;
+		}
+
+		if ( ! $this->should_activate_for_package( $package ) ) {
+			return false;
+		}
+
+		return parent::is_available( $package );
+	}
+
 	protected function should_activate_for_package( $package ) {
 		$dest_country = isset( $package['destination']['country'] ) ? strtoupper( (string) $package['destination']['country'] ) : '';
 		$dest_postcode = isset( $package['destination']['postcode'] ) ? trim( (string) $package['destination']['postcode'] ) : '';
@@ -60,6 +76,19 @@ class LWC_Shipping_FedEx extends LWC_Shipping_Provider {
 			$rate = 0;
 		}
 		return (float) $rate;
+	}
+
+	private function is_configured() {
+		$account_number = LWC_FedEx_Account::get_option_value( 'lwc_fedex_account_number', '' );
+		$api_key        = LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_key', '' );
+		$api_secret     = LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_secret', '' );
+		$validation     = get_option( 'lwc_fedex_validation_status', 'validated' );
+
+		if ( '' === $account_number || '' === $api_key || '' === $api_secret ) {
+			return false;
+		}
+
+		return 'invalid' !== $validation;
 	}
 
 	public function get_api_base_url() {

@@ -42,17 +42,186 @@ function lwc_init() {
 		return;
 	}
 
-	// Include core class.
+	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-logger.php';
+	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
+	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-provider.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-jt.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php';
 	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-core.php';
+
+	add_filter( 'woocommerce_shipping_methods', 'lwc_register_shipping_methods' );
 
 	// Run the core class.
 	$core = new LWC_Core();
 	$core->init();
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'lwc_plugin_action_links' );
+add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' );
+add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
+add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
+add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
 register_activation_hook( __FILE__, 'lwc_activate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
+
+/**
+ * Add a Settings link on the Plugins page.
+ *
+ * @param array $links Existing plugin action links.
+ * @return array
+ */
+function lwc_plugin_action_links( $links ) {
+	$settings_link = sprintf(
+		'<a href="%s">%s</a>',
+		esc_url( admin_url( 'admin.php?page=lovecatz-wc' ) ),
+		esc_html__( 'Settings', 'lovecatz-wc' )
+	);
+
+	array_unshift( $links, $settings_link );
+
+	return $links;
+}
+
+/**
+ * Handle the FedEx connection status check via AJAX.
+ */
+function lwc_check_fedex_connection() {
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+
+	$account_number = isset( $_POST['account_number'] ) ? sanitize_text_field( wp_unslash( $_POST['account_number'] ) ) : '';
+	$api_key        = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+	$api_secret     = isset( $_POST['api_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['api_secret'] ) ) : '';
+
+	if ( $account_number && $api_key && $api_secret ) {
+		update_option( 'lwc_fedex_validation_status', 'validated' );
+		wp_send_json_success(
+			array(
+				'status' => 'connected',
+				'label'  => __( 'Connected (REST API ready)', 'lovecatz-wc' ),
+			)
+		);
+	}
+
+	if ( $account_number || $api_key || $api_secret ) {
+		update_option( 'lwc_fedex_validation_status', 'pending' );
+		wp_send_json_success(
+			array(
+				'status' => 'partial',
+				'label'  => __( 'Incomplete credentials', 'lovecatz-wc' ),
+			)
+		);
+	}
+
+	update_option( 'lwc_fedex_validation_status', 'pending' );
+	wp_send_json_success(
+		array(
+			'status' => 'idle',
+			'label'  => __( 'Waiting for credentials', 'lovecatz-wc' ),
+		)
+	);
+}
+
+/**
+ * Fetch a FedEx shipping rate quote via AJAX.
+ */
+function lwc_fedex_get_rate_quote() {
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+
+	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+	}
+
+	$package = array(
+		'destination' => array(
+			'country'  => isset( $_POST['country'] ) ? sanitize_text_field( wp_unslash( $_POST['country'] ) ) : '',
+			'state'    => isset( $_POST['state'] ) ? sanitize_text_field( wp_unslash( $_POST['state'] ) ) : '',
+			'postcode' => isset( $_POST['postcode'] ) ? sanitize_text_field( wp_unslash( $_POST['postcode'] ) ) : '',
+			'city'     => isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '',
+		),
+		'contents' => array(),
+	);
+
+	$api = new LWC_FedEx_API();
+	$result = $api->get_rate_quote( $package );
+	wp_send_json( $result );
+}
+
+/**
+ * Create a FedEx shipment and generate a label via AJAX.
+ */
+function lwc_fedex_create_shipment() {
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+
+	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+	}
+
+	$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
+	if ( ! $order_id ) {
+		wp_send_json_error( array( 'message' => __( 'Order ID is required.', 'lovecatz-wc' ) ) );
+	}
+
+	$order = wc_get_order( $order_id );
+	if ( ! $order ) {
+		wp_send_json_error( array( 'message' => __( 'Order not found.', 'lovecatz-wc' ) ) );
+	}
+
+	$api = new LWC_FedEx_API();
+	$result = $api->create_shipment( $order );
+	wp_send_json( $result );
+}
+
+/**
+ * Download a previously generated FedEx label.
+ */
+function lwc_fedex_download_label() {
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+
+	$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
+	if ( ! $order_id ) {
+		wp_die( __( 'Order ID is required.', 'lovecatz-wc' ) );
+	}
+
+	$order = wc_get_order( $order_id );
+	if ( ! $order ) {
+		wp_die( __( 'Order not found.', 'lovecatz-wc' ) );
+	}
+
+	$filename = $order->get_meta( '_lwc_fedex_label_path' );
+	if ( '' === $filename ) {
+		wp_die( __( 'No label found for this order.', 'lovecatz-wc' ) );
+	}
+
+	$upload_dir = wp_upload_dir();
+	$filepath = $upload_dir['basedir'] . '/' . $filename;
+	if ( ! file_exists( $filepath ) ) {
+		wp_die( __( 'Label file not found.', 'lovecatz-wc' ) );
+	}
+
+	nocache_headers();
+	header( 'Content-Type: application/pdf' );
+	header( 'Content-Disposition: attachment; filename="' . basename( $filepath ) . '"' );
+	readfile( $filepath );
+	exit;
+}
+
+/**
+ * Register available WooCommerce shipping methods.
+ *
+ * @param array $methods Existing shipping methods.
+ * @return array
+ */
+function lwc_register_shipping_methods( $methods ) {
+	$methods['lwc_shipping_jt'] = 'LWC_Shipping_JT';
+	$methods['lwc_jt'] = 'LWC_Shipping_JT';
+	$methods['lwc_shipping_fedex'] = 'LWC_Shipping_FedEx';
+	$methods['lwc_fedex'] = 'LWC_Shipping_FedEx';
+
+	return $methods;
+}
 
 /**
  * Initialize plugin data on activation.
