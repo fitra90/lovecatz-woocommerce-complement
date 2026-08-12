@@ -76,6 +76,12 @@ class LWC_Core {
 			$promo_dashboard->init();
 		}
 
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-product-quantity-limits.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-product-quantity-limits.php';
+			$quantity_limits = new LWC_Product_Quantity_Limits();
+			$quantity_limits->init();
+		}
+
 		if ( function_exists( 'is_admin' ) && is_admin() ) {
 			LWC_FedEx_Account::create_table();
 			LWC_JT_Account::create_table();
