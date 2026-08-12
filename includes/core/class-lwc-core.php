@@ -31,8 +31,8 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-promo-dashboard.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-promo-dashboard.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/promo/class-lwc-promo-dashboard.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/promo/class-lwc-promo-dashboard.php';
 		}
 
 		if ( file_exists( LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-members.php' ) ) {
@@ -43,24 +43,24 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-provider.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-jt.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-jt.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-shipping-jt.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-shipping-jt.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-shipping-fedex.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-shipping-fedex.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php';
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
 		}
 	}
 
@@ -76,8 +76,9 @@ class LWC_Core {
 			$promo_dashboard->init();
 		}
 
-		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-product-quantity-limits.php' ) ) {
-			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-product-quantity-limits.php';
+		// Product quantity limits — load from organized path.
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/products/class-lwc-product-quantity-limits.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/products/class-lwc-product-quantity-limits.php';
 			$quantity_limits = new LWC_Product_Quantity_Limits();
 			$quantity_limits->init();
 		}
@@ -103,3 +104,5 @@ class LWC_Core {
 		return $methods;
 	}
 }
+
+

@@ -43,14 +43,14 @@ function lwc_init() {
 	}
 
 	// Include core plugin classes.
-	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-logger.php';
-	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
-	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
-	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-provider.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-jt.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-fedex.php';
-	require_once LWC_PLUGIN_DIR . 'includes/class-lwc-core.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-shipping-jt.php';
+	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-shipping-fedex.php';
+	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
 
 	add_filter( 'woocommerce_shipping_methods', 'lwc_register_shipping_methods' );
 
@@ -66,6 +66,24 @@ add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
 register_activation_hook( __FILE__, 'lwc_activate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
+add_action( 'init', 'lwc_maybe_flush_rewrite_rules' );
+
+/**
+ * Flush rewrite rules once when the coupon endpoint is newly registered.
+ */
+function lwc_maybe_flush_rewrite_rules() {
+	if ( ! function_exists( 'add_rewrite_endpoint' ) || ! function_exists( 'flush_rewrite_rules' ) ) {
+		return;
+	}
+
+	if ( get_option( 'lwc_coupon_endpoint_rewrite_flushed', 'no' ) === 'yes' ) {
+		return;
+	}
+
+	add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
+	flush_rewrite_rules();
+	update_option( 'lwc_coupon_endpoint_rewrite_flushed', 'yes' );
+}
 
 /**
  * Add a Settings link on the Plugins page.
@@ -131,7 +149,7 @@ function lwc_fedex_get_rate_quote() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
 	}
 
 	$package = array(
@@ -156,7 +174,7 @@ function lwc_fedex_create_shipment() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-api.php';
+		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
 	}
 
 	$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
@@ -191,19 +209,22 @@ function lwc_fedex_download_label() {
 	}
 
 	$filename = $order->get_meta( '_lwc_fedex_label_path' );
+	$filename = is_string( $filename ) ? basename( $filename ) : '';
 	if ( '' === $filename ) {
 		wp_die( __( 'No label found for this order.', 'lovecatz-wc' ) );
 	}
 
+	// Prevent directory traversal and ensure file is inside the uploads directory.
 	$upload_dir = wp_upload_dir();
-	$filepath = $upload_dir['basedir'] . '/' . $filename;
-	if ( ! file_exists( $filepath ) ) {
+	$filepath = wp_normalize_path( $upload_dir['basedir'] . '/' . $filename );
+	$basedir = wp_normalize_path( $upload_dir['basedir'] );
+	if ( strpos( $filepath, $basedir ) !== 0 || ! file_exists( $filepath ) ) {
 		wp_die( __( 'Label file not found.', 'lovecatz-wc' ) );
 	}
 
 	nocache_headers();
 	header( 'Content-Type: application/pdf' );
-	header( 'Content-Disposition: attachment; filename="' . basename( $filepath ) . '"' );
+	header( 'Content-Disposition: attachment; filename="' . esc_attr( basename( $filepath ) ) . '"' );
 	readfile( $filepath );
 	exit;
 }
@@ -239,12 +260,12 @@ function lwc_activate() {
 		return;
 	}
 
-	if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-fedex-account.php';
+	if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php';
 	}
 
-	if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/class-lwc-jt-account.php';
+	if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php';
 	}
 
 	if ( class_exists( 'LWC_FedEx_Account' ) ) {
@@ -261,6 +282,8 @@ function lwc_activate() {
 
 	if ( function_exists( 'flush_rewrite_rules' ) ) {
 		flush_rewrite_rules();
+		/* Mark that the coupon endpoint has been flushed so init-time helper doesn't run unnecessarily. */
+		update_option( 'lwc_coupon_endpoint_rewrite_flushed', 'yes' );
 	}
 }
 
@@ -294,3 +317,5 @@ function lwc_woocommerce_missing_notice() {
 	</div>
 	<?php
 }
+
+

@@ -20,6 +20,8 @@ class LWC_Promo_Dashboard {
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'add_coupon_account_menu_item' ) );
 		add_action( 'woocommerce_account_coupon_endpoint', array( $this, 'render_coupon_dashboard' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
+		// Shortcode fallback so admin can place promo dashboard on any page if endpoint rewrites fail.
+		add_shortcode( 'lwc_promo_dashboard', array( $this, 'promo_dashboard_shortcode' ) );
 	}
 
 	/**
@@ -50,8 +52,8 @@ class LWC_Promo_Dashboard {
 			return;
 		}
 
-		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo-dashboard.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo/promo-dashboard.css', array(), LWC_VERSION );
+				wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
 		wp_localize_script(
 			'lwc-promo-dashboard',
 			'lwcPromoDashboard',
@@ -84,6 +86,13 @@ class LWC_Promo_Dashboard {
 	/**
 	 * Render the promo list in My Account > Coupon.
 	 */
+	public function promo_dashboard_shortcode( $atts = array() ) {
+		// Return output so shortcode can be used. Ensure user sees same content as account endpoint.
+		ob_start();
+		$this->render_coupon_dashboard();
+		return ob_get_clean();
+	}
+
 	public function render_coupon_dashboard() {
 		if ( ! is_user_logged_in() ) {
 			echo '<p>' . esc_html__( 'Please log in to see available coupons.', 'lovecatz-wc' ) . '</p>';
@@ -100,8 +109,16 @@ class LWC_Promo_Dashboard {
 		$message = get_option( 'lwc_promo_message', __( 'Enjoy special promo offers today!', 'lovecatz-wc' ) );
 		$image_id = get_option( 'lwc_promo_image_id', 0 );
 		$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'large' ) : LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
+		$shop_url = $this->get_shop_url();
 
-		$coupon_code = $this->get_or_create_promo_coupon( $prefix );
+		$coupons = $this->get_promo_coupons();
+		if ( empty( $coupons ) ) {
+			$coupon_code = $this->get_or_create_promo_coupon( $prefix );
+			$coupon = wc_get_coupon( wc_get_coupon_id_by_code( $coupon_code ) );
+			if ( $coupon ) {
+				$coupons = array( $coupon );
+			}
+		}
 
 		echo '<div class="lwc-promo-dashboard">';
 		echo '<div class="lwc-promo-dashboard-header">';
@@ -109,14 +126,23 @@ class LWC_Promo_Dashboard {
 		echo '<p>' . esc_html( $message ) . '</p>';
 		echo '</div>';
 
+		if ( empty( $coupons ) ) {
+			echo '<p>' . esc_html__( 'No promo coupons are currently available. Check back later for new offers.', 'lovecatz-wc' ) . '</p>';
+			echo '</div>';
+			return;
+		}
+
 		echo '<div class="lwc-promo-dashboard-grid">';
-		echo '<button class="lwc-promo-card" type="button" data-coupon="' . esc_attr( $coupon_code ) . '">';
-		echo '<img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" />';
-		echo '<div class="lwc-promo-card-body">';
-		echo '<strong>' . esc_html( $coupon_code ) . '</strong>';
-		echo '<span>' . esc_html__( 'Click to copy and apply at checkout', 'lovecatz-wc' ) . '</span>';
-		echo '</div>';
-		echo '</button>';
+		foreach ( $coupons as $coupon ) {
+			$coupon_code = $coupon->get_code();
+			echo '<a class="lwc-promo-card" href="' . esc_url( $shop_url ) . '" data-coupon="' . esc_attr( $coupon_code ) . '">';
+			echo '<img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" />';
+			echo '<div class="lwc-promo-card-body">';
+			echo '<strong>' . esc_html( $coupon_code ) . '</strong>';
+			echo '<span>' . esc_html__( 'Click to browse products and use this coupon at checkout.', 'lovecatz-wc' ) . '</span>';
+			echo '</div>';
+			echo '</a>';
+		}
 		echo '</div>';
 		echo '</div>';
 	}
@@ -158,6 +184,82 @@ class LWC_Promo_Dashboard {
 	}
 
 	/**
+	 * Get the current shop URL for product browsing.
+	 *
+	 * @return string
+	 */
+	private function get_shop_url() {
+		if ( function_exists( 'wc_get_page_permalink' ) ) {
+			$shop_url = wc_get_page_permalink( 'shop' );
+		} else {
+			$shop_url = get_post_type_archive_link( 'product' );
+		}
+
+		if ( ! $shop_url ) {
+			$shop_url = home_url( '/shop/' );
+		}
+
+		return $shop_url;
+	}
+
+	/**
+	 * Return promo coupons created by this plugin.
+	 *
+	 * @return array
+	 */
+	private function get_promo_coupons() {
+		if ( ! class_exists( 'WC_Coupon' ) ) {
+			return array();
+		}
+
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'shop_coupon',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'meta_query'     => array(
+					array(
+						'key'   => '_lwc_promo_created',
+						'value' => '1',
+					),
+				),
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+			)
+		);
+
+		$coupons = array();
+		if ( $query->have_posts() ) {
+			foreach ( $query->posts as $post ) {
+				$coupons[] = new WC_Coupon( $post->ID );
+			}
+			wp_reset_postdata();
+		}
+
+		if ( empty( $coupons ) ) {
+			$coupon_code = get_option( 'lwc_promo_coupon_code', '' );
+			$coupon_id = get_option( 'lwc_promo_coupon_id', 0 );
+
+			if ( $coupon_id ) {
+				$coupon = wc_get_coupon( $coupon_id );
+				if ( $coupon ) {
+					$coupons[] = $coupon;
+				}
+			} elseif ( $coupon_code ) {
+				$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
+				if ( $coupon_id ) {
+					$coupon = wc_get_coupon( $coupon_id );
+					if ( $coupon ) {
+						$coupons[] = $coupon;
+					}
+				}
+			}
+		}
+
+		return $coupons;
+	}
+
+	/**
 	 * Create a new WooCommerce promo coupon.
 	 *
 	 * @param string $coupon_code Coupon code.
@@ -179,7 +281,12 @@ class LWC_Promo_Dashboard {
 		$coupon->set_free_shipping( false );
 		$coupon->save();
 
-		return $coupon->get_id();
+		$coupon_id = $coupon->get_id();
+		if ( $coupon_id ) {
+			update_post_meta( $coupon_id, '_lwc_promo_created', '1' );
+		}
+
+		return $coupon_id;
 	}
 
 	/**

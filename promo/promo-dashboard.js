@@ -33,7 +33,13 @@
 
             var couponCode = $(this).data('coupon');
             window.localStorage.setItem(storageKey, couponCode);
-            if (window.location.href.indexOf(lwcPromoDashboard.checkoutUrl) !== -1) {
+            var href = $(this).attr('href');
+            if ( href ) {
+                window.location.href = href;
+                return;
+            }
+
+            if ( window.location.href.indexOf( lwcPromoDashboard.checkoutUrl ) !== -1 ) {
                 applyCouponFromStorage();
                 return;
             }
