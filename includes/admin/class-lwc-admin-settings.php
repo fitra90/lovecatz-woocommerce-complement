@@ -80,7 +80,7 @@ class LWC_Admin_Settings {
 		if ( 'couriers' === $active_tab ) {
 			$active_tab = 'shipping';
 		}
-		if ( ! in_array( $active_tab, array( 'settings', 'shipping', 'currency', 'store-members' ), true ) ) {
+		if ( ! in_array( $active_tab, array( 'settings', 'shipping', 'promo', 'currency', 'store-members' ), true ) ) {
 			$active_tab = 'settings';
 		}
 
@@ -92,10 +92,11 @@ class LWC_Admin_Settings {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
 			<h2 class="nav-tab-wrapper">
-				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo $active_tab === 'store-members' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo $active_tab === 'shipping' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo $active_tab === 'currency' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo 'store-members' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo 'shipping' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=promo" class="nav-tab <?php echo 'promo' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Promo', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo 'currency' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
 			</h2>
 
 			<?php if ( $this->members_handler instanceof LWC_Admin_Members ) {
@@ -121,6 +122,10 @@ class LWC_Admin_Settings {
 						<?php settings_fields( 'lwc_shipping_fedex_options' ); do_settings_sections( 'lwc_shipping_fedex_options' ); submit_button(); ?>
 					</form>
 				<?php endif; ?>
+			<?php elseif ( 'promo' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php settings_fields( 'lwc_promo_options' ); do_settings_sections( 'lwc_promo_options' ); submit_button(); ?>
+				</form>
 			<?php elseif ( 'currency' === $active_tab ) : ?>
 				<p><?php esc_html_e( 'Currency settings coming soon.', 'lovecatz-wc' ); ?></p>
 			<?php else : ?>
@@ -155,6 +160,15 @@ class LWC_Admin_Settings {
 		add_settings_field( 'lwc_fedex_api_key', __( 'API Key', 'lovecatz-wc' ), array( $this, 'render_fedex_api_key_field' ), 'lwc_shipping_fedex_options', 'lwc_shipping_fedex_section' );
 		add_settings_field( 'lwc_fedex_api_secret', __( 'API Secret', 'lovecatz-wc' ), array( $this, 'render_fedex_api_secret_field' ), 'lwc_shipping_fedex_options', 'lwc_shipping_fedex_section' );
 		add_settings_field( 'lwc_fedex_test_mode', __( 'Enable Test Mode', 'lovecatz-wc' ), array( $this, 'render_fedex_test_mode_field' ), 'lwc_shipping_fedex_options', 'lwc_shipping_fedex_section' );
+
+		register_setting( 'lwc_promo_options', 'lwc_promo_enabled', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_promo_options', 'lwc_promo_prefix', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_promo_options', 'lwc_promo_message', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+
+		add_settings_section( 'lwc_promo_section', __( 'Promo & Coupon Settings', 'lovecatz-wc' ), array( $this, 'render_promo_section_intro' ), 'lwc_promo_options' );
+		add_settings_field( 'lwc_promo_enabled', __( 'Enable Promo Feature', 'lovecatz-wc' ), array( $this, 'render_promo_enabled_field' ), 'lwc_promo_options', 'lwc_promo_section' );
+		add_settings_field( 'lwc_promo_prefix', __( 'Coupon Prefix', 'lovecatz-wc' ), array( $this, 'render_promo_prefix_field' ), 'lwc_promo_options', 'lwc_promo_section' );
+		add_settings_field( 'lwc_promo_message', __( 'Promo Message', 'lovecatz-wc' ), array( $this, 'render_promo_message_field' ), 'lwc_promo_options', 'lwc_promo_section' );
 
 		register_setting( 'lwc_general_options', 'lwc_menu_title', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_general_options', 'lwc_menu_icon', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -209,6 +223,27 @@ class LWC_Admin_Settings {
 		$value = get_option( 'lwc_fedex_test_mode', 'no' );
 		$checked = 'yes' === $value ? 'checked' : '';
 		echo '<input type="checkbox" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (sandbox). Leave unchecked for production.', 'lovecatz-wc' );
+	}
+
+	public function render_promo_section_intro() {
+		echo '<p>' . esc_html__( 'Configure the coupon and promo flow for the store. This tab is focused on promotional campaigns and discount codes.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	public function render_promo_enabled_field() {
+		$value = get_option( 'lwc_promo_enabled', 'yes' );
+		$checked = 'yes' === $value ? 'checked' : '';
+		echo '<input type="checkbox" name="lwc_promo_enabled" value="yes" ' . $checked . ' /> ' . esc_html__( 'Enable promo features and coupon settings.', 'lovecatz-wc' );
+	}
+
+	public function render_promo_prefix_field() {
+		$value = get_option( 'lwc_promo_prefix', 'PROMO' );
+		echo '<input type="text" name="lwc_promo_prefix" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<p class="description">' . esc_html__( 'Example prefix: PROMO, SAVE, VIP.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	public function render_promo_message_field() {
+		$value = get_option( 'lwc_promo_message', __( 'Enjoy special promo offers today!', 'lovecatz-wc' ) );
+		echo '<input type="text" name="lwc_promo_message" value="' . esc_attr( $value ) . '" class="regular-text" />';
 	}
 
 	public function render_menu_section_intro() {

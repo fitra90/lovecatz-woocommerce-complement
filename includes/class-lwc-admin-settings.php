@@ -75,7 +75,7 @@ class LWC_Admin_Settings {
 		if ( 'couriers' === $active_tab ) {
 			$active_tab = 'shipping';
 		}
-		if ( ! in_array( $active_tab, array( 'settings', 'shipping', 'currency', 'store-members' ), true ) ) {
+		if ( ! in_array( $active_tab, array( 'settings', 'shipping', 'promo', 'currency', 'store-members' ), true ) ) {
 			$active_tab = 'settings';
 		}
 
@@ -88,10 +88,11 @@ class LWC_Admin_Settings {
 			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
 
 			<h2 class="nav-tab-wrapper">
-				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo $active_tab === 'store-members' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo $active_tab === 'shipping' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
-				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo $active_tab === 'currency' ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo 'store-members' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo 'shipping' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=promo" class="nav-tab <?php echo 'promo' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Promo', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo 'currency' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
 			</h2>
 
 			<?php $this->render_import_result_notice(); ?>
@@ -134,6 +135,10 @@ class LWC_Admin_Settings {
 						?>
 					</form>
 				<?php endif; ?>
+			<?php elseif ( 'promo' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php settings_fields( 'lwc_promo_options' ); do_settings_sections( 'lwc_promo_options' ); submit_button(); ?>
+				</form>
 			<?php elseif ( 'currency' === $active_tab ) : ?>
 				<p><?php esc_html_e( 'Currency settings coming soon.', 'lovecatz-wc' ); ?></p>
 			<?php else : ?>
