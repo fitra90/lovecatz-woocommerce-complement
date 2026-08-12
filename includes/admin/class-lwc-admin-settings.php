@@ -56,6 +56,7 @@ class LWC_Admin_Settings {
 			return;
 		}
 
+		wp_enqueue_media();
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.css', array(), LWC_VERSION );
 		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
@@ -164,11 +165,13 @@ class LWC_Admin_Settings {
 		register_setting( 'lwc_promo_options', 'lwc_promo_enabled', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_promo_options', 'lwc_promo_prefix', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_promo_options', 'lwc_promo_message', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_promo_options', 'lwc_promo_image_id', array( 'sanitize_callback' => 'absint' ) );
 
 		add_settings_section( 'lwc_promo_section', __( 'Promo & Coupon Settings', 'lovecatz-wc' ), array( $this, 'render_promo_section_intro' ), 'lwc_promo_options' );
 		add_settings_field( 'lwc_promo_enabled', __( 'Enable Promo Feature', 'lovecatz-wc' ), array( $this, 'render_promo_enabled_field' ), 'lwc_promo_options', 'lwc_promo_section' );
 		add_settings_field( 'lwc_promo_prefix', __( 'Coupon Prefix', 'lovecatz-wc' ), array( $this, 'render_promo_prefix_field' ), 'lwc_promo_options', 'lwc_promo_section' );
 		add_settings_field( 'lwc_promo_message', __( 'Promo Message', 'lovecatz-wc' ), array( $this, 'render_promo_message_field' ), 'lwc_promo_options', 'lwc_promo_section' );
+		add_settings_field( 'lwc_promo_image', __( 'Promo Image', 'lovecatz-wc' ), array( $this, 'render_promo_image_field' ), 'lwc_promo_options', 'lwc_promo_section' );
 
 		register_setting( 'lwc_general_options', 'lwc_menu_title', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_general_options', 'lwc_menu_icon', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -244,6 +247,24 @@ class LWC_Admin_Settings {
 	public function render_promo_message_field() {
 		$value = get_option( 'lwc_promo_message', __( 'Enjoy special promo offers today!', 'lovecatz-wc' ) );
 		echo '<input type="text" name="lwc_promo_message" value="' . esc_attr( $value ) . '" class="regular-text" />';
+	}
+
+	public function render_promo_image_field() {
+		$image_id = get_option( 'lwc_promo_image_id', 0 );
+		$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : '';
+		$placeholder_url = LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
+
+		echo '<div class="lwc-promo-image-field">';
+		echo '<input type="hidden" name="lwc_promo_image_id" id="lwc_promo_image_id" value="' . esc_attr( $image_id ) . '" />';
+		echo '<div class="lwc-promo-image-preview">';
+		echo '<img src="' . esc_url( $image_url ? $image_url : $placeholder_url ) . '" alt="' . esc_attr__( 'Promo image preview', 'lovecatz-wc' ) . '" data-placeholder-src="' . esc_url( $placeholder_url ) . '" />';
+		echo '</div>';
+		echo '<p>';
+		echo '<button type="button" class="button button-secondary lwc-promo-image-select">' . esc_html__( 'Choose Promo Image', 'lovecatz-wc' ) . '</button> ';
+		echo '<button type="button" class="button button-secondary lwc-promo-image-remove"' . ( $image_id ? '' : ' style="display:none;"' ) . '>' . esc_html__( 'Remove Image', 'lovecatz-wc' ) . '</button>';
+		echo '</p>';
+		echo '<p class="description">' . esc_html__( 'Upload or select an image to visualize the promo banner. Use the example image file from the plugin assets if needed.', 'lovecatz-wc' ) . '</p>';
+		echo '</div>';
 	}
 
 	public function render_menu_section_intro() {

@@ -254,6 +254,14 @@ function lwc_activate() {
 	if ( class_exists( 'LWC_JT_Account' ) ) {
 		LWC_JT_Account::create_table();
 	}
+
+	if ( function_exists( 'add_rewrite_endpoint' ) ) {
+		add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
+	}
+
+	if ( function_exists( 'flush_rewrite_rules' ) ) {
+		flush_rewrite_rules();
+	}
 }
 
 /**

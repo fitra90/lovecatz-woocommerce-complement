@@ -72,3 +72,19 @@
 	background: currentColor;
 	flex-shrink: 0;
 }
+
+.lwc-promo-image-field {
+	margin-top: 18px;
+}
+
+.lwc-promo-image-preview {
+	margin-bottom: 12px;
+}
+
+.lwc-promo-image-preview img {
+	max-width: 320px;
+	width: 100%;
+	height: auto;
+	border: 1px solid #ccd0d4;
+	border-radius: 6px;
+}

@@ -31,6 +31,10 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 		}
 
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/class-lwc-promo-dashboard.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/class-lwc-promo-dashboard.php';
+		}
+
 		if ( file_exists( LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-members.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-members.php';
 		}
@@ -67,6 +71,9 @@ class LWC_Core {
 		if ( is_admin() ) {
 			$admin_settings = new LWC_Admin_Settings();
 			$admin_settings->init();
+		} else {
+			$promo_dashboard = new LWC_Promo_Dashboard();
+			$promo_dashboard->init();
 		}
 
 		if ( function_exists( 'is_admin' ) && is_admin() ) {
