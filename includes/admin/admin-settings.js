@@ -78,8 +78,10 @@
 
     function initPromoImageUploader() {
         var frame;
+        var target;
 
-        function openPromoMediaFrame() {
+        function openPromoMediaFrame(targetSelector) {
+            target = $(targetSelector);
             if (frame) {
                 frame.open();
                 return;
@@ -95,28 +97,28 @@
 
             frame.on('select', function () {
                 var attachment = frame.state().get('selection').first().toJSON();
-                $('#lwc_promo_image_id').val(attachment.id);
-                $('.lwc-promo-image-preview img').attr('src', attachment.url);
-                $('.lwc-promo-image-remove').show();
+                if (target && target.length) {
+                    target.val(attachment.id).trigger('change');
+                    target.closest('.lwc-promo-image-field').find('.lwc-promo-image-preview').html('<img src="' + attachment.url + '" alt="">');
+                }
             });
         }
 
         $('.lwc-promo-image-select').on('click', function (e) {
             e.preventDefault();
-            openPromoMediaFrame();
+            openPromoMediaFrame($(this).data('target'));
         });
+    }
 
-        $('.lwc-promo-image-remove').on('click', function (e) {
-            e.preventDefault();
-            $('#lwc_promo_image_id').val('');
-            $('.lwc-promo-image-preview img').each(function () {
-                var placeholder = $(this).data('placeholder-src');
-                if (placeholder) {
-                    $(this).attr('src', placeholder);
-                }
-            });
-            $(this).hide();
-        });
+    function initPromoDiscountType() {
+        function toggleMaximumDiscount() {
+            var isPercent = $('#lwc_promo_discount_type').val() === 'percent';
+            $('.lwc-percent-only').toggle(isPercent);
+            $('.lwc-fixed-only').toggle(!isPercent);
+        }
+
+        $('#lwc_promo_discount_type').on('change', toggleMaximumDiscount);
+        toggleMaximumDiscount();
     }
 
     $(document).ready(function () {
@@ -133,6 +135,10 @@
 
         if ($('.lwc-promo-image-select').length) {
             initPromoImageUploader();
+        }
+
+        if ($('#lwc_promo_discount_type').length) {
+            initPromoDiscountType();
         }
     });
 })(jQuery);

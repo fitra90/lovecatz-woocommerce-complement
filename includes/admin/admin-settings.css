@@ -88,3 +88,71 @@
 	border: 1px solid #ccd0d4;
 	border-radius: 6px;
 }
+
+.lwc-promo-manager {
+	max-width: 1100px;
+	margin-top: 24px;
+}
+
+.lwc-promo-manager-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	margin-bottom: 20px;
+}
+
+.lwc-promo-manager-heading h2 {
+	margin: 0 0 6px;
+}
+
+.lwc-promo-manager-heading p {
+	margin: 0;
+	color: #50575e;
+}
+
+.lwc-promo-form {
+	padding: 24px;
+	margin: 0 0 32px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+}
+
+.lwc-promo-form-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 18px 24px;
+}
+
+.lwc-promo-form-grid label {
+	display: grid;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.lwc-promo-form-grid input,
+.lwc-promo-form-grid select {
+	width: 100%;
+}
+
+.lwc-promo-form-grid input[type="date"] {
+	align-self: start;
+	height: 40px;
+	box-sizing: border-box;
+}
+
+.lwc-promo-form-grid small {
+	font-weight: 400;
+	color: #646970;
+}
+
+.lwc-promo-form-grid .lwc-promo-image-preview {
+	display: block;
+	margin-top: 4px;
+}
+
+.lwc-promo-form-grid .lwc-promo-image-preview img {
+	max-width: 160px;
+	border-radius: 4px;
+}

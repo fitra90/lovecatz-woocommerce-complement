@@ -15,9 +15,20 @@ class LWC_Product_Quantity_Limits {
 	 * Initialize quantity hooks.
 	 */
 	public function init() {
-		error_log( '[LWC_DEBUG] LWC_Product_Quantity_Limits::init() called at ' . current_time( 'mysql' ) );
-		add_action( 'woocommerce_product_options_stock_fields', array( $this, 'add_quantity_limit_fields' ) );
+		if ( ! $this->is_enabled() ) {
+			return;
+		}
+
+		// This hook is outside WooCommerce's show_if_manage_stock container,
+		// so quantity limits remain available for backorder products.
+		add_action( 'woocommerce_product_options_sku', array( $this, 'add_quantity_limit_fields' ) );
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_quantity_limit_fields' ) );
+		add_action( 'quick_edit_custom_box', array( $this, 'add_quick_edit_fields' ), 10, 2 );
+		add_filter( 'post_row_actions', array( $this, 'add_quick_edit_product_data' ), 10, 2 );
+		add_action( 'admin_head-edit.php', array( $this, 'render_quick_edit_styles' ) );
+		add_action( 'admin_footer-edit.php', array( $this, 'render_quick_edit_script' ) );
+		add_action( 'save_post_product', array( $this, 'save_quick_edit_fields' ), 10, 2 );
+		add_action( 'wp_footer', array( $this, 'render_frontend_quantity_control' ) );
 
 		add_filter( 'woocommerce_quantity_input_args', array( $this, 'set_product_quantity_input_args' ), 10, 2 );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate_add_to_cart_quantities' ), 10, 5 );
@@ -26,26 +37,21 @@ class LWC_Product_Quantity_Limits {
 	}
 
 	/**
-	 * Add quantity limit fields to the product inventory tab.
+	 * Add quantity limit fields to the product Inventory tab.
+	 *
+	 * The fields are deliberately independent from WooCommerce stock management.
 	 */
 	public function add_quantity_limit_fields() {
-		global $product, $post;
-		error_log( '[LWC_DEBUG] add_quantity_limit_fields() called. product is_object: ' . ( is_object( $product ) ? 'yes' : 'no' ) . ', post ID: ' . ( isset( $post->ID ) ? $post->ID : 'none' ) );
+		global $post, $thepostid;
 
-		// Fallback: if $product is not set, try to get from $post global
-		if ( ! is_object( $product ) && isset( $post ) && $post->ID ) {
-			error_log( '[LWC_DEBUG] Product not object, attempting fallback from post ID: ' . $post->ID );
-			if ( function_exists( 'wc_get_product' ) ) {
-				$product = wc_get_product( $post->ID );
-			}
+		// A product object is not always available on the new-product screen.
+		// The Inventory fields must still render there, so use the post ID when it exists.
+		$product_id = absint( $thepostid );
+		if ( ! $product_id && isset( $post->ID ) ) {
+			$product_id = absint( $post->ID );
 		}
 
-		if ( ! is_object( $product ) ) {
-			error_log( '[LWC_DEBUG] Product is still not object after fallback, returning early' );
-			return;
-		}
-
-		$min_qty = get_post_meta( $product->get_id(), '_lwc_minimum_quantity', true );
+		$min_qty = $product_id ? get_post_meta( $product_id, '_lwc_minimum_quantity', true ) : '';
 		$min_qty = $min_qty ? absint( $min_qty ) : '';
 
 		woocommerce_wp_text_input(
@@ -63,7 +69,7 @@ class LWC_Product_Quantity_Limits {
 			)
 		);
 
-		$max_qty = get_post_meta( $product->get_id(), '_lwc_maximum_quantity', true );
+		$max_qty = $product_id ? get_post_meta( $product_id, '_lwc_maximum_quantity', true ) : '';
 		$max_qty = $max_qty ? absint( $max_qty ) : '';
 
 		woocommerce_wp_text_input(
@@ -94,23 +100,11 @@ class LWC_Product_Quantity_Limits {
 		}
 
 		if ( isset( $_POST['_lwc_minimum_quantity'] ) ) {
-			$min_qty = intval( wp_unslash( $_POST['_lwc_minimum_quantity'] ) );
-
-			if ( $min_qty > 1 ) {
-				update_post_meta( $post_id, '_lwc_minimum_quantity', $min_qty );
-			} else {
-				delete_post_meta( $post_id, '_lwc_minimum_quantity' );
-			}
+			$this->save_quantity_limit_meta( $post_id, '_lwc_minimum_quantity', '_lwc_minimum_quantity' );
 		}
 
 		if ( isset( $_POST['_lwc_maximum_quantity'] ) ) {
-			$max_qty = intval( wp_unslash( $_POST['_lwc_maximum_quantity'] ) );
-
-			if ( $max_qty > 0 ) {
-				update_post_meta( $post_id, '_lwc_maximum_quantity', $max_qty );
-			} else {
-				delete_post_meta( $post_id, '_lwc_maximum_quantity' );
-			}
+			$this->save_quantity_limit_meta( $post_id, '_lwc_maximum_quantity', '_lwc_maximum_quantity' );
 		}
 	}
 
@@ -177,6 +171,50 @@ class LWC_Product_Quantity_Limits {
 		$args['input_value'] = $default_input;
 
 		return $args;
+	}
+
+	/**
+	 * Keep the product-page quantity input within its configured limits while typing.
+	 */
+	public function render_frontend_quantity_control() {
+		if ( ! function_exists( 'is_product' ) || ! is_product() ) {
+			return;
+		}
+		?>
+		<script>
+		(function () {
+			'use strict';
+
+			function normalizeQuantity(input) {
+				var quantity = Number(input.value);
+				var minimum = Number(input.getAttribute('min'));
+				var maximum = Number(input.getAttribute('max'));
+
+				if (!Number.isFinite(quantity)) {
+					return;
+				}
+
+				if (Number.isFinite(minimum) && minimum > 0 && quantity < minimum) {
+					input.value = minimum;
+					return;
+				}
+
+				if (Number.isFinite(maximum) && maximum > 0 && quantity > maximum) {
+					input.value = maximum;
+				}
+			}
+
+			function handleQuantityEvent(event) {
+				if (event.target.matches('.single-product .quantity input.qty')) {
+					normalizeQuantity(event.target);
+				}
+			}
+
+			document.addEventListener('keyup', handleQuantityEvent);
+			document.addEventListener('input', handleQuantityEvent);
+		}());
+		</script>
+		<?php
 	}
 
 	/**
@@ -338,5 +376,199 @@ class LWC_Product_Quantity_Limits {
 
 		// No custom minimum set → return 0 (means use WooCommerce default of 1)
 		return 0;
+	}
+
+	/**
+	 * Add product quantity fields to the WooCommerce Quick Edit panel.
+	 *
+	 * @param string $column_name Current product-list column.
+	 * @param string $post_type   Current post type.
+	 */
+	public function add_quick_edit_fields( $column_name, $post_type ) {
+		if ( 'product' !== $post_type || 'name' !== $column_name ) {
+			return;
+		}
+		?>
+		<fieldset class="inline-edit-col-left lwc-quantity-limits-quick-edit">
+			<div class="inline-edit-col">
+				<span class="lwc-quantity-limits-heading"><?php esc_html_e( 'Quantity Limits', 'lovecatz-wc' ); ?></span>
+				<label>
+					<span class="title"><?php esc_html_e( 'Minimum', 'lovecatz-wc' ); ?></span>
+					<span class="input-text-wrap"><input type="number" name="lwc_quick_edit_minimum_quantity" min="1" step="1" /></span>
+				</label>
+				<label>
+					<span class="title"><?php esc_html_e( 'Maximum', 'lovecatz-wc' ); ?></span>
+					<span class="input-text-wrap"><input type="number" name="lwc_quick_edit_maximum_quantity" min="1" step="1" /></span>
+				</label>
+			</div>
+		</fieldset>
+		<?php
+	}
+
+	/**
+	 * Render Quick Edit styles on the Products list table.
+	 */
+	public function render_quick_edit_styles() {
+		$screen = get_current_screen();
+		if ( ! $screen || 'edit-product' !== $screen->id ) {
+			return;
+		}
+		?>
+		<style>
+			.inline-edit-row .lwc-quantity-limits-quick-edit {
+				clear: left;
+				padding-top: 8px;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-quick-edit .inline-edit-col {
+				padding: 0;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-heading {
+				display: block;
+				margin-bottom: 6px;
+				font-weight: 600;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-quick-edit label {
+				display: flex;
+				align-items: center;
+				margin: 0 0 6px;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-quick-edit label .title {
+				float: none;
+				width: 85px;
+				margin: 0;
+				white-space: nowrap;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-quick-edit label .input-text-wrap {
+				float: none;
+				margin: 0;
+			}
+
+			.inline-edit-row .lwc-quantity-limits-quick-edit input[type="number"] {
+				width: 120px;
+			}
+		</style>
+		<?php
+	}
+
+	/**
+	 * Store product-specific limit values in the row for the Quick Edit script.
+	 *
+	 * @param array   $actions Product row actions.
+	 * @param WP_Post $post    Current post.
+	 * @return array
+	 */
+	public function add_quick_edit_product_data( $actions, $post ) {
+		if ( 'product' !== $post->post_type ) {
+			return $actions;
+		}
+
+		$minimum = get_post_meta( $post->ID, '_lwc_minimum_quantity', true );
+		$maximum = get_post_meta( $post->ID, '_lwc_maximum_quantity', true );
+		$actions['lwc_quantity_limit_data'] = sprintf(
+			'<span class="lwc-quantity-limit-data" data-minimum="%1$s" data-maximum="%2$s" aria-hidden="true" style="display:none"></span>',
+			esc_attr( $minimum ),
+			esc_attr( $maximum )
+		);
+
+		return $actions;
+	}
+
+	/**
+	 * Populate the Quick Edit fields from the selected product row.
+	 */
+	public function render_quick_edit_script() {
+		$screen = get_current_screen();
+		if ( ! $screen || 'edit-product' !== $screen->id ) {
+			return;
+		}
+		?>
+		<script>
+		jQuery( function( $ ) {
+			var originalEdit = inlineEditPost.edit;
+
+			inlineEditPost.edit = function( postId ) {
+				originalEdit.apply( this, arguments );
+
+				var id = typeof postId === 'object' ? this.getId( postId ) : postId;
+				var data = $( '#post-' + id + ' .lwc-quantity-limit-data' );
+				var quickEdit = $( '#edit-' + id );
+
+				quickEdit.find( '[name="lwc_quick_edit_minimum_quantity"]' ).val( data.data( 'minimum' ) || '' );
+				quickEdit.find( '[name="lwc_quick_edit_maximum_quantity"]' ).val( data.data( 'maximum' ) || '' );
+			};
+		} );
+		</script>
+		<?php
+	}
+
+	/**
+	 * Save quantity limits submitted from WooCommerce Quick Edit.
+	 *
+	 * @param int     $post_id Product ID.
+	 * @param WP_Post $post    Product post.
+	 */
+	public function save_quick_edit_fields( $post_id, $post ) {
+		if ( ! isset( $_POST['_inline_edit'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_inline_edit'] ) ), 'inlineeditnonce' ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) || 'product' !== $post->post_type ) {
+			return;
+		}
+
+		$this->save_quantity_limit_meta( $post_id, '_lwc_minimum_quantity', 'lwc_quick_edit_minimum_quantity' );
+		$this->save_quantity_limit_meta( $post_id, '_lwc_maximum_quantity', 'lwc_quick_edit_maximum_quantity' );
+	}
+
+	/**
+	 * Determine whether per-product quantity limits are enabled.
+	 *
+	 * @return bool
+	 */
+	private function is_enabled() {
+		return 'yes' === get_option( 'lwc_enable_product_quantity_limits', 'no' );
+	}
+
+	/**
+	 * Sanitize an optional quantity limit.
+	 *
+	 * An empty value means no product-specific limit. Any supplied value below
+	 * one is normalized to one so direct form submissions cannot bypass the UI.
+	 *
+	 * @param mixed $value Submitted quantity limit.
+	 * @return int Limit value, or 0 when empty.
+	 */
+	private function sanitize_quantity_limit( $value ) {
+		$value = trim( (string) wp_unslash( $value ) );
+		if ( '' === $value ) {
+			return 0;
+		}
+
+		return max( 1, intval( $value ) );
+	}
+
+	/**
+	 * Save or remove one optional quantity-limit meta value from the request.
+	 *
+	 * @param int    $post_id   Product ID.
+	 * @param string $meta_key  Product meta key.
+	 * @param string $field_key Submitted request field name.
+	 */
+	private function save_quantity_limit_meta( $post_id, $meta_key, $field_key ) {
+		if ( ! isset( $_POST[ $field_key ] ) ) {
+			return;
+		}
+
+		$quantity = $this->sanitize_quantity_limit( $_POST[ $field_key ] );
+		if ( $quantity > 0 ) {
+			update_post_meta( $post_id, $meta_key, $quantity );
+		} else {
+			delete_post_meta( $post_id, $meta_key );
+		}
 	}
 }

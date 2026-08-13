@@ -60,8 +60,9 @@ class LWC_Admin_Settings {
 		}
 
 		wp_enqueue_style( 'dashicons' );
-		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_enqueue_media();
+		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array(), LWC_VERSION );
+		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
 	}
 
 	/**
@@ -137,9 +138,7 @@ class LWC_Admin_Settings {
 					</form>
 				<?php endif; ?>
 			<?php elseif ( 'promo' === $active_tab ) : ?>
-				<form method="post" action="options.php">
-					<?php settings_fields( 'lwc_promo_options' ); do_settings_sections( 'lwc_promo_options' ); submit_button(); ?>
-				</form>
+				<?php do_action( 'lwc_render_promo_manager' ); ?>
 			<?php elseif ( 'products' === $active_tab ) : ?>
 				<form method="post" action="options.php">
 					<?php settings_fields( 'lwc_products_options' ); do_settings_sections( 'lwc_products_options' ); submit_button(); ?>
@@ -257,8 +256,11 @@ class LWC_Admin_Settings {
 			'lwc_general_section_menu'
 		);
 
-		register_setting( 'lwc_products_options', 'lwc_product_default_minimum_quantity', array( 'sanitize_callback' => 'absint' ) );
-		register_setting( 'lwc_products_options', 'lwc_product_default_maximum_quantity', array( 'sanitize_callback' => 'absint' ) );
+		register_setting(
+			'lwc_products_options',
+			'lwc_enable_product_quantity_limits',
+			array( 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) )
+		);
 
 		add_settings_section(
 			'lwc_products_section_quantity_limits',
@@ -268,17 +270,9 @@ class LWC_Admin_Settings {
 		);
 
 		add_settings_field(
-			'lwc_product_default_minimum_quantity',
-			__( 'Default Minimum Quantity', 'lovecatz-wc' ),
-			array( $this, 'render_product_default_minimum_quantity_field' ),
-			'lwc_products_options',
-			'lwc_products_section_quantity_limits'
-		);
-
-		add_settings_field(
-			'lwc_product_default_maximum_quantity',
-			__( 'Default Maximum Quantity', 'lovecatz-wc' ),
-			array( $this, 'render_product_default_maximum_quantity_field' ),
+			'lwc_enable_product_quantity_limits',
+			__( 'Enable quantity limits per product', 'lovecatz-wc' ),
+			array( $this, 'render_product_quantity_limits_enabled_field' ),
 			'lwc_products_options',
 			'lwc_products_section_quantity_limits'
 		);
@@ -394,25 +388,26 @@ class LWC_Admin_Settings {
 	 * Render intro text for the Products settings section.
 	 */
 	public function render_products_section_intro() {
-		echo '<p>' . esc_html__( 'Configure default quantity limits for products and use the product Inventory tab to override limits on individual items.', 'lovecatz-wc' ) . '</p>';
+		echo '<p>' . esc_html__( 'Enable this feature to add Minimum Quantity and Maximum Quantity fields to the Inventory tab for each product.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/**
-	 * Render the default minimum quantity field.
+	 * Render the per-product quantity limits toggle.
 	 */
-	public function render_product_default_minimum_quantity_field() {
-		$value = absint( get_option( 'lwc_product_default_minimum_quantity', 0 ) );
-		echo '<input type="number" name="lwc_product_default_minimum_quantity" value="' . esc_attr( $value ) . '" class="small-text" min="0" step="1" />';
-		echo '<p class="description">' . esc_html__( 'Set a default minimum quantity for products. Leave blank or zero to use product-specific limits only.', 'lovecatz-wc' ) . '</p>';
+	public function render_product_quantity_limits_enabled_field() {
+		$enabled = 'yes' === get_option( 'lwc_enable_product_quantity_limits', 'no' );
+		echo '<input type="hidden" name="lwc_enable_product_quantity_limits" value="no" />';
+		echo '<label><input type="checkbox" name="lwc_enable_product_quantity_limits" value="yes" ' . checked( $enabled, true, false ) . ' /> ' . esc_html__( 'Show and enforce minimum/maximum quantity limits for individual products.', 'lovecatz-wc' ) . '</label>';
 	}
 
 	/**
-	 * Render the default maximum quantity field.
+	 * Sanitize a checkbox setting stored as a yes/no value.
+	 *
+	 * @param string $value Submitted option value.
+	 * @return string
 	 */
-	public function render_product_default_maximum_quantity_field() {
-		$value = absint( get_option( 'lwc_product_default_maximum_quantity', 0 ) );
-		echo '<input type="number" name="lwc_product_default_maximum_quantity" value="' . esc_attr( $value ) . '" class="small-text" min="0" step="1" />';
-		echo '<p class="description">' . esc_html__( 'Set a default maximum quantity for products. Leave blank or zero to allow stock-based maximum values.', 'lovecatz-wc' ) . '</p>';
+	public function sanitize_yes_no_option( $value ) {
+		return 'yes' === $value ? 'yes' : 'no';
 	}
 
 	/**

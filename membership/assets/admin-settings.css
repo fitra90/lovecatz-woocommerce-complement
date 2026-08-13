@@ -1,0 +1,41 @@
+.lwc-dashicon-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.lwc-dashicon-choice {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 6px;
+    color: #23282d;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 10px;
+    text-decoration: none;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .15s ease;
+    min-height: 80px;
+}
+
+.lwc-dashicon-choice.selected,
+.lwc-dashicon-choice:hover {
+    background: #f7fbfd;
+    border-color: #00a0d2;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .08);
+    transform: translateY(-1px);
+}
+
+.lwc-dashicon-choice .dashicons {
+    font-size: 22px;
+}
+
+.lwc-dashicon-choice .dashicon-label {
+    font-size: 13px;
+    line-height: 1.2;
+    text-align: center;
+}
