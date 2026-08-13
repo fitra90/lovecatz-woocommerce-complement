@@ -44,12 +44,12 @@ function lwc_init() {
 
 	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/class-lwc-shipping-provider.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-shipping-jt.php';
-	require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-shipping-fedex.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
 
 	add_filter( 'woocommerce_shipping_methods', 'lwc_register_shipping_methods' );
@@ -149,7 +149,7 @@ function lwc_fedex_get_rate_quote() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
+		require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	}
 
 	$package = array(
@@ -174,7 +174,7 @@ function lwc_fedex_create_shipment() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-api.php';
+		require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	}
 
 	$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
@@ -260,12 +260,12 @@ function lwc_activate() {
 		return;
 	}
 
-	if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/shipping/fedex/class-lwc-fedex-account.php';
+	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
 	}
 
-	if ( file_exists( LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php' ) ) {
-		require_once LWC_PLUGIN_DIR . 'includes/shipping/jt/class-lwc-jt-account.php';
+	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
 	}
 
 	if ( class_exists( 'LWC_FedEx_Account' ) ) {

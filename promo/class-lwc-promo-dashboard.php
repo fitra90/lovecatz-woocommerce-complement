@@ -52,8 +52,8 @@ class LWC_Promo_Dashboard {
 			return;
 		}
 
-		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo/promo-dashboard.css', array(), LWC_VERSION );
-				wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'includes/promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.css', array(), LWC_VERSION );
+				wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
 		wp_localize_script(
 			'lwc-promo-dashboard',
 			'lwcPromoDashboard',
