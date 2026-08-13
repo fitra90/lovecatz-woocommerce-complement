@@ -15,6 +15,7 @@ class LWC_Product_Quantity_Limits {
 	 * Initialize quantity hooks.
 	 */
 	public function init() {
+		error_log( '[LWC_DEBUG] LWC_Product_Quantity_Limits::init() called at ' . current_time( 'mysql' ) );
 		add_action( 'woocommerce_product_options_stock_fields', array( $this, 'add_quantity_limit_fields' ) );
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_quantity_limit_fields' ) );
 
@@ -28,9 +29,19 @@ class LWC_Product_Quantity_Limits {
 	 * Add quantity limit fields to the product inventory tab.
 	 */
 	public function add_quantity_limit_fields() {
-		global $product;
+		global $product, $post;
+		error_log( '[LWC_DEBUG] add_quantity_limit_fields() called. product is_object: ' . ( is_object( $product ) ? 'yes' : 'no' ) . ', post ID: ' . ( isset( $post->ID ) ? $post->ID : 'none' ) );
+
+		// Fallback: if $product is not set, try to get from $post global
+		if ( ! is_object( $product ) && isset( $post ) && $post->ID ) {
+			error_log( '[LWC_DEBUG] Product not object, attempting fallback from post ID: ' . $post->ID );
+			if ( function_exists( 'wc_get_product' ) ) {
+				$product = wc_get_product( $post->ID );
+			}
+		}
 
 		if ( ! is_object( $product ) ) {
+			error_log( '[LWC_DEBUG] Product is still not object after fallback, returning early' );
 			return;
 		}
 
@@ -254,8 +265,11 @@ class LWC_Product_Quantity_Limits {
 	/**
 	 * Get the maximum quantity for the product or variation.
 	 *
+	 * Per-product setting ONLY — no fallback to global defaults.
+	 * Returns 0 (unlimited) if not explicitly set on the product.
+	 *
 	 * @param WC_Product $product Product object.
-	 * @return int
+	 * @return int Maximum quantity, or 0 for unlimited.
 	 */
 	private function get_product_maximum_quantity( $product ) {
 		if ( ! is_object( $product ) ) {
@@ -265,26 +279,23 @@ class LWC_Product_Quantity_Limits {
 		$max_qty = get_post_meta( $product->get_id(), '_lwc_maximum_quantity', true );
 		$max_qty = $max_qty ? absint( $max_qty ) : 0;
 
-		if ( $product->is_type( 'variation' ) ) {
+		// For variations, check parent product if variation has no custom max
+		if ( $max_qty === 0 && $product->is_type( 'variation' ) ) {
 			$parent_id = $product->get_parent_id();
 			if ( $parent_id ) {
 				$parent_max_qty = get_post_meta( $parent_id, '_lwc_maximum_quantity', true );
 				$parent_max_qty = $parent_max_qty ? absint( $parent_max_qty ) : 0;
-				if ( $parent_max_qty > $max_qty ) {
+				if ( $parent_max_qty > 0 ) {
 					$max_qty = $parent_max_qty;
 				}
 			}
 		}
 
+		// Ensure max_qty >= min_qty when both are set
 		if ( $max_qty > 0 ) {
 			$min_qty = $this->get_product_minimum_quantity( $product );
 			if ( $min_qty > 0 && $max_qty < $min_qty ) {
 				$max_qty = $min_qty;
-			}
-		} else {
-			$default_max_qty = absint( get_option( 'lwc_product_default_maximum_quantity', 0 ) );
-			if ( $default_max_qty > 0 ) {
-				$max_qty = $default_max_qty;
 			}
 		}
 
@@ -294,8 +305,11 @@ class LWC_Product_Quantity_Limits {
 	/**
 	 * Get the minimum quantity for the product or variation.
 	 *
+	 * Per-product setting ONLY — no fallback to global defaults.
+	 * Returns 0 (no minimum / default to 1) if not explicitly set on the product.
+	 *
 	 * @param WC_Product $product Product object.
-	 * @return int
+	 * @return int Minimum quantity, or 0 if not set (defaults to 1).
 	 */
 	private function get_product_minimum_quantity( $product ) {
 		if ( ! is_object( $product ) ) {
@@ -305,11 +319,13 @@ class LWC_Product_Quantity_Limits {
 		$min_qty = get_post_meta( $product->get_id(), '_lwc_minimum_quantity', true );
 		$min_qty = $min_qty ? absint( $min_qty ) : 0;
 
+		// If product has explicit minimum set, use it (even 1+)
 		if ( $min_qty > 1 ) {
 			return $min_qty;
 		}
 
-		if ( $product->is_type( 'variation' ) ) {
+		// For variations, check parent product if variation has no custom minimum
+		if ( $min_qty === 0 && $product->is_type( 'variation' ) ) {
 			$parent_id = $product->get_parent_id();
 			if ( $parent_id ) {
 				$parent_min_qty = get_post_meta( $parent_id, '_lwc_minimum_quantity', true );
@@ -320,11 +336,7 @@ class LWC_Product_Quantity_Limits {
 			}
 		}
 
-		$default_min_qty = absint( get_option( 'lwc_product_default_minimum_quantity', 0 ) );
-		if ( $default_min_qty > 1 ) {
-			return $default_min_qty;
-		}
-
+		// No custom minimum set → return 0 (means use WooCommerce default of 1)
 		return 0;
 	}
 }

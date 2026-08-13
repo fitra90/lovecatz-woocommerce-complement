@@ -53,7 +53,7 @@ class LWC_Promo_Dashboard {
 		}
 
 		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.css', array(), LWC_VERSION );
-				wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
 		wp_localize_script(
 			'lwc-promo-dashboard',
 			'lwcPromoDashboard',
@@ -114,9 +114,14 @@ class LWC_Promo_Dashboard {
 		$coupons = $this->get_promo_coupons();
 		if ( empty( $coupons ) ) {
 			$coupon_code = $this->get_or_create_promo_coupon( $prefix );
-			$coupon = wc_get_coupon( wc_get_coupon_id_by_code( $coupon_code ) );
-			if ( $coupon ) {
-				$coupons = array( $coupon );
+			if ( function_exists( 'wc_get_coupon' ) && function_exists( 'wc_get_coupon_id_by_code' ) ) {
+				$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
+				if ( $coupon_id ) {
+					$coupon = wc_get_coupon( $coupon_id );
+					if ( $coupon && is_object( $coupon ) ) {
+						$coupons = array( $coupon );
+					}
+				}
 			}
 		}
 
@@ -158,17 +163,21 @@ class LWC_Promo_Dashboard {
 		$coupon_id = get_option( 'lwc_promo_coupon_id', 0 );
 
 		if ( $coupon_code && $coupon_id ) {
-			$coupon = wc_get_coupon( $coupon_id );
-			if ( $coupon && $coupon->get_code() === $coupon_code ) {
-				return $coupon_code;
+			if ( function_exists( 'wc_get_coupon' ) ) {
+				$coupon = wc_get_coupon( $coupon_id );
+				if ( $coupon && is_object( $coupon ) && $coupon->get_code() === $coupon_code ) {
+					return $coupon_code;
+				}
 			}
 		}
 
 		if ( $coupon_code ) {
-			$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
-			if ( $coupon_id ) {
-				update_option( 'lwc_promo_coupon_id', $coupon_id );
-				return $coupon_code;
+			if ( function_exists( 'wc_get_coupon_id_by_code' ) ) {
+				$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
+				if ( $coupon_id ) {
+					update_option( 'lwc_promo_coupon_id', $coupon_id );
+					return $coupon_code;
+				}
 			}
 		}
 
@@ -231,7 +240,12 @@ class LWC_Promo_Dashboard {
 		$coupons = array();
 		if ( $query->have_posts() ) {
 			foreach ( $query->posts as $post ) {
-				$coupons[] = new WC_Coupon( $post->ID );
+				if ( class_exists( 'WC_Coupon' ) ) {
+					$coupon_obj = new WC_Coupon( $post->ID );
+					if ( is_object( $coupon_obj ) && $coupon_obj->get_id() > 0 ) {
+						$coupons[] = $coupon_obj;
+					}
+				}
 			}
 			wp_reset_postdata();
 		}
@@ -240,19 +254,19 @@ class LWC_Promo_Dashboard {
 			$coupon_code = get_option( 'lwc_promo_coupon_code', '' );
 			$coupon_id = get_option( 'lwc_promo_coupon_id', 0 );
 
+			// Try to load coupon by ID if available
 			if ( $coupon_id ) {
-				$coupon = wc_get_coupon( $coupon_id );
-				if ( $coupon ) {
-					$coupons[] = $coupon;
-				}
-			} elseif ( $coupon_code ) {
-				$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
-				if ( $coupon_id ) {
+				if ( function_exists( 'wc_get_coupon' ) ) {
 					$coupon = wc_get_coupon( $coupon_id );
-					if ( $coupon ) {
+					if ( $coupon && is_object( $coupon ) ) {
 						$coupons[] = $coupon;
 					}
 				}
+			}
+
+			// Try to load coupon by code if ID didn't work
+			if ( empty( $coupons ) && $coupon_code ) {
+				$this->load_coupon_by_code( $coupon_code, $coupons );
 			}
 		}
 
@@ -299,6 +313,28 @@ class LWC_Promo_Dashboard {
 		$prefix = sanitize_text_field( strtoupper( $prefix ) );
 		$random = wp_generate_password( 6, false, false );
 		return $prefix . '-' . strtoupper( $random );
+	}
+
+	/**
+	 * Load a coupon by its code and add to coupons array.
+	 *
+	 * @param string $coupon_code Coupon code.
+	 * @param array  $coupons Reference to coupons array to populate.
+	 */
+	private function load_coupon_by_code( $coupon_code, &$coupons ) {
+		if ( ! function_exists( 'wc_get_coupon_id_by_code' ) || ! function_exists( 'wc_get_coupon' ) ) {
+			return;
+		}
+
+		$coupon_id = wc_get_coupon_id_by_code( $coupon_code );
+		if ( ! $coupon_id ) {
+			return;
+		}
+
+		$coupon = wc_get_coupon( $coupon_id );
+		if ( $coupon && is_object( $coupon ) ) {
+			$coupons[] = $coupon;
+		}
 	}
 
 }

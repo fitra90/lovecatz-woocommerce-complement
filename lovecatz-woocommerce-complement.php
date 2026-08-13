@@ -44,6 +44,7 @@ function lwc_init() {
 
 	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
+	require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
