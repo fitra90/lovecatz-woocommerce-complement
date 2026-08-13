@@ -106,6 +106,12 @@ class LWC_Product_Quantity_Limits {
 	/**
 	 * Set product quantity limits on the quantity selector.
 	 *
+	 * This filter is applied by:
+	 * 1. Classic forms: wc_get_quantity_input_args() for product pages and classic cart
+	 * 2. Store API (Blocks): QuantityLimits::get_add_to_cart_limits() → wc_get_quantity_input_args()
+	 *
+	 * This single filter handles quantity limits for BOTH classic and modern (Blocks) implementations.
+	 *
 	 * @param array      $args    Quantity input args.
 	 * @param WC_Product $product Product object.
 	 * @return array
@@ -118,26 +124,46 @@ class LWC_Product_Quantity_Limits {
 		$min_qty = $this->get_product_minimum_quantity( $product );
 		$max_qty = $this->get_product_maximum_quantity( $product );
 
-		if ( $min_qty > 1 ) {
-			$args['min_value'] = $min_qty;
-			$args['input_value'] = max( isset( $args['input_value'] ) ? intval( $args['input_value'] ) : 0, $min_qty );
-		}
+		// Resolve final minimum quantity: use custom minimum if set, otherwise keep WooCommerce default.
+		$final_min = $min_qty > 1 ? $min_qty : ( isset( $args['min_value'] ) ? intval( $args['min_value'] ) : 1 );
 
+		// Resolve final maximum quantity: use custom maximum if set, otherwise normalize WooCommerce value.
+		$final_max = 0;
 		if ( $max_qty > 0 ) {
-			if ( isset( $args['max_value'] ) && $args['max_value'] > 0 ) {
-				$args['max_value'] = min( $args['max_value'], $max_qty );
-			} else {
-				$args['max_value'] = $max_qty;
-			}
+			// Custom maximum from product meta or default option.
+			$final_max = $max_qty;
+		} elseif ( isset( $args['max_value'] ) && intval( $args['max_value'] ) > 0 ) {
+			// WooCommerce native max (if positive).
+			$final_max = intval( $args['max_value'] );
+		}
+		// Note: if $max_qty is 0 and $args['max_value'] is -1 or ≤ 0, $final_max remains 0 (unlimited).
 
-			if ( isset( $args['input_value'] ) ) {
-				$args['input_value'] = min( intval( $args['input_value'] ), $args['max_value'] );
-			}
+		// Ensure max_value >= min_value when both are set.
+		if ( $final_max > 0 && $final_max < $final_min ) {
+			$final_max = $final_min;
 		}
 
-		if ( isset( $args['max_value'] ) && isset( $args['min_value'] ) ) {
-			$args['input_value'] = max( min( intval( $args['input_value'] ), $args['max_value'] ), $args['min_value'] );
+		// Apply normalized min/max to args.
+		$args['min_value'] = $final_min;
+		if ( $final_max > 0 ) {
+			$args['max_value'] = $final_max;
+		} else {
+			// Remove max_value to prevent negative values from reaching the HTML output.
+			unset( $args['max_value'] );
 		}
+
+		// Calculate default input_value based on normalized min/max constraints.
+		$default_input = isset( $args['input_value'] ) ? intval( $args['input_value'] ) : 1;
+
+		// Clamp input_value to [min_value, max_value].
+		if ( $default_input < $final_min ) {
+			$default_input = $final_min;
+		}
+		if ( $final_max > 0 && $default_input > $final_max ) {
+			$default_input = $final_max;
+		}
+
+		$args['input_value'] = $default_input;
 
 		return $args;
 	}
