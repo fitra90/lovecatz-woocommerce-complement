@@ -47,7 +47,7 @@ class LWC_Shipping_JT extends WC_Shipping_Method {
 				'title'   => __( 'Enable/Disable', 'lovecatz-wc' ),
 				'type'    => 'checkbox',
 				'label'   => __( 'Enable J&T Express Shipping', 'lovecatz-wc' ),
-				'default' => 'yes',
+				'default' => 'no',
 			),
 			'title'        => array(
 				'title'       => __( 'Method Title', 'lovecatz-wc' ),

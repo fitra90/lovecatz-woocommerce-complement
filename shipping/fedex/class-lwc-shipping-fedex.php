@@ -47,7 +47,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 				'title'   => __( 'Enable/Disable', 'lovecatz-wc' ),
 				'type'    => 'checkbox',
 				'label'   => __( 'Enable FedEx Shipping', 'lovecatz-wc' ),
-				'default' => 'yes',
+				'default' => 'no',
 			),
 			'title'        => array(
 				'title'       => __( 'Method Title', 'lovecatz-wc' ),
