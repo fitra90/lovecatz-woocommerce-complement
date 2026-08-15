@@ -159,8 +159,8 @@ class LWC_Admin_Settings {
 		LWC_Logger::log( 'Registering admin settings.', 'info' );
 
 		// Shipping provider settings.
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_key' );
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_secret' );
+		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_test_mode' );
 
 		add_settings_section(
@@ -194,8 +194,8 @@ class LWC_Admin_Settings {
 			'lwc_shipping_jt_section'
 		);
 
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key' );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret' );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_test_mode' );
 
 		add_settings_section(
@@ -665,7 +665,11 @@ class LWC_Admin_Settings {
 		$phone       = get_user_meta( $user_id, 'billing_phone', true );
 		$logo_url    = LWC_PLUGIN_URL . 'assets/logo.webp';
 		$product_url = LWC_PLUGIN_URL . 'assets/product.png';
-		$qr_url      = $this->get_qr_code_url( 'https://ddistillers.com/my-account' );
+		$my_account_url = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : '';
+		if ( ! $my_account_url ) {
+			$my_account_url = home_url( '/my-account/' );
+		}
+		$qr_url = $this->get_qr_code_url( $my_account_url );
 		?>
 		<!DOCTYPE html>
 		<html lang="en">
@@ -827,17 +831,6 @@ class LWC_Admin_Settings {
 	 * @return string
 	 */
 	private function get_member_import_template_source_path() {
-		$candidates = array(
-			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xls',
-			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xlsx',
-		);
-
-		foreach ( $candidates as $candidate ) {
-			if ( is_file( $candidate ) && is_readable( $candidate ) ) {
-				return $candidate;
-			}
-		}
-
 		return '';
 	}
 
@@ -1356,9 +1349,9 @@ class LWC_Admin_Settings {
 			// always receive WooCommerce's customer role regardless of file contents.
 			$role = 'customer';
  
-			// Imported members use their customer ID as the initial password so
-			// they can sign in with ID_PELANGGAN for both login fields.
-			$password = $main_id;
+			// Imported members get a random password plus a password-reset email,
+			// so credentials are never predictable from the customer ID.
+			$password = wp_generate_password( 16, true, false );
  
 			// FIX: added 'street' so it matches the "Street" column used by
 			// the current .xlsx template, while still supporting legacy names.
@@ -1430,7 +1423,9 @@ class LWC_Admin_Settings {
 				if ( '' !== $phone ) {
 					update_user_meta( $user_id, 'billing_phone', $phone );
 				}
- 
+
+				wp_new_user_notification( $user_id, null, 'user' );
+
 				$imported++;
 			}
 		}

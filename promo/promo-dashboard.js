@@ -63,12 +63,41 @@
         }
     }
 
+    function getCheckoutCouponContainer() {
+        var selectors = [
+            '.lwc-checkout-promos',
+            '.ct-order-review',
+            '.ct-woocommerce-checkout .ct-order-review',
+            '.cart_totals',
+            '.woocommerce-checkout-review-order',
+            '.woocommerce-checkout-payment',
+            '.wc-block-components-totals-coupon',
+            '.wp-block-woocommerce-checkout-totals-block .wc-block-components-totals-coupon',
+            '.wc-block-checkout__totals .wc-block-components-totals-coupon',
+            '.woocommerce-checkout .coupon',
+            '.checkout_coupon',
+            '#payment .checkout_coupon',
+            '.wp-block-woocommerce-checkout-order-summary-block .wc-block-components-totals-coupon',
+            '.entry-content .woocommerce-checkout .coupon',
+            '.blocksy-content-wrapper .woocommerce-checkout .coupon'
+        ];
+
+        for (var i = 0; i < selectors.length; i += 1) {
+            var container = $(selectors[i]).first();
+            if (container.length) {
+                return container;
+            }
+        }
+
+        return $('body');
+    }
+
     function renderCheckoutCouponPicker() {
         if (!lwcPromoDashboard.coupons || !lwcPromoDashboard.coupons.length || $('#lwc-checkout-coupon-picker').length) {
             return;
         }
 
-        var couponArea = $('.wc-block-components-totals-coupon').first();
+        var couponArea = getCheckoutCouponContainer();
         if (!couponArea.length) {
             return;
         }
@@ -87,6 +116,19 @@
             '<div class="lwc-coupon-modal__backdrop"></div><div class="lwc-coupon-modal__panel">' +
             '<div class="lwc-coupon-modal__header"><div><h3 id="lwc-coupon-modal-title">Pilih kupon</h3><p>Pilih promo untuk diterapkan pada pesanan ini.</p></div><button type="button" class="lwc-close-coupon-modal" aria-label="Tutup">×</button></div>' +
             '<div class="lwc-coupon-modal__list">' + modalItems + '</div></div></div></div>';
+
+        if (couponArea.is('body')) {
+            if ($('#lwc-checkout-coupon-picker').length === 0) {
+                $('body').append(picker);
+            }
+            return;
+        }
+
+        if (couponArea.is('.ct-order-review')) {
+            couponArea.prepend(picker);
+            return;
+        }
+
         couponArea.append(picker);
     }
 
@@ -120,6 +162,10 @@
             $(this).closest('.lwc-coupon-modal').prop('hidden', true);
         });
 
+        $(document).on('updated_checkout wc-blocks_checkout_update checkout_error', function () {
+            renderCheckoutCouponPicker();
+        });
+
         $(document).on('click', '.lwc-checkout-coupon-option', function () {
             var couponCode = $(this).data('coupon');
             applyCoupon(couponCode);
@@ -134,6 +180,23 @@
 
         applyCouponFromStorage();
         renderCheckoutCouponPicker();
-        $(document.body).on('updated_checkout wc-blocks_checkout_update', renderCheckoutCouponPicker);
+
+        if (typeof MutationObserver !== 'undefined' && $('body').length) {
+            var checkoutObserver = new MutationObserver(function () {
+                if ($('#lwc-checkout-coupon-picker').length === 0) {
+                    renderCheckoutCouponPicker();
+                }
+            });
+            checkoutObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: false
+            });
+        }
+
+        $(document.body).on('updated_checkout wc-blocks_checkout_update checkout_error', renderCheckoutCouponPicker);
+        window.setTimeout(function () {
+            renderCheckoutCouponPicker();
+        }, 1200);
     });
 })(jQuery);

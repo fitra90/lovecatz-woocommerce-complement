@@ -89,11 +89,6 @@ class LWC_Core {
 			$quantity_limits->init();
 		}
 
-		if ( function_exists( 'is_admin' ) && is_admin() ) {
-			LWC_FedEx_Account::create_table();
-			LWC_JT_Account::create_table();
-		}
-
 		add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_methods' ) );
 	}
 

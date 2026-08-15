@@ -3,10 +3,10 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.2
+ * Version:     1.0.4
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
- * Text Domain: lovecatz-woocommerce-complement
+ * Text Domain: lovecatz-wc
  * Domain Path: /languages
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -19,10 +19,56 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.2' );
+define( 'LWC_VERSION', '1.0.4' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+/**
+ * Encrypt a shipping credential before it is stored in the database.
+ *
+ * A key derived from the site secret is used so the value cannot be read from
+ * a plain database dump. Values that are already encrypted or empty pass through.
+ *
+ * @param mixed $value Raw credential value.
+ * @return string
+ */
+function lwc_encrypt_secret( $value ) {
+	if ( ! is_string( $value ) || '' === $value || ! function_exists( 'openssl_encrypt' ) ) {
+		return $value;
+	}
+
+	if ( 0 === strpos( $value, 'lwc1:' ) ) {
+		return $value;
+	}
+
+	$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+	$iv     = substr( hash( 'sha256', $key ), 0, 16 );
+	$cipher = openssl_encrypt( $value, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+
+	return ( false === $cipher ) ? $value : 'lwc1:' . base64_encode( $cipher );
+}
+
+/**
+ * Decrypt a shipping credential that was stored with lwc_encrypt_secret().
+ *
+ * Plain values are returned unchanged, which keeps existing installs working.
+ *
+ * @param mixed $value Stored credential value.
+ * @return string
+ */
+function lwc_decrypt_secret( $value ) {
+	if ( ! is_string( $value ) || 0 !== strpos( $value, 'lwc1:' ) || ! function_exists( 'openssl_decrypt' ) ) {
+		return $value;
+	}
+
+	$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+	$iv     = substr( hash( 'sha256', $key ), 0, 16 );
+	$raw    = base64_decode( substr( $value, 5 ) );
+	$plain  = ( false === $raw ) ? false : openssl_decrypt( $raw, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+
+	return ( false === $plain ) ? $value : $plain;
+}
 
 /**
  * Check if WooCommerce is active.
@@ -41,6 +87,14 @@ function lwc_init() {
 		add_action( 'admin_notices', 'lwc_woocommerce_missing_notice' );
 		return;
 	}
+
+	load_plugin_textdomain( 'lovecatz-wc', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+
+	// Decrypt stored shipping credentials transparently on read.
+	add_filter( 'option_lwc_fedex_api_key', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_fedex_api_secret', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_jt_api_key', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_jt_api_secret', 'lwc_decrypt_secret' );
 
 	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
@@ -70,20 +124,50 @@ register_uninstall_hook( __FILE__, 'lwc_uninstall' );
 add_action( 'init', 'lwc_maybe_flush_rewrite_rules' );
 
 /**
- * Flush rewrite rules once when the coupon endpoint is newly registered.
+ * Flush rewrite rules whenever the coupon endpoint rule is missing.
+ *
+ * The coupon endpoint is only persisted when flush_rewrite_rules() runs after
+ * add_rewrite_endpoint() has been called. Theme or permalink changes can
+ * regenerate the rules without this plugin's endpoint, so a single
+ * activation-time flush is not enough. Compare the stored plugin version and
+ * the actual saved rules, and re-flush when stale.
  */
 function lwc_maybe_flush_rewrite_rules() {
 	if ( ! function_exists( 'add_rewrite_endpoint' ) || ! function_exists( 'flush_rewrite_rules' ) ) {
 		return;
 	}
 
-	if ( get_option( 'lwc_coupon_endpoint_rewrite_flushed', 'no' ) === 'yes' ) {
+	add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
+
+	$version = get_option( 'lwc_coupon_endpoint_rewrite_version', '' );
+	$rules   = get_option( 'rewrite_rules' );
+
+	if ( LWC_VERSION === $version && lwc_rewrite_rules_have_coupon_endpoint( $rules ) ) {
 		return;
 	}
 
-	add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
 	flush_rewrite_rules();
-	update_option( 'lwc_coupon_endpoint_rewrite_flushed', 'yes' );
+	update_option( 'lwc_coupon_endpoint_rewrite_version', LWC_VERSION );
+}
+
+/**
+ * Check whether the saved rewrite rules contain the coupon endpoint.
+ *
+ * @param mixed $rules Stored rewrite rules.
+ * @return bool
+ */
+function lwc_rewrite_rules_have_coupon_endpoint( $rules ) {
+	if ( ! is_array( $rules ) ) {
+		return false;
+	}
+
+	foreach ( $rules as $regex => $query ) {
+		if ( false !== strpos( (string) $regex, 'coupon' ) || false !== strpos( (string) $query, 'coupon=' ) ) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -108,6 +192,10 @@ function lwc_plugin_action_links( $links ) {
  * Handle the FedEx connection status check via AJAX.
  */
 function lwc_check_fedex_connection() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ) );
+	}
+
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	$account_number = isset( $_POST['account_number'] ) ? sanitize_text_field( wp_unslash( $_POST['account_number'] ) ) : '';
@@ -147,6 +235,10 @@ function lwc_check_fedex_connection() {
  * Fetch a FedEx shipping rate quote via AJAX.
  */
 function lwc_fedex_get_rate_quote() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ) );
+	}
+
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
@@ -172,6 +264,10 @@ function lwc_fedex_get_rate_quote() {
  * Create a FedEx shipment and generate a label via AJAX.
  */
 function lwc_fedex_create_shipment() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ) );
+	}
+
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	if ( ! class_exists( 'LWC_FedEx_API' ) ) {
@@ -197,6 +293,10 @@ function lwc_fedex_create_shipment() {
  * Download a previously generated FedEx label.
  */
 function lwc_fedex_download_label() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_die( __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) );
+	}
+
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 
 	$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
@@ -283,8 +383,8 @@ function lwc_activate() {
 
 	if ( function_exists( 'flush_rewrite_rules' ) ) {
 		flush_rewrite_rules();
-		/* Mark that the coupon endpoint has been flushed so init-time helper doesn't run unnecessarily. */
-		update_option( 'lwc_coupon_endpoint_rewrite_flushed', 'yes' );
+		/* Record the flushed version so init-time helper knows the rule is current. */
+		update_option( 'lwc_coupon_endpoint_rewrite_version', LWC_VERSION );
 	}
 }
 

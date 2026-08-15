@@ -15,11 +15,13 @@ class LWC_Promo_Dashboard {
 	 * Initialize frontend hooks.
 	 */
 	public function init() {
-		add_action( 'init', array( $this, 'register_coupon_endpoint' ) );
+		add_action( 'init', array( $this, 'register_coupon_endpoint' ), 1 );
 		add_filter( 'query_vars', array( $this, 'register_coupon_query_var' ) );
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'add_coupon_account_menu_item' ) );
 		add_action( 'woocommerce_account_coupon_endpoint', array( $this, 'render_coupon_dashboard' ) );
+		add_action( 'woocommerce_before_cart_totals', array( $this, 'render_checkout_coupons' ), 15 );
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'render_checkout_coupons' ), 5 );
+		add_action( 'woocommerce_review_order_before_payment', array( $this, 'render_checkout_coupons' ), 10 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 		add_filter( 'woocommerce_coupon_get_discount_amount', array( $this, 'limit_percentage_discount' ), 10, 5 );
 		// Shortcode fallback so admin can place promo dashboard on any page if endpoint rewrites fail.
@@ -138,9 +140,13 @@ class LWC_Promo_Dashboard {
 
 	/** Render eligible promo cards above the checkout form. */
 	public function render_checkout_coupons() {
-		if ( ! is_user_logged_in() ) {
+		static $rendered = false;
+
+		if ( $rendered || ! is_user_logged_in() ) {
 			return;
 		}
+
+		$rendered = true;
 
 		$coupons = array_filter(
 			$this->get_promo_coupons(),
@@ -153,11 +159,13 @@ class LWC_Promo_Dashboard {
 			return;
 		}
 
-		echo '<section class="lwc-checkout-promos"><h3>' . esc_html__( 'Available coupons', 'lovecatz-wc' ) . '</h3><div class="lwc-promo-dashboard-grid">';
+		$context = is_cart() ? __( 'Cart coupons', 'lovecatz-wc' ) : __( 'Available coupons', 'lovecatz-wc' );
+		echo '<section class="lwc-checkout-promos"><h3>' . esc_html( $context ) . '</h3><div class="lwc-promo-dashboard-grid">';
 		foreach ( $coupons as $coupon ) {
 			$image_id = absint( get_post_meta( $coupon->get_id(), '_lwc_promo_active_image_id', true ) );
 			$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'large' ) : LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
-			echo '<a class="lwc-promo-card" href="' . esc_url( wc_get_checkout_url() ) . '" data-coupon="' . esc_attr( $coupon->get_code() ) . '"><img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" /><div class="lwc-promo-card-body"><strong>' . esc_html( $coupon->get_code() ) . '</strong><span>' . esc_html__( 'Click to apply this coupon.', 'lovecatz-wc' ) . '</span></div></a>';
+			$target_url = is_cart() ? wc_get_cart_url() : wc_get_checkout_url();
+			echo '<a class="lwc-promo-card" href="' . esc_url( $target_url ) . '" data-coupon="' . esc_attr( $coupon->get_code() ) . '"><img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" /><div class="lwc-promo-card-body"><strong>' . esc_html( $coupon->get_code() ) . '</strong><span>' . esc_html__( 'Click to apply this coupon.', 'lovecatz-wc' ) . '</span></div></a>';
 		}
 		echo '</div></section>';
 	}

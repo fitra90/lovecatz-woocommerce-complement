@@ -283,7 +283,11 @@ class LWC_Admin_Members {
 		$customer_id = get_user_meta( $user_id, 'lwc_customer_id', true );
 		$logo_url    = LWC_PLUGIN_URL . 'assets/logo.webp';
 		$product_url = LWC_PLUGIN_URL . 'assets/product.png';
-		$qr_url      = $this->get_qr_code_url( 'https://ddistillers.com/my-account' );
+		$my_account_url = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : '';
+		if ( ! $my_account_url ) {
+			$my_account_url = home_url( '/my-account/' );
+		}
+		$qr_url = $this->get_qr_code_url( $my_account_url );
 		?>
 		<!DOCTYPE html>
 		<html lang="en">
@@ -445,17 +449,6 @@ class LWC_Admin_Members {
 	 * @return string
 	 */
 	private function get_member_import_template_source_path() {
-		$candidates = array(
-			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xls',
-			rtrim( dirname( ABSPATH ), '/\\' ) . DIRECTORY_SEPARATOR . 'crm_leads.xlsx',
-		);
-
-		foreach ( $candidates as $candidate ) {
-			if ( is_file( $candidate ) && is_readable( $candidate ) ) {
-				return $candidate;
-			}
-		}
-
 		return '';
 	}
 
@@ -963,7 +956,9 @@ class LWC_Admin_Members {
 			$last_name  = sanitize_text_field( $last_name );
 
 			$role = 'customer';
-			$password = $main_id;
+			// Imported members get a random password plus a password-reset email,
+			// so credentials are never predictable from the customer ID.
+			$password = wp_generate_password( 16, true, false );
 
 			$street   = sanitize_text_field( $this->get_row_value( $row, array( 'street_adress', 'street_address', 'street', 'address', 'address_1' ) ) );
 			$street2  = sanitize_text_field( $this->get_row_value( $row, array( 'street2' ) ) );
@@ -1030,6 +1025,8 @@ class LWC_Admin_Members {
 				if ( '' !== $phone ) {
 					update_user_meta( $user_id, 'billing_phone', $phone );
 				}
+
+				wp_new_user_notification( $user_id, null, 'user' );
 
 				$imported++;
 			}
