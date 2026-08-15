@@ -105,6 +105,7 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-currency-adapter.php';
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
 
 	add_filter( 'woocommerce_shipping_methods', 'lwc_register_shipping_methods' );

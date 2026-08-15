@@ -66,6 +66,10 @@ class LWC_Core {
 		if ( file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php' ) ) {
 					require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-currency-adapter.php' ) ) {
+					require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-currency-adapter.php';
+		}
 	}
 
 	/**
@@ -87,6 +91,12 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'products/class-lwc-product-quantity-limits.php';
 			$quantity_limits = new LWC_Product_Quantity_Limits();
 			$quantity_limits->init();
+		}
+
+		// FedEx currency adapter (engine selector + Octolize currency gate-fix).
+		if ( class_exists( 'LWC_FedEx_Currency_Adapter' ) ) {
+			$fedex_currency_adapter = new LWC_FedEx_Currency_Adapter();
+			$fedex_currency_adapter->init();
 		}
 
 		add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_methods' ) );

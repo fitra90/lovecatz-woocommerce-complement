@@ -121,6 +121,28 @@
         toggleMaximumDiscount();
     }
 
+    function initFedExCurrencyAdapter() {
+        if ($('input[name="lwc_fedex_engine"]').length === 0) {
+            return;
+        }
+
+        function toggleManualRateField() {
+            var engine = $('input[name="lwc_fedex_engine"]:checked').val();
+            var mode = $('input[name="lwc_fedex_conversion_mode"]:checked').val();
+            $('.lwc-fedex-manual-rate-field').toggle(engine === 'octolize' && mode === 'manual');
+        }
+
+        function toggleAdapterSettings() {
+            var engine = $('input[name="lwc_fedex_engine"]:checked').val();
+            $('.lwc-fedex-adapter-settings').toggle(engine === 'octolize');
+            toggleManualRateField();
+        }
+
+        $('input[name="lwc_fedex_engine"]').on('change', toggleAdapterSettings);
+        $('input[name="lwc_fedex_conversion_mode"]').on('change', toggleManualRateField);
+        toggleAdapterSettings();
+    }
+
     $(document).ready(function () {
         if ($('#lwc_menu_icon_class').length) {
             initDashiconSelectors();
@@ -140,5 +162,7 @@
         if ($('#lwc_promo_discount_type').length) {
             initPromoDiscountType();
         }
+
+        initFedExCurrencyAdapter();
     });
 })(jQuery);
