@@ -93,11 +93,16 @@ class LWC_FedEx_Currency_Adapter {
 	/**
 	 * Whether the adapter should be active on the frontend.
 	 *
+	 * The adapter auto-activates when the Octolize engine is selected and the
+	 * Octolize Flexible Shipping FedEx plugin is installed/active.  The
+	 * per-method enabled checkbox is no longer required for activation — the
+	 * adapter is always active in Octolize mode so that currency switching
+	 * (CURCY / woo-multi-currency / manual) does not break live-rate quotes.
+	 *
 	 * @return bool
 	 */
 	public function is_active() {
 		return self::MODE_OCTOLIZE === $this->get_engine()
-			&& 'yes' === $this->get_adapter_enabled()
 			&& $this->is_octolize_active();
 	}
 
