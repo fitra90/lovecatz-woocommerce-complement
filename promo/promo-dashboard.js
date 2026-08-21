@@ -63,6 +63,11 @@
         }
     }
 
+    function isCheckoutLikePage() {
+        var bodyClass = document.body ? String(document.body.className) : '';
+        return bodyClass.indexOf('woocommerce-checkout') !== -1 || bodyClass.indexOf('woocommerce-cart') !== -1;
+    }
+
     function getCheckoutCouponContainer() {
         var selectors = [
             '.lwc-checkout-promos',
@@ -89,10 +94,16 @@
             }
         }
 
-        return $('body');
+        // Never fall back to <body>: outside a real checkout layout the
+        // picker would render below the site footer.
+        return $();
     }
 
     function renderCheckoutCouponPicker() {
+        if (!isCheckoutLikePage()) {
+            return;
+        }
+
         if (!lwcPromoDashboard.coupons || !lwcPromoDashboard.coupons.length || $('#lwc-checkout-coupon-picker').length) {
             return;
         }
@@ -116,13 +127,6 @@
             '<div class="lwc-coupon-modal__backdrop"></div><div class="lwc-coupon-modal__panel">' +
             '<div class="lwc-coupon-modal__header"><div><h3 id="lwc-coupon-modal-title">Pilih kupon</h3><p>Pilih promo untuk diterapkan pada pesanan ini.</p></div><button type="button" class="lwc-close-coupon-modal" aria-label="Tutup">×</button></div>' +
             '<div class="lwc-coupon-modal__list">' + modalItems + '</div></div></div></div>';
-
-        if (couponArea.is('body')) {
-            if ($('#lwc-checkout-coupon-picker').length === 0) {
-                $('body').append(picker);
-            }
-            return;
-        }
 
         if (couponArea.is('.ct-order-review')) {
             couponArea.prepend(picker);
