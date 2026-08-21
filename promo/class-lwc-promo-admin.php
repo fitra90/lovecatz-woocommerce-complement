@@ -41,9 +41,9 @@ class LWC_Promo_Admin {
 				<div class="lwc-promo-form-grid">
 					<label><span><?php esc_html_e( 'Coupon code', 'lovecatz-wc' ); ?></span><input required name="coupon_code" value="<?php echo esc_attr( $values['code'] ); ?>" placeholder="WELCOME10" /></label>
 					<label><span><?php esc_html_e( 'Discount type', 'lovecatz-wc' ); ?></span><select name="discount_type" id="lwc_promo_discount_type"><option value="percent" <?php selected( $values['type'], 'percent' ); ?>><?php esc_html_e( 'Percentage discount', 'lovecatz-wc' ); ?></option><option value="fixed_cart" <?php selected( $values['type'], 'fixed_cart' ); ?>><?php esc_html_e( 'Fixed cart discount', 'lovecatz-wc' ); ?></option></select></label>
-					<label class="lwc-percent-only"><span><?php esc_html_e( 'Discount percentage', 'lovecatz-wc' ); ?></span><input type="number" name="percentage_amount" min="1" max="100" step="0.01" value="<?php echo esc_attr( $values['percentage_amount'] ); ?>" /></label>
-					<label class="lwc-fixed-only"><span><?php esc_html_e( 'Discount amount', 'lovecatz-wc' ); ?></span><input type="number" name="fixed_amount" min="1" step="0.01" value="<?php echo esc_attr( $values['fixed_amount'] ); ?>" /></label>
-					<label class="lwc-percent-only"><span><?php esc_html_e( 'Maximum discount', 'lovecatz-wc' ); ?></span><input type="number" name="maximum_discount" min="1" step="0.01" value="<?php echo esc_attr( $values['maximum_discount'] ); ?>" /><small><?php esc_html_e( 'Optional cap for percentage discounts.', 'lovecatz-wc' ); ?></small></label>
+					<label class="lwc-percent-only"><span><?php esc_html_e( 'Discount percentage', 'lovecatz-wc' ); ?></span><input type="number" name="percentage_amount" min="1" max="100" step="1" value="<?php echo esc_attr( $values['percentage_amount'] ); ?>" /></label>
+					<label class="lwc-fixed-only"><span><?php esc_html_e( 'Discount amount', 'lovecatz-wc' ); ?></span><input type="number" name="fixed_amount" min="1" step="1" value="<?php echo esc_attr( $values['fixed_amount'] ); ?>" /></label>
+					<label class="lwc-percent-only"><span><?php esc_html_e( 'Maximum discount', 'lovecatz-wc' ); ?></span><input type="number" name="maximum_discount" min="1" step="1" value="<?php echo esc_attr( $values['maximum_discount'] ); ?>" /><small><?php esc_html_e( 'Optional cap for percentage discounts.', 'lovecatz-wc' ); ?></small></label>
 					<label><span><?php esc_html_e( 'Expiry date', 'lovecatz-wc' ); ?></span><input type="date" name="expiry_date" value="<?php echo esc_attr( $values['expiry_date'] ); ?>" /></label>
 					<label><span><?php esc_html_e( 'Eligible users', 'lovecatz-wc' ); ?></span><?php $this->render_eligible_user_select( $values['eligible_user_ids'] ); ?><small><?php esc_html_e( 'Leave empty for all users.', 'lovecatz-wc' ); ?></small></label>
 					<label><span><?php esc_html_e( 'Total usage limit', 'lovecatz-wc' ); ?></span><input type="number" name="usage_limit" min="1" step="1" value="<?php echo esc_attr( $values['usage_limit'] ); ?>" /><small><?php esc_html_e( 'Leave empty for unlimited uses.', 'lovecatz-wc' ); ?></small></label>
@@ -74,7 +74,7 @@ class LWC_Promo_Admin {
 		$emails = array(); foreach ( $user_ids as $user_id ) { $user = get_userdata( $user_id ); if ( $user ) { $emails[] = $user->user_email; } }
 		$coupon->set_code( $code );
 		$coupon->set_discount_type( $type );
-		$coupon->set_amount( max( 1, (float) $amount ) );
+		$coupon->set_amount( max( 1, absint( $amount ) ) );
 		$coupon->set_individual_use( isset( $_POST['individual_use'] ) );
 		$coupon->set_usage_limit( ! empty( $_POST['usage_limit'] ) ? absint( $_POST['usage_limit'] ) : 0 );
 		$coupon->set_usage_limit_per_user( ! empty( $_POST['usage_limit_per_user'] ) ? absint( $_POST['usage_limit_per_user'] ) : 0 );
@@ -84,7 +84,7 @@ class LWC_Promo_Admin {
 		$id = $coupon->get_id();
 		update_post_meta( $id, '_lwc_promo_created', '1' );
 		update_post_meta( $id, '_lwc_promo_eligible_user_ids', $user_ids );
-		update_post_meta( $id, '_lwc_promo_maximum_discount', 'percent' === $type && ! empty( $_POST['maximum_discount'] ) ? wc_format_decimal( wp_unslash( $_POST['maximum_discount'] ) ) : '' );
+		update_post_meta( $id, '_lwc_promo_maximum_discount', 'percent' === $type && ! empty( $_POST['maximum_discount'] ) ? absint( wp_unslash( $_POST['maximum_discount'] ) ) : '' );
 		update_post_meta( $id, '_lwc_promo_active_image_id', isset( $_POST['active_image_id'] ) ? absint( $_POST['active_image_id'] ) : 0 );
 		update_post_meta( $id, '_lwc_promo_disabled_image_id', isset( $_POST['disabled_image_id'] ) ? absint( $_POST['disabled_image_id'] ) : 0 );
 		wp_safe_redirect( add_query_arg( array( 'page' => 'lovecatz-wc', 'tab' => 'promo', 'promo_updated' => '1' ), admin_url( 'admin.php' ) ) ); exit;

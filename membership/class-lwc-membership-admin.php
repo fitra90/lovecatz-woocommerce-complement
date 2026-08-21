@@ -119,10 +119,10 @@ class LWC_Membership_Admin {
     public function register_settings() {
         LWC_Logger::log( 'Registering admin settings.', 'info' );
 
-        // Couriers Settings
-        register_setting( 'lwc_couriers_options', 'lwc_jt_api_key' );
-        register_setting( 'lwc_couriers_options', 'lwc_jt_api_secret' );
-        register_setting( 'lwc_couriers_options', 'lwc_jt_test_mode' );
+        // Couriers Settings (J&T Express; Cargo lives under Shipping tab)
+        register_setting( 'lwc_couriers_options', 'lwc_jt_express_api_key' );
+        register_setting( 'lwc_couriers_options', 'lwc_jt_express_api_secret' );
+        register_setting( 'lwc_couriers_options', 'lwc_jt_express_test_mode' );
 
         add_settings_section(
             'lwc_couriers_section_jt',
@@ -132,7 +132,7 @@ class LWC_Membership_Admin {
         );
 
         add_settings_field(
-            'lwc_jt_api_key',
+            'lwc_jt_express_api_key',
             __( 'API Key', 'lovecatz-wc' ),
             array( $this, 'render_jt_api_key_field' ),
             'lwc_couriers_options',
@@ -140,7 +140,7 @@ class LWC_Membership_Admin {
         );
 
         add_settings_field(
-            'lwc_jt_api_secret',
+            'lwc_jt_express_api_secret',
             __( 'API Secret', 'lovecatz-wc' ),
             array( $this, 'render_jt_api_secret_field' ),
             'lwc_couriers_options',
@@ -148,7 +148,7 @@ class LWC_Membership_Admin {
         );
 
         add_settings_field(
-            'lwc_jt_test_mode',
+            'lwc_jt_express_test_mode',
             __( 'Enable Test Mode', 'lovecatz-wc' ),
             array( $this, 'render_jt_test_mode_field' ),
             'lwc_couriers_options',
@@ -194,25 +194,25 @@ class LWC_Membership_Admin {
      * Render the API key field.
      */
     public function render_jt_api_key_field() {
-        $value = get_option( 'lwc_jt_api_key', '' );
-        echo '<input type="text" name="lwc_jt_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
+        $value = get_option( 'lwc_jt_express_api_key', '' );
+        echo '<input type="text" name="lwc_jt_express_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
     }
 
     /**
      * Render the API secret field.
      */
     public function render_jt_api_secret_field() {
-        $value = get_option( 'lwc_jt_api_secret', '' );
-        echo '<input type="password" name="lwc_jt_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
+        $value = get_option( 'lwc_jt_express_api_secret', '' );
+        echo '<input type="password" name="lwc_jt_express_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
     }
 
     /**
      * Render the test mode field.
      */
     public function render_jt_test_mode_field() {
-        $value = get_option( 'lwc_jt_test_mode', 'no' );
+        $value = get_option( 'lwc_jt_express_test_mode', 'no' );
         $checked = 'yes' === $value ? 'checked' : '';
-        echo '<input type="checkbox" name="lwc_jt_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+        echo '<input type="checkbox" name="lwc_jt_express_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
     }
 
     /**

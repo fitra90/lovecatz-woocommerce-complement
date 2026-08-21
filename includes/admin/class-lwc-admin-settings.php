@@ -63,6 +63,15 @@ class LWC_Admin_Settings {
 		wp_enqueue_media();
 		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array(), LWC_VERSION );
 		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
+
+		wp_localize_script(
+			'lwc-admin-settings',
+			'lwcFedexSettings',
+			array(
+				'ajax_url' => admin_url( 'admin-ajax.php' ),
+				'nonce'    => wp_create_nonce( 'lwc_fedex_connection_check' ),
+			)
+		);
 	}
 
 	/**
@@ -118,13 +127,30 @@ class LWC_Admin_Settings {
 				</div>
 
 				<?php if ( 'jt' === $provider ) : ?>
-					<form method="post" action="options.php">
-						<?php
-						settings_fields( 'lwc_shipping_jt_options' );
-						do_settings_sections( 'lwc_shipping_jt_options' );
-						submit_button();
-						?>
-					</form>
+					<div style="margin: 0 0 15px;">
+						<a href="#lwc-jt-express" class="button button-secondary"><?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?></a>
+						<a href="#lwc-jt-cargo" class="button button-secondary"><?php esc_html_e( 'J&T Cargo', 'lovecatz-wc' ); ?></a>
+					</div>
+
+					<div id="lwc-jt-express">
+						<form method="post" action="options.php">
+							<?php
+							settings_fields( 'lwc_shipping_jt_express_options' );
+							do_settings_sections( 'lwc_shipping_jt_express_options' );
+							submit_button();
+							?>
+						</form>
+					</div>
+
+					<div id="lwc-jt-cargo">
+						<form method="post" action="options.php">
+							<?php
+							settings_fields( 'lwc_shipping_jt_cargo_options' );
+							do_settings_sections( 'lwc_shipping_jt_cargo_options' );
+							submit_button();
+							?>
+						</form>
+					</div>
 				<?php else : ?>
 					<div class="notice notice-info inline">
 						<p><?php esc_html_e( 'FedEx will be available for international shipments where the destination country is outside Indonesia.', 'lovecatz-wc' ); ?></p>
@@ -144,7 +170,13 @@ class LWC_Admin_Settings {
 					<?php settings_fields( 'lwc_products_options' ); do_settings_sections( 'lwc_products_options' ); submit_button(); ?>
 				</form>
 			<?php elseif ( 'currency' === $active_tab ) : ?>
-				<p><?php esc_html_e( 'Currency settings coming soon.', 'lovecatz-wc' ); ?></p>
+				<form method="post" action="options.php">
+					<?php
+					settings_fields( 'lwc_currency_options' );
+					do_settings_sections( 'lwc_currency_options' );
+					submit_button();
+					?>
+				</form>
 			<?php else : ?>
 				<?php $this->render_store_members(); ?>
 			<?php endif; ?>
@@ -158,51 +190,81 @@ class LWC_Admin_Settings {
 	public function register_settings() {
 		LWC_Logger::log( 'Registering admin settings.', 'info' );
 
-		// Shipping provider settings.
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-		register_setting( 'lwc_shipping_jt_options', 'lwc_jt_test_mode' );
+		// Shipping provider settings: J&T Express and J&T Cargo are separate
+		// API providers with their own credentials.
+		foreach ( array( 'express', 'cargo' ) as $jt_provider ) {
+			$group = "lwc_shipping_jt_{$jt_provider}_options";
+			$section = "lwc_shipping_jt_{$jt_provider}_section";
 
-		add_settings_section(
-			'lwc_shipping_jt_section',
-			__( 'J&T Express Settings', 'lovecatz-wc' ),
-			array( $this, 'render_jt_section_intro' ),
-			'lwc_shipping_jt_options'
-		);
+			register_setting( $group, "lwc_jt_{$jt_provider}_api_key", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+			register_setting( $group, "lwc_jt_{$jt_provider}_api_secret", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+			register_setting( $group, "lwc_jt_{$jt_provider}_test_mode" );
 
-		add_settings_field(
-			'lwc_jt_api_key',
-			__( 'API Key', 'lovecatz-wc' ),
-			array( $this, 'render_jt_api_key_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
+			add_settings_section(
+				$section,
+				sprintf(
+					/* translators: %s: provider name */
+					__( '%s Settings', 'lovecatz-wc' ),
+					'express' === $jt_provider ? __( 'J&T Express', 'lovecatz-wc' ) : __( 'J&T Cargo', 'lovecatz-wc' )
+				),
+				function () use ( $jt_provider ) {
+					if ( 'express' === $jt_provider ) {
+						echo '<p>' . esc_html__( 'Enter your J&T Express API credentials below. J&T Express handles regular parcels up to 100 kg.', 'lovecatz-wc' ) . '</p>';
+					} else {
+						echo '<p>' . esc_html__( 'Enter your J&T Cargo API credentials below. J&T Cargo is a separate provider for large and heavy shipments up to 500 kg (10 kg minimum billable weight).', 'lovecatz-wc' ) . '</p>';
+					}
+				},
+				$group
+			);
 
-		add_settings_field(
-			'lwc_jt_api_secret',
-			__( 'API Secret', 'lovecatz-wc' ),
-			array( $this, 'render_jt_api_secret_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
+			add_settings_field(
+				"lwc_jt_{$jt_provider}_api_key",
+				__( 'API Key', 'lovecatz-wc' ),
+				array( $this, 'render_jt_api_key_field' ),
+				$group,
+				$section,
+				array( 'provider' => $jt_provider )
+			);
 
-		add_settings_field(
-			'lwc_jt_test_mode',
-			__( 'Enable Test Mode', 'lovecatz-wc' ),
-			array( $this, 'render_jt_test_mode_field' ),
-			'lwc_shipping_jt_options',
-			'lwc_shipping_jt_section'
-		);
+			add_settings_field(
+				"lwc_jt_{$jt_provider}_api_secret",
+				__( 'API Secret', 'lovecatz-wc' ),
+				array( $this, 'render_jt_api_secret_field' ),
+				$group,
+				$section,
+				array( 'provider' => $jt_provider )
+			);
 
+			add_settings_field(
+				"lwc_jt_{$jt_provider}_test_mode",
+				__( 'Enable Test Mode', 'lovecatz-wc' ),
+				array( $this, 'render_jt_test_mode_field' ),
+				$group,
+				$section,
+				array( 'provider' => $jt_provider )
+			);
+		}
+
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_account_number', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_test_mode' );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_phone', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 
 		add_settings_section(
 			'lwc_shipping_fedex_section',
 			__( 'FedEx Settings', 'lovecatz-wc' ),
 			array( $this, 'render_fedex_section_intro' ),
 			'lwc_shipping_fedex_options'
+		);
+
+		add_settings_field(
+			'lwc_fedex_account_number',
+			__( 'Account Number', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_account_number_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
 		);
 
 		add_settings_field(
@@ -225,6 +287,22 @@ class LWC_Admin_Settings {
 			'lwc_fedex_test_mode',
 			__( 'Enable Test Mode', 'lovecatz-wc' ),
 			array( $this, 'render_fedex_test_mode_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
+
+		add_settings_field(
+			'lwc_fedex_shipper_name',
+			__( 'Shipper Name', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_shipper_name_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
+
+		add_settings_field(
+			'lwc_fedex_shipper_phone',
+			__( 'Shipper Phone', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_shipper_phone_field' ),
 			'lwc_shipping_fedex_options',
 			'lwc_shipping_fedex_section'
 		);
@@ -282,32 +360,44 @@ class LWC_Admin_Settings {
 	 * Render introductory text for the J&T section.
 	 */
 	public function render_jt_section_intro() {
-		echo '<p>' . esc_html__( 'Enter your J&T Express API credentials below.', 'lovecatz-wc' ) . '</p>';
+		echo '<p>' . esc_html__( 'Enter your J&T API credentials below.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/**
-	 * Render the API key field.
+	 * Render the J&T Express/Cargo API key field.
+	 *
+	 * @param array $args Field args including provider.
 	 */
-	public function render_jt_api_key_field() {
-		$value = get_option( 'lwc_jt_api_key', '' );
-		echo '<input type="text" name="lwc_jt_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
+	public function render_jt_api_key_field( $args = array() ) {
+		$provider = isset( $args['provider'] ) ? $args['provider'] : 'express';
+		$name = "lwc_jt_{$provider}_api_key";
+		$value = get_option( $name, '' );
+		echo '<input type="text" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text" />';
 	}
 
 	/**
-	 * Render the API secret field.
+	 * Render the J&T Express/Cargo API secret field.
+	 *
+	 * @param array $args Field args including provider.
 	 */
-	public function render_jt_api_secret_field() {
-		$value = get_option( 'lwc_jt_api_secret', '' );
-		echo '<input type="password" name="lwc_jt_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
+	public function render_jt_api_secret_field( $args = array() ) {
+		$provider = isset( $args['provider'] ) ? $args['provider'] : 'express';
+		$name = "lwc_jt_{$provider}_api_secret";
+		$value = get_option( $name, '' );
+		echo '<input type="password" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text" />';
 	}
 
 	/**
-	 * Render the test mode field.
+	 * Render the J&T Express/Cargo test mode field.
+	 *
+	 * @param array $args Field args including provider.
 	 */
-	public function render_jt_test_mode_field() {
-		$value = get_option( 'lwc_jt_test_mode', 'no' );
+	public function render_jt_test_mode_field( $args = array() ) {
+		$provider = isset( $args['provider'] ) ? $args['provider'] : 'express';
+		$name = "lwc_jt_{$provider}_test_mode";
+		$value = get_option( $name, 'no' );
 		$checked = 'yes' === $value ? 'checked' : '';
-		echo '<input type="checkbox" name="lwc_jt_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+		echo '<input type="checkbox" name="' . esc_attr( $name ) . '" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
 	}
 
 	/**
@@ -315,6 +405,28 @@ class LWC_Admin_Settings {
 	 */
 	public function render_fedex_section_intro() {
 		echo '<p>' . esc_html__( 'Enter your FedEx API credentials below. FedEx will appear for international shipments outside Indonesia.', 'lovecatz-wc' ) . '</p>';
+
+		$stored_status = get_option( 'lwc_fedex_validation_status', 'pending' );
+		$status_map    = array(
+			'validated' => array( 'connected', __( 'Connected (REST API ready)', 'lovecatz-wc' ) ),
+			'failed'    => array( 'auth_failed', __( 'FedEx rejected the credentials.', 'lovecatz-wc' ) ),
+			'pending'   => array( 'idle', __( 'Waiting for credentials', 'lovecatz-wc' ) ),
+		);
+		$current = isset( $status_map[ $stored_status ] ) ? $status_map[ $stored_status ] : $status_map['pending'];
+		?>
+		<div id="lwc-fedex-connection-status" class="lwc-fedex-connection-status" data-status="<?php echo esc_attr( $current[0] ); ?>">
+			<span class="lwc-fedex-status-dot"></span>
+			<span class="lwc-fedex-status-label"><?php echo esc_html( $current[1] ); ?></span>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the FedEx account number field.
+	 */
+	public function render_fedex_account_number_field() {
+		$value = get_option( 'lwc_fedex_account_number', '' );
+		echo '<input type="text" id="lwc_fedex_account_number" name="lwc_fedex_account_number" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="off" />';
 	}
 
 	/**
@@ -322,7 +434,7 @@ class LWC_Admin_Settings {
 	 */
 	public function render_fedex_api_key_field() {
 		$value = get_option( 'lwc_fedex_api_key', '' );
-		echo '<input type="text" name="lwc_fedex_api_key" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<input type="text" id="lwc_fedex_api_key" name="lwc_fedex_api_key" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="off" />';
 	}
 
 	/**
@@ -330,7 +442,7 @@ class LWC_Admin_Settings {
 	 */
 	public function render_fedex_api_secret_field() {
 		$value = get_option( 'lwc_fedex_api_secret', '' );
-		echo '<input type="password" name="lwc_fedex_api_secret" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<input type="password" id="lwc_fedex_api_secret" name="lwc_fedex_api_secret" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="new-password" />';
 	}
 
 	/**
@@ -340,6 +452,24 @@ class LWC_Admin_Settings {
 		$value = get_option( 'lwc_fedex_test_mode', 'no' );
 		$checked = 'yes' === $value ? 'checked' : '';
 		echo '<input type="checkbox" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+	}
+
+	/**
+	 * Render the FedEx shipper name field.
+	 */
+	public function render_fedex_shipper_name_field() {
+		$value = get_option( 'lwc_fedex_shipper_name', get_bloginfo( 'name' ) );
+		echo '<input type="text" name="lwc_fedex_shipper_name" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<p class="description">' . esc_html__( 'Contact name printed on FedEx shipping labels.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Render the FedEx shipper phone field.
+	 */
+	public function render_fedex_shipper_phone_field() {
+		$value = get_option( 'lwc_fedex_shipper_phone', '' );
+		echo '<input type="text" name="lwc_fedex_shipper_phone" value="' . esc_attr( $value ) . '" class="regular-text" />';
+		echo '<p class="description">' . esc_html__( 'Required by FedEx when creating shipments and printing labels.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/**

@@ -48,8 +48,8 @@ class LWC_FedEx_Account {
 		$table_name = self::get_table_name();
 		$payload = array(
 			'account_number' => isset( $data['account_number'] ) ? sanitize_text_field( wp_unslash( $data['account_number'] ) ) : '',
-			'api_key'        => isset( $data['api_key'] ) ? sanitize_text_field( wp_unslash( $data['api_key'] ) ) : '',
-			'api_secret'     => isset( $data['api_secret'] ) ? sanitize_text_field( wp_unslash( $data['api_secret'] ) ) : '',
+			'api_key'        => isset( $data['api_key'] ) ? self::encrypt_credential( sanitize_text_field( wp_unslash( $data['api_key'] ) ) ) : '',
+			'api_secret'     => isset( $data['api_secret'] ) ? self::encrypt_credential( sanitize_text_field( wp_unslash( $data['api_secret'] ) ) ) : '',
 			'test_mode'      => isset( $data['test_mode'] ) ? sanitize_text_field( wp_unslash( $data['test_mode'] ) ) : 'no',
 			'updated_at'     => current_time( 'mysql' ),
 		);
@@ -106,7 +106,14 @@ class LWC_FedEx_Account {
 		);
 
 		if ( isset( $field_map[ $option_name ] ) && isset( $account[ $field_map[ $option_name ] ] ) ) {
-			return $account[ $field_map[ $option_name ] ];
+			$value = $account[ $field_map[ $option_name ] ];
+
+			// Credentials are stored encrypted in the custom table.
+			if ( 'api_key' === $field_map[ $option_name ] || 'api_secret' === $field_map[ $option_name ] ) {
+				$value = self::decrypt_credential( $value );
+			}
+
+			return $value;
 		}
 
 		return get_option( $option_name, $default );
@@ -137,5 +144,33 @@ class LWC_FedEx_Account {
 		global $wpdb;
 
 		return $wpdb->prefix . 'lwc_fedex_accounts';
+	}
+
+	/**
+	 * Encrypt a credential before it is persisted.
+	 *
+	 * @param string $value Plain credential.
+	 * @return string
+	 */
+	private static function encrypt_credential( $value ) {
+		if ( '' === $value || ! function_exists( 'lwc_encrypt_secret' ) ) {
+			return $value;
+		}
+
+		return lwc_encrypt_secret( $value );
+	}
+
+	/**
+	 * Decrypt a stored credential so it is only ever used in plain form in memory.
+	 *
+	 * @param string $value Stored credential.
+	 * @return string
+	 */
+	private static function decrypt_credential( $value ) {
+		if ( '' === $value || ! function_exists( 'lwc_decrypt_secret' ) ) {
+			return $value;
+		}
+
+		return lwc_decrypt_secret( $value );
 	}
 }

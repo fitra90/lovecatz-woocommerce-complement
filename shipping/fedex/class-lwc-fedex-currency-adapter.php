@@ -72,6 +72,12 @@ class LWC_FedEx_Currency_Adapter {
 		add_action( 'admin_init', array( $this, 'register_admin_settings' ) );
 		add_action( 'admin_notices', array( $this, 'maybe_render_admin_notice' ) );
 
+		// Avoid double conversion: in manual mode both engines convert their
+		// own FedEx rate, so the currency plugin must skip them.
+		if ( self::MODE_MANUAL === $this->get_conversion_mode() ) {
+			add_filter( 'wmc_excluded_shipping_methods_from_converting', array( $this, 'exclude_from_wmc_conversion' ) );
+		}
+
 		if ( ! $this->is_active() ) {
 			return;
 		}
@@ -83,11 +89,6 @@ class LWC_FedEx_Currency_Adapter {
 
 		// Manual conversion (and fallback when no currency plugin is available).
 		add_filter( 'woocommerce_package_rates', array( $this, 'convert_fedex_rates' ), 20, 2 );
-
-		// Avoid double conversion when we convert the FedEx rate ourselves.
-		if ( self::MODE_MANUAL === $this->get_conversion_mode() ) {
-			add_filter( 'wmc_excluded_shipping_methods_from_converting', array( $this, 'exclude_from_wmc_conversion' ) );
-		}
 	}
 
 	/**
@@ -179,6 +180,11 @@ class LWC_FedEx_Currency_Adapter {
 			return $rates;
 		}
 
+		// The built-in converter already converts every shipping rate.
+		if ( class_exists( 'LWC_Currency_Converter' ) && LWC_Currency_Converter::instance()->is_active() ) {
+			return $rates;
+		}
+
 		if ( ! is_array( $rates ) ) {
 			return $rates;
 		}
@@ -248,6 +254,11 @@ class LWC_FedEx_Currency_Adapter {
 	 */
 	public function exclude_from_wmc_conversion( $methods ) {
 		$methods[] = self::OCTOLIZE_METHOD_ID;
+
+		if ( ! in_array( 'lwc_fedex', $methods, true ) ) {
+			$methods[] = 'lwc_fedex';
+		}
+
 		return $methods;
 	}
 
@@ -590,9 +601,16 @@ class LWC_FedEx_Currency_Adapter {
 			return null;
 		}
 
+		$converted = $amount / $rate;
+
+		// Round to the active currency's decimals (integers for IDR etc.).
+		if ( class_exists( 'LWC_Currency_Converter' ) && function_exists( 'get_woocommerce_currency' ) ) {
+			return LWC_Currency_Converter::round_for_currency( $converted, strtoupper( (string) get_woocommerce_currency() ) );
+		}
+
 		$decimals = function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2;
 
-		return round( $amount / $rate, $decimals );
+		return round( $converted, $decimals );
 	}
 
 	/**

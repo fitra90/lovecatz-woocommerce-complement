@@ -95,6 +95,10 @@ function lwc_init() {
 	add_filter( 'option_lwc_fedex_api_secret', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_key', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_secret', 'lwc_decrypt_secret' );
+	foreach ( array( 'express', 'cargo' ) as $lwc_jt_provider ) {
+		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_key", 'lwc_decrypt_secret' );
+		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
+	}
 
 	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
@@ -103,10 +107,15 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
-	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-base.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-currency-adapter.php';
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
+
+	// Carry pre-split J&T credentials into the Express provider once.
+	LWC_JT_Account::migrate_legacy_credentials();
 
 	add_filter( 'woocommerce_shipping_methods', 'lwc_register_shipping_methods' );
 
@@ -121,6 +130,7 @@ add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
 register_activation_hook( __FILE__, 'lwc_activate' );
+register_deactivation_hook( __FILE__, 'lwc_deactivate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
 add_action( 'init', 'lwc_maybe_flush_rewrite_rules' );
 
@@ -191,6 +201,9 @@ function lwc_plugin_action_links( $links ) {
 
 /**
  * Handle the FedEx connection status check via AJAX.
+ *
+ * Performs a real OAuth handshake against FedEx using the submitted
+ * credentials so the reported status reflects an actual working connection.
  */
 function lwc_check_fedex_connection() {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
@@ -202,13 +215,39 @@ function lwc_check_fedex_connection() {
 	$account_number = isset( $_POST['account_number'] ) ? sanitize_text_field( wp_unslash( $_POST['account_number'] ) ) : '';
 	$api_key        = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$api_secret     = isset( $_POST['api_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['api_secret'] ) ) : '';
+	$test_mode      = isset( $_POST['test_mode'] ) && 'yes' === $_POST['test_mode'] ? 'yes' : 'no';
 
 	if ( $account_number && $api_key && $api_secret ) {
-		update_option( 'lwc_fedex_validation_status', 'validated' );
+		if ( ! class_exists( 'LWC_FedEx_API' ) ) {
+			require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
+		}
+
+		$api = new LWC_FedEx_API(
+			array(
+				'account_number' => $account_number,
+				'api_key'        => $api_key,
+				'api_secret'     => $api_secret,
+				'test_mode'      => $test_mode,
+			)
+		);
+
+		$result = $api->test_connection();
+
+		if ( ! empty( $result['success'] ) ) {
+			update_option( 'lwc_fedex_validation_status', 'validated' );
+			wp_send_json_success(
+				array(
+					'status' => 'connected',
+					'label'  => __( 'Connected (REST API ready)', 'lovecatz-wc' ),
+				)
+			);
+		}
+
+		update_option( 'lwc_fedex_validation_status', 'failed' );
 		wp_send_json_success(
 			array(
-				'status' => 'connected',
-				'label'  => __( 'Connected (REST API ready)', 'lovecatz-wc' ),
+				'status' => 'auth_failed',
+				'label'  => isset( $result['message'] ) ? $result['message'] : __( 'FedEx rejected the credentials.', 'lovecatz-wc' ),
 			)
 		);
 	}
@@ -257,7 +296,19 @@ function lwc_fedex_get_rate_quote() {
 	);
 
 	$api = new LWC_FedEx_API();
-	$result = $api->get_rate_quote( $package );
+	$result = $api->get_rate_quotes( $package );
+
+	// Keep a single "rate" field for backward compatibility.
+	if ( ! empty( $result['success'] ) && ! empty( $result['quotes'] ) ) {
+		$cheapest = null;
+		foreach ( $result['quotes'] as $quote ) {
+			if ( null === $cheapest || $quote['rate'] < $cheapest['rate'] ) {
+				$cheapest = $quote;
+			}
+		}
+		$result['rate'] = $cheapest['rate'];
+	}
+
 	wp_send_json( $result );
 }
 
@@ -285,8 +336,39 @@ function lwc_fedex_create_shipment() {
 		wp_send_json_error( array( 'message' => __( 'Order not found.', 'lovecatz-wc' ) ) );
 	}
 
+	// Manual partial shipping: only the selected line items go on this AWB.
+	$item_ids = array();
+	if ( isset( $_POST['item_ids'] ) && is_array( $_POST['item_ids'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$item_ids = array_map( 'absint', wp_unslash( $_POST['item_ids'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$item_ids = array_values( array_filter( $item_ids ) );
+	}
+
 	$api = new LWC_FedEx_API();
-	$result = $api->create_shipment( $order );
+	$result = $api->create_shipment( $order, 0, $item_ids );
+
+	if ( ! empty( $result['success'] ) ) {
+		// The raw response embeds the base64 label; keep it out of the AJAX payload.
+		unset( $result['response'] );
+
+		$tracking = $order->get_meta( '_lwc_fedex_tracking_number' );
+		$result['tracking_number'] = is_string( $tracking ) ? $tracking : '';
+
+		$result['label_url'] = '';
+		if ( ! empty( $result['label_path'] ) ) {
+			$result['label_url'] = wp_nonce_url(
+				add_query_arg(
+					array(
+						'action'   => 'lwc_fedex_download_label',
+						'order_id' => $order->get_id(),
+					),
+					admin_url( 'admin-ajax.php' )
+				),
+				'lwc_fedex_connection_check',
+				'nonce'
+			);
+		}
+	}
+
 	wp_send_json( $result );
 }
 
@@ -310,8 +392,22 @@ function lwc_fedex_download_label() {
 		wp_die( __( 'Order not found.', 'lovecatz-wc' ) );
 	}
 
-	$filename = $order->get_meta( '_lwc_fedex_label_path' );
-	$filename = is_string( $filename ) ? basename( $filename ) : '';
+	$filename = '';
+	$shipment_index = isset( $_GET['shipment'] ) ? absint( wp_unslash( $_GET['shipment'] ) ) : -1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+	// Partial shipments keep their own label files in the shipments array.
+	if ( $shipment_index >= 0 ) {
+		$shipments = $order->get_meta( '_lwc_fedex_shipments' );
+		if ( is_array( $shipments ) && isset( $shipments[ $shipment_index ]['label_file'] ) ) {
+			$filename = (string) $shipments[ $shipment_index ]['label_file'];
+		}
+	}
+
+	if ( '' === $filename ) {
+		$filename = $order->get_meta( '_lwc_fedex_label_path' );
+		$filename = is_string( $filename ) ? basename( $filename ) : '';
+	}
+
 	if ( '' === $filename ) {
 		wp_die( __( 'No label found for this order.', 'lovecatz-wc' ) );
 	}
@@ -338,8 +434,10 @@ function lwc_fedex_download_label() {
  * @return array
  */
 function lwc_register_shipping_methods( $methods ) {
-	$methods['lwc_shipping_jt'] = 'LWC_Shipping_JT';
-	$methods['lwc_jt'] = 'LWC_Shipping_JT';
+	$methods['lwc_jt_express'] = 'LWC_Shipping_JT_Express';
+	$methods['lwc_jt_cargo'] = 'LWC_Shipping_JT_Cargo';
+	// Legacy alias: pre-split J&T zone instances keep working as Express.
+	$methods['lwc_jt'] = 'LWC_Shipping_JT_Express';
 	$methods['lwc_shipping_fedex'] = 'LWC_Shipping_FedEx';
 	$methods['lwc_fedex'] = 'LWC_Shipping_FedEx';
 
@@ -348,17 +446,58 @@ function lwc_register_shipping_methods( $methods ) {
 
 /**
  * Initialize plugin data on activation.
+ *
+ * Idempotent: every step checks before it creates, so re-activation or
+ * activation over an existing install never duplicates data.
  */
 function lwc_activate() {
 	if ( ! defined( 'ABSPATH' ) ) {
 		return;
 	}
 
-	if ( ! function_exists( 'lwc_is_woocommerce_active' ) ) {
+	lwc_install();
+
+	if ( function_exists( 'add_rewrite_endpoint' ) ) {
+		add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
+	}
+
+	if ( function_exists( 'flush_rewrite_rules' ) ) {
+		flush_rewrite_rules();
+		/* Record the flushed version so init-time helper knows the rule is current. */
+		update_option( 'lwc_coupon_endpoint_rewrite_version', LWC_VERSION );
+	}
+}
+
+/**
+ * Deactivate the plugin without touching any stored data.
+ *
+ * Tables, options, order meta, and label files are all preserved so a
+ * later reactivation continues exactly where things left off.
+ */
+function lwc_deactivate() {
+	if ( ! defined( 'ABSPATH' ) ) {
 		return;
 	}
 
-	if ( ! lwc_is_woocommerce_active() ) {
+	if ( function_exists( 'flush_rewrite_rules' ) ) {
+		flush_rewrite_rules();
+	}
+}
+
+/**
+ * Install or upgrade the plugin schema.
+ *
+ * Safe to run repeatedly: tables are created only when missing, dbDelta
+ * adds any columns introduced by newer versions, and legacy credentials
+ * migrate once. Runs on activation and self-heals on version bumps even
+ * when the activation hook was skipped (e.g. manual file updates).
+ */
+function lwc_install() {
+	if ( ! defined( 'LWC_VERSION' ) ) {
+		return;
+	}
+
+	if ( get_option( 'lwc_schema_version' ) === LWC_VERSION ) {
 		return;
 	}
 
@@ -375,22 +514,22 @@ function lwc_activate() {
 	}
 
 	if ( class_exists( 'LWC_JT_Account' ) ) {
-		LWC_JT_Account::create_table();
+		foreach ( LWC_JT_Account::get_providers() as $provider ) {
+			LWC_JT_Account::create_table( $provider );
+		}
+		LWC_JT_Account::migrate_legacy_credentials();
 	}
 
-	if ( function_exists( 'add_rewrite_endpoint' ) ) {
-		add_rewrite_endpoint( 'coupon', EP_ROOT | EP_PAGES );
-	}
-
-	if ( function_exists( 'flush_rewrite_rules' ) ) {
-		flush_rewrite_rules();
-		/* Record the flushed version so init-time helper knows the rule is current. */
-		update_option( 'lwc_coupon_endpoint_rewrite_version', LWC_VERSION );
-	}
+	update_option( 'lwc_schema_version', LWC_VERSION );
 }
+add_action( 'admin_init', 'lwc_install' );
 
 /**
- * Clean up plugin data on uninstall.
+ * Clean up all plugin data on uninstall.
+ *
+ * Removes every table, option, transient, post/order meta, user meta, and
+ * generated label file the plugin created. Deactivation alone never runs
+ * this; only actual deletion through the Plugins screen does.
  */
 function lwc_uninstall() {
 	if ( ! defined( 'ABSPATH' ) ) {
@@ -399,13 +538,57 @@ function lwc_uninstall() {
 
 	global $wpdb;
 
+	// 1. Custom tables (current and legacy).
 	$tables = array(
 		$wpdb->prefix . 'lwc_fedex_accounts',
 		$wpdb->prefix . 'lwc_jt_accounts',
+		$wpdb->prefix . 'lwc_jt_express_accounts',
+		$wpdb->prefix . 'lwc_jt_cargo_accounts',
 	);
 
 	foreach ( $tables as $table ) {
 		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+	}
+
+	// 2. Options: every setting this plugin stored uses the lwc_ prefix.
+	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'lwc\\_%'" );
+
+	// 3. Transients (OAuth tokens, rate caches) plus their timeouts.
+	$wpdb->query(
+		"DELETE FROM {$wpdb->options}
+		 WHERE option_name LIKE '\\_transient\\_lwc\\_%'
+		    OR option_name LIKE '\\_transient\\_timeout\\_lwc\\_%'"
+	);
+
+	// 4. Post meta: product quantity limits, promo coupon markers, FedEx
+	// tracking/label/shipment records (classic post storage).
+	$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '\\_lwc\\_%'" );
+
+	// 5. HPOS order meta when WooCommerce high-performance order storage
+	// is active (order meta lives in its own table there).
+	$orders_meta_table = $wpdb->prefix . 'wc_orders_meta';
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $orders_meta_table ) ) === $orders_meta_table ) {
+		$wpdb->query( "DELETE FROM {$orders_meta_table} WHERE meta_key LIKE '\\_lwc\\_%'" );
+	}
+
+	// 6. User meta added by member import. WooCommerce's own billing_*
+	// and shipping_* fields are left untouched.
+	$wpdb->query( "DELETE FROM {$wpdb->usermeta} WHERE meta_key = 'lwc_customer_id'" );
+
+	// 7. Generated AWB label PDFs in the uploads directory.
+	$upload_dir = wp_upload_dir();
+	$label_files = glob( wp_normalize_path( $upload_dir['basedir'] . '/fedex-label-*.pdf' ) );
+	if ( is_array( $label_files ) ) {
+		foreach ( $label_files as $label_file ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@unlink( $label_file );
+		}
+	}
+
+	// 8. Drop any cached values so deleted options are not resurrected
+	// from an object cache during the same request.
+	if ( function_exists( 'wp_cache_flush' ) ) {
+		wp_cache_flush();
 	}
 }
 

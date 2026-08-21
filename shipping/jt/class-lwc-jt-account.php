@@ -1,6 +1,6 @@
 <?php
 /**
- * J&T account storage helper.
+ * J&T account storage helper (per provider: express, cargo).
  *
  * @package LoveCatzWC
  */
@@ -11,10 +11,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LWC_JT_Account {
 
-	public static function create_table() {
+	/**
+	 * Supported J&T providers.
+	 *
+	 * @return string[]
+	 */
+	public static function get_providers() {
+		return array( 'express', 'cargo' );
+	}
+
+	/**
+	 * Normalize a provider slug.
+	 *
+	 * @param string $provider Provider slug.
+	 * @return string
+	 */
+	public static function normalize_provider( $provider ) {
+		return in_array( (string) $provider, self::get_providers(), true ) ? (string) $provider : 'express';
+	}
+
+	public static function create_table( $provider = 'express' ) {
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		$provider = self::normalize_provider( $provider );
+		$table_name = self::get_table_name( $provider );
 		$charset_collate = $wpdb->get_charset_collate();
 
 		$sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
@@ -29,20 +49,22 @@ class LWC_JT_Account {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 
-		self::sync_from_options();
+		self::sync_from_options( $provider );
 	}
 
-	public static function drop_table() {
+	public static function drop_table( $provider = 'express' ) {
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		$provider = self::normalize_provider( $provider );
+		$table_name = self::get_table_name( $provider );
 		$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" );
 	}
 
-	public static function save_account( $data ) {
+	public static function save_account( $data, $provider = 'express' ) {
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		$provider = self::normalize_provider( $provider );
+		$table_name = self::get_table_name( $provider );
 		$payload = array(
 			'api_key'    => isset( $data['api_key'] ) ? sanitize_text_field( wp_unslash( $data['api_key'] ) ) : '',
 			'api_secret' => isset( $data['api_secret'] ) ? sanitize_text_field( wp_unslash( $data['api_secret'] ) ) : '',
@@ -50,7 +72,7 @@ class LWC_JT_Account {
 			'updated_at' => current_time( 'mysql' ),
 		);
 
-		$row = self::get_account();
+		$row = self::get_account( $provider );
 		if ( $row ) {
 			$wpdb->update(
 				$table_name,
@@ -63,28 +85,30 @@ class LWC_JT_Account {
 			$wpdb->insert( $table_name, $payload, array( '%s', '%s', '%s', '%s' ) );
 		}
 
-		update_option( 'lwc_jt_api_key', $payload['api_key'] );
-		update_option( 'lwc_jt_api_secret', $payload['api_secret'] );
-		update_option( 'lwc_jt_test_mode', $payload['test_mode'] );
+		update_option( "lwc_jt_{$provider}_api_key", $payload['api_key'] );
+		update_option( "lwc_jt_{$provider}_api_secret", $payload['api_secret'] );
+		update_option( "lwc_jt_{$provider}_test_mode", $payload['test_mode'] );
 
 		return true;
 	}
 
-	public static function get_account() {
+	public static function get_account( $provider = 'express' ) {
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		$provider = self::normalize_provider( $provider );
+		$table_name = self::get_table_name( $provider );
 		$row = $wpdb->get_row( "SELECT * FROM {$table_name} ORDER BY id DESC LIMIT 1", ARRAY_A );
 
 		return is_array( $row ) ? $row : array();
 	}
 
-	public static function get_option_value( $option_name, $default = '' ) {
-		$account = self::get_account();
+	public static function get_option_value( $option_name, $default = '', $provider = 'express' ) {
+		$provider = self::normalize_provider( $provider );
+		$account = self::get_account( $provider );
 		$field_map = array(
-			'lwc_jt_api_key'    => 'api_key',
-			'lwc_jt_api_secret' => 'api_secret',
-			'lwc_jt_test_mode'  => 'test_mode',
+			"lwc_jt_{$provider}_api_key"    => 'api_key',
+			"lwc_jt_{$provider}_api_secret" => 'api_secret',
+			"lwc_jt_{$provider}_test_mode"  => 'test_mode',
 		);
 
 		if ( isset( $field_map[ $option_name ] ) && isset( $account[ $field_map[ $option_name ] ] ) ) {
@@ -94,21 +118,47 @@ class LWC_JT_Account {
 		return get_option( $option_name, $default );
 	}
 
-	public static function sync_from_options() {
+	public static function sync_from_options( $provider = 'express' ) {
+		$provider = self::normalize_provider( $provider );
 		$data = array(
-			'api_key'    => get_option( 'lwc_jt_api_key', '' ),
-			'api_secret' => get_option( 'lwc_jt_api_secret', '' ),
-			'test_mode'  => get_option( 'lwc_jt_test_mode', 'no' ),
+			'api_key'    => get_option( "lwc_jt_{$provider}_api_key", '' ),
+			'api_secret' => get_option( "lwc_jt_{$provider}_api_secret", '' ),
+			'test_mode'  => get_option( "lwc_jt_{$provider}_test_mode", 'no' ),
 		);
 
 		if ( '' !== $data['api_key'] || '' !== $data['api_secret'] || 'no' !== $data['test_mode'] ) {
-			self::save_account( $data );
+			self::save_account( $data, $provider );
 		}
 	}
 
-	private static function get_table_name() {
+	/**
+	 * Copy pre-split legacy J&T credentials to the Express provider once.
+	 *
+	 * @return void
+	 */
+	public static function migrate_legacy_credentials() {
+		if ( get_option( 'lwc_jt_legacy_migrated' ) ) {
+			return;
+		}
+
+		$legacy_key = get_option( 'lwc_jt_api_key', '' );
+		$legacy_secret = get_option( 'lwc_jt_api_secret', '' );
+
+		if ( '' !== $legacy_key || '' !== $legacy_secret ) {
+			if ( '' === get_option( 'lwc_jt_express_api_key', '' ) && '' === get_option( 'lwc_jt_express_api_secret', '' ) ) {
+				update_option( 'lwc_jt_express_api_key', $legacy_key );
+				update_option( 'lwc_jt_express_api_secret', $legacy_secret );
+				update_option( 'lwc_jt_express_test_mode', get_option( 'lwc_jt_test_mode', 'no' ) );
+			}
+		}
+
+		update_option( 'lwc_jt_legacy_migrated', 'yes' );
+	}
+
+	private static function get_table_name( $provider ) {
 		global $wpdb;
 
-		return $wpdb->prefix . 'lwc_jt_accounts';
+		$provider = self::normalize_provider( $provider );
+		return $wpdb->prefix . 'lwc_jt_' . $provider . '_accounts';
 	}
 }

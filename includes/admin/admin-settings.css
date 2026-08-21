@@ -65,6 +65,18 @@
 	color: #c2410c;
 }
 
+.lwc-fedex-connection-status[data-status="auth_failed"] {
+	background: #fef3f2;
+	border-color: #fda29b;
+	color: #b42318;
+}
+
+.lwc-fedex-connection-status[data-status="checking"] {
+	background: #eff8ff;
+	border-color: #b2ddff;
+	color: #175cd3;
+}
+
 .lwc-fedex-status-dot {
 	width: 10px;
 	height: 10px;

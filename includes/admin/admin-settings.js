@@ -22,9 +22,9 @@
     }
 
     function updateFedexConnectionStatus(triggerAjax) {
-        var accountNumber = $('#lwc_fedex_account_number').val().trim();
-        var apiKey = $('#lwc_fedex_api_key').val().trim();
-        var apiSecret = $('#lwc_fedex_api_secret').val().trim();
+        var accountNumber = ($('#lwc_fedex_account_number').val() || '').trim();
+        var apiKey = ($('#lwc_fedex_api_key').val() || '').trim();
+        var apiSecret = ($('#lwc_fedex_api_secret').val() || '').trim();
 
         if (triggerAjax) {
             setFedexConnectionStatus('checking', 'Checking credentials...');
@@ -45,7 +45,8 @@
                         nonce: window.lwcFedexSettings.nonce,
                         account_number: accountNumber,
                         api_key: apiKey,
-                        api_secret: apiSecret
+                        api_secret: apiSecret,
+                        test_mode: $('#lwc_fedex_test_mode').is(':checked') ? 'yes' : 'no'
                     },
                     success: function (response) {
                         if (response && response.success && response.data) {
@@ -66,8 +67,8 @@
         var label = 'Waiting for credentials';
 
         if (accountNumber && apiKey && apiSecret) {
-            status = 'connected';
-            label = 'Connected (REST API ready)';
+            status = 'partial';
+            label = 'Credentials entered';
         } else if (accountNumber || apiKey || apiSecret) {
             status = 'partial';
             label = 'Incomplete credentials';
@@ -152,7 +153,6 @@
             $('.lwc-fedex-credential-field').on('input change', function () {
                 updateFedexConnectionStatus(true);
             });
-            updateFedexConnectionStatus(false);
         }
 
         if ($('.lwc-promo-image-select').length) {

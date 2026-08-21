@@ -1,0 +1,52 @@
+.lwc-fedex-order-box .lwc-fedex-order-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.lwc-fedex-items {
+	margin: 8px 0;
+}
+
+.lwc-fedex-item {
+	display: block;
+	margin: 2px 0;
+	font-weight: 400;
+}
+
+.lwc-fedex-item.is-shipped {
+	color: #646970;
+	text-decoration: line-through;
+}
+
+.lwc-fedex-shipments ul {
+	margin: 4px 0 0 16px;
+	list-style: disc;
+}
+
+.lwc-fedex-order-status {
+	margin: 8px 0;
+	padding: 6px 10px;
+	border-radius: 4px;
+	font-weight: 600;
+	white-space: pre-line;
+}
+
+.lwc-fedex-order-status.is-checking {
+	background: #eff8ff;
+	color: #175cd3;
+}
+
+.lwc-fedex-order-status.is-ok {
+	background: #ecfdf3;
+	color: #067647;
+}
+
+.lwc-fedex-order-status.is-error {
+	background: #fef3f2;
+	color: #b42318;
+}
+
+.lwc-fedex-tracking-row span {
+	font-family: Consolas, Monaco, monospace;
+}
