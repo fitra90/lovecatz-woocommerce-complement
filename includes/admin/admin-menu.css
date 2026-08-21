@@ -1,0 +1,29 @@
+/*
+ * LoveCatz admin menu: render the tab list as a side fly-out instead of
+ * an inline-expanded submenu. Folded, auto-folded (mobile), and collapsed
+ * sidebar states are left to WordPress core styling.
+ */
+
+body:not(.folded):not(.auto-fold) #adminmenu #toplevel_page_lovecatz-wc .wp-submenu {
+	display: block !important;
+	position: absolute !important;
+	top: -1000em !important;
+	left: 160px !important;
+	margin: 0 !important;
+	padding: 7px 0 8px !important;
+	background: #2c3338;
+	box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+	min-width: 150px;
+	z-index: 9999;
+}
+
+body:not(.folded):not(.auto-fold) #adminmenu #toplevel_page_lovecatz-wc:hover .wp-submenu,
+body:not(.folded):not(.auto-fold) #adminmenu #toplevel_page_lovecatz-wc.opensub .wp-submenu,
+body:not(.folded):not(.auto-fold) #adminmenu #toplevel_page_lovecatz-wc:focus-within .wp-submenu {
+	top: 0 !important;
+}
+
+/* Keep the arrow indicator pointing right, matching fly-out behaviour. */
+body:not(.folded):not(.auto-fold) #adminmenu #toplevel_page_lovecatz-wc .wp-menu-arrow {
+	display: none;
+}

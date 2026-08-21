@@ -49,12 +49,66 @@ class LWC_Admin_Settings {
 			$menu_icon,
 			56
 		);
+
+		// Sidebar shortcuts: one entry per main tab. Each slug carries the
+		// tab query so the links land directly on that tab. The first entry
+		// reuses the parent slug, replacing WordPress's automatic duplicate
+		// label with "Setting".
+		foreach ( $this->get_main_tabs() as $tab => $label ) {
+			add_submenu_page(
+				'lovecatz-wc',
+				$label,
+				$label,
+				'manage_woocommerce',
+				'settings' === $tab ? 'lovecatz-wc' : 'lovecatz-wc&tab=' . $tab,
+				array( $this, 'render_settings_page' )
+			);
+		}
+
+		// Highlight the matching sidebar entry while a tab is open.
+		add_filter( 'submenu_file', array( $this, 'filter_submenu_file' ) );
+	}
+
+	/**
+	 * Main plugin tabs shown as sidebar submenu entries.
+	 *
+	 * @return array tab slug => label
+	 */
+	public function get_main_tabs() {
+		return array(
+			'settings'      => __( 'Setting', 'lovecatz-wc' ),
+			'products'      => __( 'Products', 'lovecatz-wc' ),
+			'store-members' => __( 'Members', 'lovecatz-wc' ),
+			'shipping'      => __( 'Shipping', 'lovecatz-wc' ),
+			'promo'         => __( 'Promo', 'lovecatz-wc' ),
+			'currency'      => __( 'Currency', 'lovecatz-wc' ),
+		);
+	}
+
+	/**
+	 * Point WordPress at the submenu entry matching the active tab.
+	 *
+	 * @param string $submenu_file Current submenu slug.
+	 * @return string
+	 */
+	public function filter_submenu_file( $submenu_file ) {
+		if ( isset( $_GET['page'], $_GET['tab'] ) && 'lovecatz-wc' === $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$tab = sanitize_key( wp_unslash( $_GET['tab'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( isset( $this->get_main_tabs()[ $tab ] ) ) {
+				return 'lovecatz-wc&tab=' . $tab;
+			}
+		}
+
+		return $submenu_file;
 	}
 
 	/**
 	 * Enqueue admin scripts and styles for the plugin settings page.
 	 */
 	public function enqueue_admin_assets( $hook ) {
+		// Menu styling must load on every admin screen (the sidebar is global).
+		wp_enqueue_style( 'lwc-admin-menu', LWC_PLUGIN_URL . 'includes/admin/admin-menu.css', array(), LWC_VERSION );
+
 		if ( get_current_screen() && 'toplevel_page_lovecatz-wc' !== get_current_screen()->id ) {
 			return;
 		}
@@ -119,7 +173,7 @@ class LWC_Admin_Settings {
 			<?php elseif ( 'shipping' === $active_tab ) : ?>
 				<div style="margin: 15px 0;">
 					<a href="?page=lovecatz-wc&tab=shipping&provider=jt" class="button <?php echo 'jt' === $provider ? 'button-primary' : 'button-secondary'; ?>">
-						<?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?>
+						<?php esc_html_e( 'J&T', 'lovecatz-wc' ); ?>
 					</a>
 					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="button <?php echo 'fedex' === $provider ? 'button-primary' : 'button-secondary'; ?>">
 						<?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?>
@@ -127,11 +181,6 @@ class LWC_Admin_Settings {
 				</div>
 
 				<?php if ( 'jt' === $provider ) : ?>
-					<div style="margin: 0 0 15px;">
-						<a href="#lwc-jt-express" class="button button-secondary"><?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?></a>
-						<a href="#lwc-jt-cargo" class="button button-secondary"><?php esc_html_e( 'J&T Cargo', 'lovecatz-wc' ); ?></a>
-					</div>
-
 					<div id="lwc-jt-express">
 						<form method="post" action="options.php">
 							<?php
@@ -245,6 +294,50 @@ class LWC_Admin_Settings {
 			);
 		}
 
+		register_setting(
+			'lwc_shipping_fedex_options',
+			'lwc_fedex_enabled',
+			array(
+				'default'           => 'yes',
+				'sanitize_callback' => function ( $value ) {
+					return ( true === $value || 'yes' === $value || '1' === $value || 1 === $value ) ? 'yes' : 'no';
+				},
+			)
+		);
+		register_setting(
+			'lwc_shipping_fedex_options',
+			'lwc_fedex_max_package_weight_kg',
+			array(
+				'default'           => 10,
+				'sanitize_callback' => function ( $value ) {
+					$value = (float) str_replace( ',', '.', (string) $value );
+					// FedEx rejects packages above 68 kg on every parcel service.
+					return max( 0, min( 68, $value ) );
+				},
+			)
+		);
+		register_setting(
+			'lwc_shipping_fedex_options',
+			'lwc_fedex_services',
+			array(
+				'default'           => array(),
+				'sanitize_callback' => function ( $value ) {
+					if ( ! is_array( $value ) ) {
+						$value = array_filter( array_map( 'trim', explode( ',', (string) $value ) ) );
+					}
+
+					$clean = array();
+					foreach ( $value as $service ) {
+						$service = strtoupper( sanitize_text_field( (string) $service ) );
+						if ( '' !== $service ) {
+							$clean[] = $service;
+						}
+					}
+
+					return array_values( array_unique( $clean ) );
+				},
+			)
+		);
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_account_number', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
@@ -257,6 +350,30 @@ class LWC_Admin_Settings {
 			__( 'FedEx Settings', 'lovecatz-wc' ),
 			array( $this, 'render_fedex_section_intro' ),
 			'lwc_shipping_fedex_options'
+		);
+
+		add_settings_field(
+			'lwc_fedex_enabled',
+			__( 'Enable FedEx', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_enabled_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
+
+		add_settings_field(
+			'lwc_fedex_max_package_weight_kg',
+			__( 'Max package weight (kg)', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_max_weight_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
+
+		add_settings_field(
+			'lwc_fedex_services',
+			__( 'FedEx service types', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_services_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
 		);
 
 		add_settings_field(
@@ -419,6 +536,51 @@ class LWC_Admin_Settings {
 			<span class="lwc-fedex-status-label"><?php echo esc_html( $current[1] ); ?></span>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render the FedEx enable toggle.
+	 */
+	public function render_fedex_enabled_field() {
+		$value = get_option( 'lwc_fedex_enabled', 'yes' );
+		$checked = 'yes' === $value ? 'checked' : '';
+		echo '<input type="hidden" name="lwc_fedex_enabled" value="no" />';
+		echo '<input type="checkbox" name="lwc_fedex_enabled" value="yes" ' . $checked . ' /> ';
+		echo esc_html__( 'Offer FedEx rates at checkout for every destination (worldwide) — no WooCommerce shipping zone setup needed.', 'lovecatz-wc' );
+	}
+
+	/**
+	 * Render the FedEx max package weight field.
+	 */
+	public function render_fedex_max_weight_field() {
+		$value = get_option( 'lwc_fedex_max_package_weight_kg', 10 );
+		echo '<input type="number" name="lwc_fedex_max_package_weight_kg" value="' . esc_attr( $value ) . '" class="small-text" min="0" max="68" step="0.5" />';
+		echo '<p class="description">' . esc_html__( 'Carts heavier than this are split into multiple packages for rating and labels. Capped at the FedEx limit of 68 kg. Set 0 to always quote one package.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Render the FedEx service types multiselect.
+	 */
+	public function render_fedex_services_field() {
+		if ( ! class_exists( 'LWC_FedEx_API' ) && file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
+		}
+
+		$selected = (array) get_option( 'lwc_fedex_services', array() );
+		$selected = array_map( 'strtoupper', array_map( 'strval', $selected ) );
+		$options  = class_exists( 'LWC_FedEx_API' ) ? LWC_FedEx_API::get_available_services() : array();
+
+		echo '<select name="lwc_fedex_services[]" multiple size="8" style="min-width:320px;">';
+		foreach ( $options as $service_type => $label ) {
+			printf(
+				'<option value="%1$s"%2$s>%3$s (%1$s)</option>',
+				esc_attr( $service_type ),
+				in_array( $service_type, $selected, true ) ? ' selected' : '',
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Every selected service that FedEx prices becomes its own checkout option. Leave empty to use the defaults (Ground, Express Saver, International Economy, International Priority).', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/**

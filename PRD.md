@@ -61,6 +61,8 @@ Uninstall currently drops only the two account tables. It does not remove option
 The top-level menu requires `manage_woocommerce`; its label and Dashicon are configurable.
 
 - **Setting** — menu title and icon.
+
+The sidebar menu expands into one submenu entry per main tab (Setting, Products, Members, Shipping, Promo, Currency); each links straight to that tab via `?page=lovecatz-wc&tab=…`, and the open tab highlights its entry through a `submenu_file` filter.
 - **Products** — quantity-limit feature switch.
 - **Members** — import, list, delete, and print cards.
 - **Shipping** — J&T and FedEx settings.
@@ -126,7 +128,16 @@ Encryption uses AES-256-CBC with a key and deterministic IV derived from the Wor
 
 ### Native LoveCatz FedEx
 
-The `lwc_fedex` zone method performs live REST quotes at checkout: it builds a rate request from the store origin, the package destination, and real cart weight (per item × quantity), authenticates with a cached OAuth token (~1 hour), calls `/rate/v1/rates/quotes`, and caches successful quotes per request payload for 30 minutes (`lwc_fedex_rate_cache_ttl` filter). No `serviceType` is sent, so FedEx returns every applicable service; each enabled service becomes its own checkout option (per-instance multiselect of the `lwc_fedex_available_services` catalog; empty selection falls back to Ground/Express Saver/International Economy/Priority). When no service matches or the live quote fails, an optional per-instance flat fallback rate is offered (enabled by default, cost configurable); disabling the fallback hides the method instead.
+The `lwc_fedex` zone method performs live REST quotes at checkout: it builds a rate request from the store origin, the package destination, and real cart weight (per item × quantity), authenticates with a cached OAuth token (~1 hour), calls `/rate/v1/rates/quotes`, and caches successful quotes per request payload for 30 minutes (`lwc_fedex_rate_cache_ttl` filter). No `serviceType` is sent, so FedEx returns every applicable service; each enabled service becomes its own checkout option. When no service matches or the live quote fails, an optional flat fallback rate is offered (enabled by default, cost configurable); disabling the fallback hides the method instead.
+
+FedEx is managed entirely from the plugin's Shipping tab — no WooCommerce shipping zone setup required:
+
+- **Enable FedEx** (`lwc_fedex_enabled`, default on) — a checkbox toggle on the settings page gates every rate path (`calculate_shipping`, `is_available`, and the global injector).
+- **Worldwide availability without zones** — the method hooks `woocommerce_shipping_packages` and appends its rates to every cart package whenever a zone instance isn't already providing `lwc_fedex` rates, so it works out of the box for all destinations.
+- **Max package weight** (`lwc_fedex_max_package_weight_kg`, default 10, clamped 0–68) — drives package splitting for rating and labels and travels via rate meta to label creation.
+- **Service types** (`lwc_fedex_services`, multiselect from the `lwc_fedex_available_services` catalog; empty selection falls back to Ground/Express Saver/International Economy/Priority).
+
+Only display options (method title/description) and the fallback rate remain per-instance in WooCommerce.
 
 Cartons are derived from product data: items are grouped into packages that respect a per-instance max package weight (kg; 0 disables splitting), and package dimensions come from the cube root of the summed item volume when products have dimensions set. The same packages drive rating and label creation. The split threshold is hard-capped at the FedEx parcel ceiling of 68 kg (150 lbs) — `lwc_fedex_package_weight_ceiling_kg` filter; heavier loads require FedEx Freight, which is out of scope.
 
@@ -175,7 +186,7 @@ J&T is split into two independent providers, each with its own credentials, zone
 - **`lwc_jt_express`** (`LWC_Shipping_JT_Express`) — regular parcels; auto-split threshold default 10 kg, hard ceiling 100 kg (`lwc_jt_express_package_weight_ceiling_kg` filter).
 - **`lwc_jt_cargo`** (`LWC_Shipping_JT_Cargo`) — large/heavy shipments (10 kg minimum billable, tiers H50–H500); auto-split off by default, ceiling 500 kg (`lwc_jt_cargo_package_weight_ceiling_kg` filter).
 
-Both extend `LWC_Shipping_JT_Base`, expose a flat provisional cost and a max-package-weight setting, and stamp the provider plus threshold into rate meta for the future live integration. The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. Credentials live under `lwc_jt_{provider}_*` options/tables; the Shipping tab shows anchor links to the J&T Express and J&T Cargo sections, and legacy pre-split credentials migrate to Express once.
+Both extend `LWC_Shipping_JT_Base`, expose a flat provisional cost and a max-package-weight setting, and stamp the provider plus threshold into rate meta for the future live integration. The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. Credentials live under `lwc_jt_{provider}_*` options/tables; a single "J&T" switcher button opens one page containing both the Express and Cargo forms (each with its own section heading), and legacy pre-split credentials migrate to Express once.
 
 Neither provider is a live API integration yet: `calculate_shipping()` returns a configurable flat cost regardless of destination or weight. Live rates, waybills, tracking, and estimates are not implemented.
 

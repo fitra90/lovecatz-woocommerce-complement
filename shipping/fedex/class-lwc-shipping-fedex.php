@@ -27,6 +27,11 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 		$this->supports           = array( 'shipping-zones', 'instance-settings' );
 
 		parent::__construct( $instance_id );
+
+		// Offer rates worldwide from the plugin settings page even when the
+		// method was never added to a WooCommerce shipping zone.
+		add_filter( 'woocommerce_shipping_packages', array( $this, 'inject_global_rates' ) );
+
 		$this->init();
 	}
 
@@ -40,15 +45,13 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 
 	/**
 	 * Define shipping method form fields.
+	 *
+	 * Enable state, service selection, and the package weight threshold are
+	 * managed on the LoveCatz settings page; only display and fallback
+	 * options remain here.
 	 */
 	public function init_form_fields() {
 		$this->form_fields = array(
-			'enabled'      => array(
-				'title'   => __( 'Enable/Disable', 'lovecatz-wc' ),
-				'type'    => 'checkbox',
-				'label'   => __( 'Enable FedEx Shipping', 'lovecatz-wc' ),
-				'default' => 'no',
-			),
 			'title'        => array(
 				'title'       => __( 'Method Title', 'lovecatz-wc' ),
 				'type'        => 'text',
@@ -76,24 +79,36 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 				'default'     => 25,
 				'desc_tip'    => true,
 			),
-			'services' => array(
-				'title'             => __( 'FedEx services', 'lovecatz-wc' ),
-				'type'              => 'multiselect',
-				'class'             => 'wc-enhanced-select',
-				'css'               => 'width: 400px;',
-				'options'           => class_exists( 'LWC_FedEx_API' ) ? LWC_FedEx_API::get_available_services() : array(),
-				'custom_attributes' => array( 'data-placeholder' => __( 'Select services…', 'lovecatz-wc' ) ),
-				'description'       => __( 'Services offered at checkout. Every selected service that FedEx prices becomes its own shipping option; leave empty to use the defaults.', 'lovecatz-wc' ),
-				'default'           => array( 'FEDEX_GROUND', 'FEDEX_EXPRESS_SAVER', 'INTERNATIONAL_ECONOMY', 'INTERNATIONAL_PRIORITY' ),
-			),
-			'max_package_weight_kg' => array(
-				'title'       => __( 'Max package weight (kg)', 'lovecatz-wc' ),
-				'type'        => 'number',
-				'description' => __( 'Carts heavier than this are split into multiple packages for rating and labels. Capped at the FedEx limit of 68 kg. Set 0 to always quote one package.', 'lovecatz-wc' ),
-				'default'     => 10,
-				'desc_tip'    => true,
-			),
 		);
+	}
+
+	/**
+	 * Whether FedEx checkout rates are switched on in the plugin settings.
+	 *
+	 * @return bool
+	 */
+	public function is_plugin_enabled() {
+		return 'yes' === get_option( 'lwc_fedex_enabled', 'yes' );
+	}
+
+	/**
+	 * Availability follows the plugin settings toggle instead of the
+	 * WooCommerce per-zone enable checkbox.
+	 *
+	 * @param array $package Shipping package data.
+	 * @return bool
+	 */
+	public function is_available( $package = array() ) {
+		return $this->is_plugin_enabled();
+	}
+
+	/**
+	 * Package weight threshold configured on the plugin settings page.
+	 *
+	 * @return float
+	 */
+	public function resolve_max_package_weight() {
+		return (float) get_option( 'lwc_fedex_max_package_weight_kg', 10 );
 	}
 
 	/**
@@ -105,12 +120,82 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 * @param array $package Shipping package data.
 	 */
 	public function calculate_shipping( $package = array() ) {
-		$max_package_weight_kg = (float) $this->get_option( 'max_package_weight_kg', 10 );
+		if ( ! $this->is_plugin_enabled() ) {
+			return;
+		}
+
+		foreach ( $this->build_rates_for_package( $package ) as $rate ) {
+			$this->add_rate( $rate );
+		}
+	}
+
+	/**
+	 * Append FedEx rates to every cart package when the method is not
+	 * managed through a WooCommerce shipping zone.
+	 *
+	 * @param array $packages Cart packages.
+	 * @return array
+	 */
+	public function inject_global_rates( $packages ) {
+		if ( ! $this->is_plugin_enabled() || ! is_array( $packages ) ) {
+			return $packages;
+		}
+
+		foreach ( $packages as $key => $package ) {
+			if ( ! empty( $package['rates'] ) ) {
+				foreach ( $package['rates'] as $rate ) {
+					if ( $rate instanceof WC_Shipping_Rate && 'lwc_fedex' === $rate->get_method_id() ) {
+						// A zone instance already provides FedEx rates.
+						continue 2;
+					}
+				}
+			}
+
+			$rates = $this->build_rates_for_package( $package );
+			if ( empty( $rates ) ) {
+				continue;
+			}
+
+			if ( ! isset( $packages[ $key ]['rates'] ) || ! is_array( $packages[ $key ]['rates'] ) ) {
+				$packages[ $key ]['rates'] = array();
+			}
+
+			foreach ( $rates as $rate_args ) {
+				$rate = new WC_Shipping_Rate(
+					$rate_args['id'],
+					$rate_args['label'],
+					$rate_args['cost'],
+					array(),
+					'lwc_fedex'
+				);
+
+				if ( ! empty( $rate_args['meta_data'] ) && is_array( $rate_args['meta_data'] ) ) {
+					foreach ( $rate_args['meta_data'] as $meta_key => $meta_value ) {
+						$rate->add_meta_data( $meta_key, $meta_value );
+					}
+				}
+
+				$packages[ $key ]['rates'][ $rate_args['id'] ] = $rate;
+			}
+		}
+
+		return $packages;
+	}
+
+	/**
+	 * Build the rate definitions for one package: one per priced service,
+	 * plus the flat fallback when the live quote fails.
+	 *
+	 * @param array $package Shipping package data.
+	 * @return array[] add_rate argument arrays.
+	 */
+	private function build_rates_for_package( $package = array() ) {
+		$max_package_weight_kg = $this->resolve_max_package_weight();
 		$quotes = $this->get_live_quotes( $package, $max_package_weight_kg );
 
 		if ( ! empty( $quotes ) ) {
 			$enabled = $this->get_enabled_services();
-			$added = 0;
+			$rates = array();
 
 			foreach ( $quotes as $quote ) {
 				if ( ! empty( $enabled ) && ! in_array( $quote['service_type'], $enabled, true ) ) {
@@ -122,44 +207,41 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 					continue;
 				}
 
-				$this->add_rate(
-					array(
-						'id'       => $this->get_rate_id() . ':' . strtolower( str_replace( '_', '', $quote['service_type'] ) ),
-						'label'    => $quote['label'],
-						'cost'     => $cost,
-						'calc_tax' => 'per_order',
-						// Transferred to the order so label creation reuses the
-						// chosen service and package weight.
-						'meta_data' => array(
-							'lwc_fedex_service' => $quote['service_type'],
-							'lwc_fedex_max_weight' => $max_package_weight_kg,
-						),
-					)
+				$rates[] = array(
+					'id'       => $this->get_rate_id() . ':' . strtolower( str_replace( '_', '', $quote['service_type'] ) ),
+					'label'    => $quote['label'],
+					'cost'     => $cost,
+					'calc_tax' => 'per_order',
+					// Transferred to the order so label creation reuses the
+					// chosen service and package weight.
+					'meta_data' => array(
+						'lwc_fedex_service' => $quote['service_type'],
+						'lwc_fedex_max_weight' => $max_package_weight_kg,
+					),
 				);
-				$added++;
 			}
 
-			if ( $added > 0 ) {
-				return;
+			if ( ! empty( $rates ) ) {
+				return $rates;
 			}
 		}
 
 		if ( 'yes' !== $this->get_option( 'fallback_enabled', 'yes' ) ) {
-			return;
+			return array();
 		}
 
 		$cost = $this->prepare_rate_cost( (float) $this->get_option( 'fallback_cost', 25 ) );
 		if ( null === $cost ) {
-			return;
+			return array();
 		}
 
-		$this->add_rate(
+		return array(
 			array(
 				'id'       => $this->get_rate_id(),
 				'label'    => $this->title,
 				'cost'     => $cost,
 				'calc_tax' => 'per_order',
-			)
+			),
 		);
 	}
 
@@ -210,14 +292,15 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	}
 
 	/**
-	 * Get the service types this instance offers at checkout.
+	 * Get the service types offered at checkout.
 	 *
-	 * An empty selection falls back to the default set.
+	 * Reads the plugin settings page selection; an empty selection falls
+	 * back to the default set.
 	 *
 	 * @return string[]
 	 */
 	private function get_enabled_services() {
-		$services = $this->get_option( 'services', array() );
+		$services = (array) get_option( 'lwc_fedex_services', array() );
 
 		if ( is_string( $services ) ) {
 			$services = array_filter( array_map( 'trim', explode( ',', $services ) ) );
