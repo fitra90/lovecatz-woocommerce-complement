@@ -1,0 +1,51 @@
+.lwc-fedex-customer-tracking {
+	margin-top: 2rem;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-card {
+	margin: 0 0 1rem;
+	padding: 1rem;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-heading a {
+	font-family: monospace;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-events {
+	list-style: none;
+	margin: 1rem 0 0;
+	padding: 0 0 0 1rem;
+	border-left: 2px solid #e2e8f0;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-events li {
+	margin: 0 0 1rem;
+	padding-left: .75rem;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-events time,
+.lwc-fedex-customer-tracking .lwc-fedex-track-events strong,
+.lwc-fedex-customer-tracking .lwc-fedex-track-events span {
+	display: block;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-events time,
+.lwc-fedex-customer-tracking .lwc-fedex-track-events span {
+	font-size: .875em;
+	opacity: .75;
+}
+
+.lwc-fedex-customer-tracking .lwc-fedex-track-exception {
+	color: #b42318;
+	opacity: 1 !important;
+}

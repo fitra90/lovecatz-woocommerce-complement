@@ -97,13 +97,16 @@ class LWC_Core {
 			$promo_admin = new LWC_Promo_Admin();
 			$promo_admin->init();
 
-			if ( class_exists( 'LWC_FedEx_Order_Admin' ) ) {
-				$fedex_order_admin = new LWC_FedEx_Order_Admin();
-				$fedex_order_admin->init();
-			}
 		} else {
 			$promo_dashboard = new LWC_Promo_Dashboard();
 			$promo_dashboard->init();
+		}
+
+		// Order fulfillment hooks include both the admin metabox and customer
+		// My Account tracking, so they must be registered on every request.
+		if ( class_exists( 'LWC_FedEx_Order_Admin' ) ) {
+			$fedex_order_admin = new LWC_FedEx_Order_Admin();
+			$fedex_order_admin->init();
 		}
 
 		// Product quantity limits — load from organized path.

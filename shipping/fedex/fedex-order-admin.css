@@ -50,3 +50,63 @@
 .lwc-fedex-tracking-row span {
 	font-family: Consolas, Monaco, monospace;
 }
+
+.lwc-fedex-pickup-fields {
+	display: grid;
+	gap: 7px;
+}
+
+.lwc-fedex-pickup-fields label {
+	display: grid;
+	gap: 3px;
+	font-weight: 600;
+}
+
+.lwc-fedex-pickup-summary,
+.lwc-fedex-track-card {
+	padding: 9px;
+	border: 1px solid #dcdcde;
+	border-radius: 5px;
+	background: #fff;
+}
+
+.lwc-fedex-track-card + .lwc-fedex-track-card {
+	margin-top: 8px;
+}
+
+.lwc-fedex-track-heading {
+	display: grid;
+	gap: 3px;
+}
+
+.lwc-fedex-track-heading a {
+	font-family: Consolas, Monaco, monospace;
+}
+
+.lwc-fedex-track-card p {
+	margin: 6px 0;
+}
+
+.lwc-fedex-track-events {
+	margin: 8px 0 0 18px;
+}
+
+.lwc-fedex-track-events li {
+	margin-bottom: 8px;
+}
+
+.lwc-fedex-track-events time,
+.lwc-fedex-track-events strong,
+.lwc-fedex-track-events span {
+	display: block;
+}
+
+.lwc-fedex-track-events time,
+.lwc-fedex-track-events span {
+	font-size: 11px;
+	color: #646970;
+}
+
+.lwc-fedex-track-exception {
+	color: #b42318 !important;
+}

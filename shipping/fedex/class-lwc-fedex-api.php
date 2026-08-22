@@ -1,6 +1,6 @@
 <?php
 /**
- * FedEx API helper for rates, shipment creation, and label generation.
+ * FedEx API helper for rates, shipments, labels, tracking, and pickup requests.
  *
  * @package LoveCatzWC
  */
@@ -247,6 +247,191 @@ class LWC_FedEx_API {
 	}
 
 	/**
+	 * Retrieve current status and detailed scan history for tracking numbers.
+	 *
+	 * @param string[] $tracking_numbers FedEx tracking numbers (maximum 30).
+	 * @return array
+	 */
+	public function track_shipments( $tracking_numbers ) {
+		if ( 'yes' === $this->settings['test_mode'] ) {
+			return array( 'success' => false, 'message' => __( 'Live tracking is available only in FedEx Production mode.', 'lovecatz-wc' ) );
+		}
+		$tracking_numbers = array_values( array_unique( array_filter( array_map( static function ( $number ) {
+			return preg_replace( '/[^A-Za-z0-9]/', '', (string) $number );
+		}, (array) $tracking_numbers ) ) ) );
+		$tracking_numbers = array_slice( $tracking_numbers, 0, 30 );
+
+		if ( empty( $tracking_numbers ) ) {
+			return array( 'success' => false, 'message' => __( 'No FedEx tracking number is available.', 'lovecatz-wc' ) );
+		}
+
+		$token = $this->get_access_token();
+		if ( '' === $token ) {
+			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
+		}
+
+		$tracking_info = array();
+		foreach ( $tracking_numbers as $tracking_number ) {
+			$tracking_info[] = array( 'trackingNumberInfo' => array( 'trackingNumber' => $tracking_number ) );
+		}
+
+		$response = $this->request(
+			'/track/v1/trackingnumbers',
+			array( 'includeDetailedScans' => true, 'trackingInfo' => $tracking_info ),
+			$token
+		);
+		$body = $this->parse_response_body( $response );
+		if ( ! $body ) {
+			return array( 'success' => false, 'message' => __( 'FedEx tracking request returned no response.', 'lovecatz-wc' ) );
+		}
+		if ( isset( $body['errors'] ) ) {
+			return array( 'success' => false, 'message' => $this->extract_error_message( $body ), 'response' => $body );
+		}
+
+		$tracks = array();
+		$groups = isset( $body['output']['completeTrackResults'] ) && is_array( $body['output']['completeTrackResults'] ) ? $body['output']['completeTrackResults'] : array();
+		foreach ( $groups as $group ) {
+			$requested_number = isset( $group['trackingNumber'] ) ? (string) $group['trackingNumber'] : '';
+			$results = isset( $group['trackResults'] ) && is_array( $group['trackResults'] ) ? $group['trackResults'] : array();
+			foreach ( $results as $result ) {
+				$normalized = $this->normalize_tracking_result( $result, $requested_number );
+				if ( '' !== $normalized['tracking_number'] ) {
+					$tracks[ $normalized['tracking_number'] ] = $normalized;
+				}
+			}
+		}
+
+		if ( empty( $tracks ) ) {
+			return array( 'success' => false, 'message' => __( 'FedEx has not published tracking details for this shipment yet.', 'lovecatz-wc' ), 'response' => $body );
+		}
+
+		return array( 'success' => true, 'tracks' => $tracks );
+	}
+
+	/**
+	 * Check available FedEx pickup windows for an order.
+	 *
+	 * @param WC_Order $order Order being collected.
+	 * @param array    $pickup Pickup date/time and carrier fields.
+	 * @return array
+	 */
+	public function check_pickup_availability( $order, $pickup ) {
+		if ( 'yes' === $this->settings['test_mode'] ) {
+			return array( 'success' => false, 'message' => __( 'Courier pickup is available only in FedEx Production mode.', 'lovecatz-wc' ) );
+		}
+		$token = $this->get_access_token();
+		if ( '' === $token ) {
+			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
+		}
+
+		$response = $this->request( '/pickup/v1/pickups/availabilities', $this->build_pickup_availability_payload( $order, $pickup ), $token );
+		$body = $this->parse_response_body( $response );
+		if ( ! $body ) {
+			return array( 'success' => false, 'message' => __( 'FedEx pickup availability returned no response.', 'lovecatz-wc' ) );
+		}
+		if ( isset( $body['errors'] ) ) {
+			return array( 'success' => false, 'message' => $this->extract_error_message( $body ), 'response' => $body );
+		}
+
+		$options = $this->normalize_pickup_options( $body );
+		if ( ! empty( $options ) && ! wp_list_filter( $options, array( 'available' => true ) ) ) {
+			return array( 'success' => false, 'message' => __( 'FedEx pickup is not available for the requested window.', 'lovecatz-wc' ), 'options' => $options );
+		}
+
+		return array(
+			'success' => true,
+			'message' => __( 'FedEx pickup is available for the requested window.', 'lovecatz-wc' ),
+			'options' => $options,
+			'response' => $body,
+		);
+	}
+
+	/**
+	 * Schedule a FedEx courier pickup for an order.
+	 *
+	 * @param WC_Order $order Order being collected.
+	 * @param array    $pickup Pickup date/time and carrier fields.
+	 * @return array
+	 */
+	public function create_pickup( $order, $pickup ) {
+		if ( 'yes' === $this->settings['test_mode'] ) {
+			return array( 'success' => false, 'message' => __( 'Courier pickup is available only in FedEx Production mode.', 'lovecatz-wc' ) );
+		}
+		$token = $this->get_access_token();
+		if ( '' === $token ) {
+			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
+		}
+
+		$response = $this->request( '/pickup/v1/pickups', $this->build_create_pickup_payload( $order, $pickup ), $token );
+		$body = $this->parse_response_body( $response );
+		if ( ! $body ) {
+			return array( 'success' => false, 'message' => __( 'FedEx pickup request returned no response.', 'lovecatz-wc' ) );
+		}
+		if ( isset( $body['errors'] ) ) {
+			return array( 'success' => false, 'message' => $this->extract_error_message( $body ), 'response' => $body );
+		}
+
+		$output = isset( $body['output'] ) && is_array( $body['output'] ) ? $body['output'] : array();
+		$confirmation = '';
+		foreach ( array( 'pickupConfirmationCode', 'confirmationNumber', 'dispatchConfirmationNumber' ) as $key ) {
+			if ( ! empty( $output[ $key ] ) ) {
+				$confirmation = (string) $output[ $key ];
+				break;
+			}
+		}
+		$location = isset( $output['location'] ) ? (string) $output['location'] : ( isset( $output['locationCode'] ) ? (string) $output['locationCode'] : '' );
+
+		if ( '' === $confirmation ) {
+			return array( 'success' => false, 'message' => __( 'FedEx accepted the request but returned no pickup confirmation number.', 'lovecatz-wc' ), 'response' => $body );
+		}
+
+		return array(
+			'success'             => true,
+			'message'             => __( 'FedEx pickup scheduled successfully.', 'lovecatz-wc' ),
+			'confirmation_number' => $confirmation,
+			'location'            => $location,
+			'response'            => $body,
+		);
+	}
+
+	/**
+	 * Cancel a previously scheduled FedEx pickup.
+	 *
+	 * @param array $pickup Stored pickup record.
+	 * @return array
+	 */
+	public function cancel_pickup( $pickup ) {
+		if ( 'yes' === $this->settings['test_mode'] ) {
+			return array( 'success' => false, 'message' => __( 'Courier pickup is available only in FedEx Production mode.', 'lovecatz-wc' ) );
+		}
+		$token = $this->get_access_token();
+		if ( '' === $token ) {
+			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
+		}
+
+		$payload = array(
+			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
+			'confirmationNumber'      => isset( $pickup['confirmation_number'] ) ? (string) $pickup['confirmation_number'] : '',
+			'location'                => isset( $pickup['location'] ) ? (string) $pickup['location'] : '',
+			'scheduledDate'           => isset( $pickup['date'] ) ? (string) $pickup['date'] : '',
+			'carrierCode'             => isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE',
+		);
+		$response = $this->request( '/pickup/v1/pickups/cancel', $payload, $token, 'PUT' );
+		$body = $this->parse_response_body( $response );
+		if ( ! $body && ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) >= 200 && wp_remote_retrieve_response_code( $response ) < 300 ) {
+			return array( 'success' => true, 'message' => __( 'FedEx pickup cancelled successfully.', 'lovecatz-wc' ) );
+		}
+		if ( ! $body ) {
+			return array( 'success' => false, 'message' => __( 'FedEx pickup cancellation returned no response.', 'lovecatz-wc' ) );
+		}
+		if ( isset( $body['errors'] ) ) {
+			return array( 'success' => false, 'message' => $this->extract_error_message( $body ), 'response' => $body );
+		}
+
+		return array( 'success' => true, 'message' => __( 'FedEx pickup cancelled successfully.', 'lovecatz-wc' ), 'response' => $body );
+	}
+
+	/**
 	 * Resolve the FedEx base URL from the selected mode.
 	 *
 	 * @return string
@@ -319,7 +504,7 @@ class LWC_FedEx_API {
 	 * @param string $token Access token.
 	 * @return array|WP_Error
 	 */
-	private function request( $path, $payload, $token ) {
+	private function request( $path, $payload, $token, $method = 'POST' ) {
 		$url = rtrim( $this->get_api_base_url(), '/' ) . $path;
 		$args = array(
 			'headers' => array(
@@ -328,9 +513,10 @@ class LWC_FedEx_API {
 			),
 			'body' => wp_json_encode( $payload ),
 			'timeout' => '/rate/' === substr( $path, 0, 6 ) ? 20 : 60,
+			'method' => strtoupper( $method ),
 		);
 
-		return wp_remote_post( $url, $args );
+		return wp_remote_request( $url, $args );
 	}
 
 	/**
@@ -369,6 +555,180 @@ class LWC_FedEx_API {
 		}
 
 		return __( 'FedEx returned an unexpected error.', 'lovecatz-wc' );
+	}
+
+	/**
+	 * Convert a FedEx Track API result into a stable order-meta structure.
+	 *
+	 * @param array  $result Track result.
+	 * @param string $fallback_number Requested tracking number.
+	 * @return array
+	 */
+	private function normalize_tracking_result( $result, $fallback_number = '' ) {
+		$number = isset( $result['trackingNumberInfo']['trackingNumber'] ) ? (string) $result['trackingNumberInfo']['trackingNumber'] : $fallback_number;
+		$status = isset( $result['latestStatusDetail'] ) && is_array( $result['latestStatusDetail'] ) ? $result['latestStatusDetail'] : array();
+		$status_label = '';
+		foreach ( array( 'statusByLocale', 'description', 'scanLocation' ) as $key ) {
+			if ( isset( $status[ $key ] ) && is_scalar( $status[ $key ] ) && '' !== trim( (string) $status[ $key ] ) ) {
+				$status_label = trim( (string) $status[ $key ] );
+				break;
+			}
+		}
+
+		$estimated_delivery = '';
+		$actual_delivery = '';
+		$date_times = isset( $result['dateAndTimes'] ) && is_array( $result['dateAndTimes'] ) ? $result['dateAndTimes'] : array();
+		foreach ( $date_times as $date_time ) {
+			$type = isset( $date_time['type'] ) ? strtoupper( (string) $date_time['type'] ) : '';
+			$value = isset( $date_time['dateTime'] ) ? (string) $date_time['dateTime'] : '';
+			if ( 'ACTUAL_DELIVERY' === $type ) {
+				$actual_delivery = $value;
+			} elseif ( in_array( $type, array( 'ESTIMATED_DELIVERY', 'COMMITMENT', 'APPOINTMENT_DELIVERY' ), true ) && '' === $estimated_delivery ) {
+				$estimated_delivery = $value;
+			}
+		}
+		if ( '' === $estimated_delivery && isset( $result['estimatedDeliveryTimeWindow']['window']['ends'] ) ) {
+			$estimated_delivery = (string) $result['estimatedDeliveryTimeWindow']['window']['ends'];
+		}
+
+		$events = array();
+		$scan_events = isset( $result['scanEvents'] ) && is_array( $result['scanEvents'] ) ? $result['scanEvents'] : array();
+		foreach ( $scan_events as $event ) {
+			$description = isset( $event['eventDescription'] ) ? (string) $event['eventDescription'] : '';
+			if ( '' === $description && isset( $event['derivedStatus'] ) ) {
+				$description = (string) $event['derivedStatus'];
+			}
+			$events[] = array(
+				'date'        => isset( $event['date'] ) ? (string) $event['date'] : '',
+				'type'        => isset( $event['eventType'] ) ? (string) $event['eventType'] : '',
+				'description' => $description,
+				'exception'   => isset( $event['exceptionDescription'] ) ? (string) $event['exceptionDescription'] : '',
+				'location'    => isset( $event['scanLocation'] ) && is_array( $event['scanLocation'] ) ? $this->format_tracking_location( $event['scanLocation'] ) : '',
+			);
+		}
+
+		return array(
+			'tracking_number'   => preg_replace( '/[^A-Za-z0-9]/', '', $number ),
+			'status_code'       => isset( $status['derivedCode'] ) ? (string) $status['derivedCode'] : ( isset( $status['code'] ) ? (string) $status['code'] : '' ),
+			'status'            => $status_label,
+			'location'          => isset( $status['scanLocation'] ) && is_array( $status['scanLocation'] ) ? $this->format_tracking_location( $status['scanLocation'] ) : '',
+			'estimated_delivery'=> $estimated_delivery,
+			'actual_delivery'   => $actual_delivery,
+			'service'           => isset( $result['serviceDetail']['description'] ) ? (string) $result['serviceDetail']['description'] : '',
+			'events'            => $events,
+			'updated_at'        => current_time( 'mysql' ),
+		);
+	}
+
+	/**
+	 * Format a FedEx scan location without exposing recipient details.
+	 *
+	 * @param array $location Location fields.
+	 * @return string
+	 */
+	private function format_tracking_location( $location ) {
+		$parts = array();
+		foreach ( array( 'city', 'stateOrProvinceCode', 'countryName', 'countryCode' ) as $key ) {
+			if ( ! empty( $location[ $key ] ) && ! in_array( (string) $location[ $key ], $parts, true ) ) {
+				$parts[] = (string) $location[ $key ];
+			}
+		}
+		return implode( ', ', $parts );
+	}
+
+	/**
+	 * Build the Pickup Availability API request.
+	 *
+	 * @param WC_Order $order Order being collected.
+	 * @param array    $pickup Pickup fields.
+	 * @return array
+	 */
+	private function build_pickup_availability_payload( $order, $pickup ) {
+		$date = isset( $pickup['date'] ) ? (string) $pickup['date'] : current_time( 'Y-m-d' );
+		$origin = $this->build_origin_address();
+		$destination = $this->build_destination_address_from_order( $order );
+		$relationship = isset( $destination['countryCode'] ) && $destination['countryCode'] === $origin['countryCode'] ? 'DOMESTIC' : 'INTERNATIONAL';
+
+		return array(
+			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
+			'pickupAddress'            => $origin,
+			'pickupRequestType'        => array( $date === current_time( 'Y-m-d' ) ? 'SAME_DAY' : 'FUTURE_DAY' ),
+			'dispatchDate'             => $date,
+			'packageReadyTime'         => isset( $pickup['ready_time'] ) ? (string) $pickup['ready_time'] . ':00' : '09:00:00',
+			'customerCloseTime'        => isset( $pickup['close_time'] ) ? (string) $pickup['close_time'] . ':00' : '17:00:00',
+			'carriers'                 => array( isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE' ),
+			'countryRelationship'      => $relationship,
+		);
+	}
+
+	/**
+	 * Build the Create Pickup API request from store and order data.
+	 *
+	 * @param WC_Order $order Order being collected.
+	 * @param array    $pickup Pickup fields.
+	 * @return array
+	 */
+	private function build_create_pickup_payload( $order, $pickup ) {
+		$context = $this->get_order_shipping_context( $order );
+		$packages = $this->build_packages_from_order( $order, $context['max_package_weight_kg'] );
+		$total_weight = 0.0;
+		foreach ( $packages as $package ) {
+			$total_weight += isset( $package['weight'] ) ? (float) $package['weight'] : 0.0;
+		}
+		$date = isset( $pickup['date'] ) ? (string) $pickup['date'] : current_time( 'Y-m-d' );
+		$ready = isset( $pickup['ready_time'] ) ? (string) $pickup['ready_time'] : '09:00';
+		$origin = $this->build_origin_address();
+		$contact = $this->build_shipper_contact();
+		$contact['companyName'] = get_bloginfo( 'name' );
+
+		return array(
+			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
+			'originDetail' => array(
+				'pickupLocation' => array(
+					'contact'       => $contact,
+					'address'       => $origin,
+					'accountNumber' => array( 'value' => $this->settings['account_number'] ),
+				),
+				'readyDateTimestamp' => $date . 'T' . $ready . ':00',
+				'customerCloseTime'  => isset( $pickup['close_time'] ) ? (string) $pickup['close_time'] . ':00' : '17:00:00',
+			),
+			'accountAddressOfRecord' => $origin,
+			'carrierCode'           => isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE',
+			'packageCount'          => max( 1, count( $packages ) ),
+			'totalWeight'           => array( 'units' => 'KG', 'value' => max( 0.5, round( $total_weight, 2 ) ) ),
+			'packageLocation'       => 'NONE',
+			'remarks'               => sprintf( 'WooCommerce order %s', $order->get_order_number() ),
+		);
+	}
+
+	/**
+	 * Reduce the availability response to fields useful on the order screen.
+	 *
+	 * @param array $body FedEx response.
+	 * @return array
+	 */
+	private function normalize_pickup_options( $body ) {
+		$output = isset( $body['output'] ) && is_array( $body['output'] ) ? $body['output'] : array();
+		$options = isset( $output['options'] ) && is_array( $output['options'] ) ? $output['options'] : array();
+		if ( empty( $options ) && isset( $output['pickupOptions'] ) && is_array( $output['pickupOptions'] ) ) {
+			$options = $output['pickupOptions'];
+		}
+		if ( empty( $options ) && ! empty( $output ) ) {
+			$options = array( $output );
+		}
+
+		$normalized = array();
+		foreach ( $options as $option ) {
+			$available = ! isset( $option['available'] ) || true === $option['available'] || 1 === $option['available'] || 'true' === strtolower( (string) $option['available'] );
+			$normalized[] = array(
+				'carrier'      => isset( $option['carrier'] ) ? (string) $option['carrier'] : ( isset( $option['carrierCode'] ) ? (string) $option['carrierCode'] : '' ),
+				'available'    => $available,
+				'pickup_date'  => isset( $option['pickupDate'] ) ? (string) $option['pickupDate'] : '',
+				'cutoff_time'  => isset( $option['cutOffTime'] ) ? (string) $option['cutOffTime'] : ( isset( $option['cutoffTime'] ) ? (string) $option['cutoffTime'] : '' ),
+				'access_time'  => isset( $option['accessTime'] ) ? (string) $option['accessTime'] : '',
+			);
+		}
+		return $normalized;
 	}
 
 	/**
