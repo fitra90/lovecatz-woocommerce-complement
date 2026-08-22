@@ -384,6 +384,10 @@ class LWC_FedEx_API {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address( $package );
 		$packages = $this->build_packages_from_cart( $package, $max_package_weight_kg );
+		$preferred_currency = strtoupper( (string) get_option( 'woocommerce_currency', 'IDR' ) );
+		if ( ! preg_match( '/^[A-Z]{3}$/', $preferred_currency ) ) {
+			$preferred_currency = 'IDR';
+		}
 
 		return array(
 			'accountNumber' => array(
@@ -392,7 +396,8 @@ class LWC_FedEx_API {
 			'requestedShipment' => array(
 				// Required by the REST Rates API. ACCOUNT returns the merchant's
 				// negotiated FedEx prices rather than an unrelated list estimate.
-				'rateRequestType' => array( 'ACCOUNT' ),
+				'rateRequestType' => array( 'ACCOUNT', 'PREFERRED' ),
+				'preferredCurrency' => $preferred_currency,
 				'shipper' => array(
 					'address' => $origin,
 				),
@@ -1013,17 +1018,17 @@ class LWC_FedEx_API {
 				continue;
 			}
 
-			$rated_detail = isset( $detail['ratedShipmentDetails'][0] ) && is_array( $detail['ratedShipmentDetails'][0] )
-				? $detail['ratedShipmentDetails'][0]
-				: array();
+			$rated_detail = $this->select_preferred_rated_detail(
+				isset( $detail['ratedShipmentDetails'] ) ? $detail['ratedShipmentDetails'] : array()
+			);
 			$amount = null;
 
-			if ( isset( $rated_detail['totalNetCharge']['amount'] ) ) {
-				$amount = $rated_detail['totalNetCharge']['amount'];
-			} elseif ( isset( $rated_detail['totalNetFedExCharge']['amount'] ) ) {
-				$amount = $rated_detail['totalNetFedExCharge']['amount'];
-			} elseif ( isset( $rated_detail['shipmentRateDetail']['totalNetCharge']['amount'] ) ) {
-				$amount = $rated_detail['shipmentRateDetail']['totalNetCharge']['amount'];
+			if ( isset( $rated_detail['totalNetCharge'] ) ) {
+				$amount = $this->extract_money_amount( $rated_detail['totalNetCharge'] );
+			} elseif ( isset( $rated_detail['totalNetFedExCharge'] ) ) {
+				$amount = $this->extract_money_amount( $rated_detail['totalNetFedExCharge'] );
+			} elseif ( isset( $rated_detail['shipmentRateDetail']['totalNetCharge'] ) ) {
+				$amount = $this->extract_money_amount( $rated_detail['shipmentRateDetail']['totalNetCharge'] );
 			}
 
 			if ( null === $amount ) {
@@ -1053,10 +1058,56 @@ class LWC_FedEx_API {
 				'service_type' => $service_type,
 				'label' => $label,
 				'rate' => $amount,
+				'currency' => isset( $rated_detail['currency'] ) ? strtoupper( (string) $rated_detail['currency'] ) : '',
 			);
 		}
 
 		return array_values( $quotes );
+	}
+
+	/**
+	 * Read a FedEx money value returned as a scalar or an amount object.
+	 *
+	 * @param mixed $value FedEx money field.
+	 * @return float|null
+	 */
+	private function extract_money_amount( $value ) {
+		if ( is_numeric( $value ) ) {
+			return (float) $value;
+		}
+
+		if ( is_array( $value ) && isset( $value['amount'] ) && is_numeric( $value['amount'] ) ) {
+			return (float) $value['amount'];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Prefer the rate expressed in the WooCommerce store currency.
+	 *
+	 * @param mixed $details FedEx ratedShipmentDetails list.
+	 * @return array
+	 */
+	private function select_preferred_rated_detail( $details ) {
+		if ( ! is_array( $details ) || empty( $details ) ) {
+			return array();
+		}
+
+		$preferred_currency = strtoupper( (string) get_option( 'woocommerce_currency', 'IDR' ) );
+		foreach ( $details as $detail ) {
+			if ( is_array( $detail ) && isset( $detail['currency'] ) && $preferred_currency === strtoupper( (string) $detail['currency'] ) ) {
+				return $detail;
+			}
+		}
+
+		foreach ( $details as $detail ) {
+			if ( is_array( $detail ) && isset( $detail['rateType'] ) && false !== strpos( strtoupper( (string) $detail['rateType'] ), 'PREFERRED' ) ) {
+				return $detail;
+			}
+		}
+
+		return is_array( reset( $details ) ) ? reset( $details ) : array();
 	}
 
 	/**
