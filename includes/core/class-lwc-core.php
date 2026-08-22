@@ -12,6 +12,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class LWC_Core {
 
 	/**
+	 * Lazily-created global FedEx method.
+	 *
+	 * @var LWC_Shipping_FedEx|null
+	 */
+	private $fedex_global_method = null;
+
+	/**
 	 * Initialize the core functionality.
 	 */
 	public function init() {
@@ -112,12 +119,57 @@ class LWC_Core {
 			$fedex_currency_adapter->init();
 		}
 
+		// Publish built-in FedEx rates for international packages even when the
+		// merchant has not added FedEx to a WooCommerce shipping zone.
+		if ( class_exists( 'LWC_Shipping_FedEx' ) ) {
+			add_filter( 'woocommerce_package_rates', array( $this, 'add_global_fedex_rates' ), 5, 2 );
+		}
+
 		// Built-in currency converter (idle when an external one is active).
 		if ( class_exists( 'LWC_Currency_Converter' ) ) {
 			LWC_Currency_Converter::instance()->init();
 		}
 
+		// Include the plugin version in WooCommerce's package hash. This clears
+		// stale session results (including a previously cached empty rate list)
+		// whenever the shipping implementation changes in a plugin update.
+		add_filter( 'woocommerce_cart_shipping_packages', array( $this, 'add_shipping_cache_version' ) );
+
 		add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_methods' ) );
+	}
+
+	/**
+	 * Add a harmless cache marker to each cart shipping package.
+	 *
+	 * @param array $packages Cart shipping packages.
+	 * @return array
+	 */
+	public function add_shipping_cache_version( $packages ) {
+		if ( ! is_array( $packages ) ) {
+			return $packages;
+		}
+
+		foreach ( $packages as $key => $package ) {
+			$packages[ $key ]['lwc_shipping_version'] = LWC_VERSION;
+		}
+
+		return $packages;
+	}
+
+	/**
+	 * Add international FedEx rates without requiring a WooCommerce zone.
+	 * The method is constructed only when WooCommerce is calculating rates.
+	 *
+	 * @param array $rates   Existing package rates.
+	 * @param array $package Current shipping package.
+	 * @return array
+	 */
+	public function add_global_fedex_rates( $rates, $package ) {
+		if ( null === $this->fedex_global_method ) {
+			$this->fedex_global_method = new LWC_Shipping_FedEx();
+		}
+
+		return $this->fedex_global_method->inject_global_rates( $rates, $package );
 	}
 
 	/**

@@ -97,6 +97,14 @@ class LWC_FedEx_Account {
 	 * @return mixed
 	 */
 	public static function get_option_value( $option_name, $default = '' ) {
+		// The settings page writes these WordPress options. Treat them as the
+		// current source of truth; the custom table is retained as a legacy
+		// fallback for installations migrated from older plugin versions.
+		$option_value = get_option( $option_name, null );
+		if ( null !== $option_value ) {
+			return $option_value;
+		}
+
 		$account = self::get_account();
 		$field_map = array(
 			'lwc_fedex_account_number' => 'account_number',

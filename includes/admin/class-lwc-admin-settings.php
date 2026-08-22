@@ -523,6 +523,20 @@ class LWC_Admin_Settings {
 	public function render_fedex_section_intro() {
 		echo '<p>' . esc_html__( 'Enter your FedEx API credentials below. FedEx will appear for international shipments outside Indonesia.', 'lovecatz-wc' ) . '</p>';
 
+		$origin_fields = array(
+			get_option( 'woocommerce_store_address', '' ),
+			get_option( 'woocommerce_store_city', '' ),
+			get_option( 'woocommerce_store_postcode', '' ),
+		);
+		if ( in_array( '', array_map( 'trim', $origin_fields ), true ) ) {
+			printf(
+				'<div class="notice notice-error inline"><p>%1$s <a href="%2$s">%3$s</a></p></div>',
+				esc_html__( 'FedEx cannot calculate live rates because the WooCommerce store address, city, or postal code is incomplete.', 'lovecatz-wc' ),
+				esc_url( admin_url( 'admin.php?page=wc-settings' ) ),
+				esc_html__( 'Complete the store address', 'lovecatz-wc' )
+			);
+		}
+
 		$stored_status = get_option( 'lwc_fedex_validation_status', 'pending' );
 		$status_map    = array(
 			'validated' => array( 'connected', __( 'Connected (REST API ready)', 'lovecatz-wc' ) ),
@@ -546,7 +560,7 @@ class LWC_Admin_Settings {
 		$checked = 'yes' === $value ? 'checked' : '';
 		echo '<input type="hidden" name="lwc_fedex_enabled" value="no" />';
 		echo '<input type="checkbox" name="lwc_fedex_enabled" value="yes" ' . $checked . ' /> ';
-		echo esc_html__( 'Offer FedEx rates at checkout for every destination (worldwide) — no WooCommerce shipping zone setup needed.', 'lovecatz-wc' );
+		echo esc_html__( 'Offer FedEx rates at checkout for destinations outside Indonesia — no WooCommerce shipping zone setup needed.', 'lovecatz-wc' );
 	}
 
 	/**
@@ -568,6 +582,20 @@ class LWC_Admin_Settings {
 
 		$selected = (array) get_option( 'lwc_fedex_services', array() );
 		$selected = array_map( 'strtoupper', array_map( 'strval', $selected ) );
+		$legacy_aliases = array(
+			'FEDEX_STANDARD_OVERNIGHT'       => 'STANDARD_OVERNIGHT',
+			'FEDEX_PRIORITY_OVERNIGHT'       => 'PRIORITY_OVERNIGHT',
+			'FEDEX_FIRST_OVERNIGHT'          => 'FIRST_OVERNIGHT',
+			'INTERNATIONAL_PRIORITY'         => 'FEDEX_INTERNATIONAL_PRIORITY',
+			'INTERNATIONAL_PRIORITY_EXPRESS' => 'FEDEX_INTERNATIONAL_PRIORITY_EXPRESS',
+			'INTERNATIONAL_CONNECT_PLUS'     => 'FEDEX_INTERNATIONAL_CONNECT_PLUS',
+		);
+		$selected = array_map(
+			function ( $service ) use ( $legacy_aliases ) {
+				return isset( $legacy_aliases[ $service ] ) ? $legacy_aliases[ $service ] : $service;
+			},
+			$selected
+		);
 		$options  = class_exists( 'LWC_FedEx_API' ) ? LWC_FedEx_API::get_available_services() : array();
 
 		echo '<select name="lwc_fedex_services[]" multiple size="8" style="min-width:320px;">';
@@ -613,7 +641,8 @@ class LWC_Admin_Settings {
 	public function render_fedex_test_mode_field() {
 		$value = get_option( 'lwc_fedex_test_mode', 'no' );
 		$checked = 'yes' === $value ? 'checked' : '';
-		echo '<input type="checkbox" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+		echo '<input type="hidden" name="lwc_fedex_test_mode" value="no" />';
+		echo '<input type="checkbox" id="lwc_fedex_test_mode" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
 	}
 
 	/**

@@ -28,10 +28,6 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 
 		parent::__construct( $instance_id );
 
-		// Offer rates worldwide from the plugin settings page even when the
-		// method was never added to a WooCommerce shipping zone.
-		add_filter( 'woocommerce_shipping_packages', array( $this, 'inject_global_rates' ) );
-
 		$this->init();
 	}
 
@@ -41,6 +37,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	public function init() {
 		$this->init_form_fields();
 		$this->init_settings();
+		$this->title = $this->get_option( 'title', __( 'FedEx', 'lovecatz-wc' ) );
 	}
 
 	/**
@@ -70,7 +67,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 				'title'   => __( 'Fallback flat rate', 'lovecatz-wc' ),
 				'type'    => 'checkbox',
 				'label'   => __( 'Offer a flat fallback rate when the FedEx live quote fails', 'lovecatz-wc' ),
-				'default' => 'yes',
+				'default' => 'no',
 			),
 			'fallback_cost' => array(
 				'title'       => __( 'Fallback cost', 'lovecatz-wc' ),
@@ -88,7 +85,21 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 * @return bool
 	 */
 	public function is_plugin_enabled() {
-		return 'yes' === get_option( 'lwc_fedex_enabled', 'yes' );
+		if ( 'yes' !== get_option( 'lwc_fedex_enabled', 'yes' ) ) {
+			return false;
+		}
+
+		// Only one FedEx engine may publish checkout rates. When Octolize is
+		// selected, allowing this built-in method to run as well can expose its
+		// fallback rate (historically Rp25) beside the Octolize live quote.
+		if ( class_exists( 'LWC_FedEx_Currency_Adapter' ) ) {
+			$adapter = new LWC_FedEx_Currency_Adapter();
+			if ( LWC_FedEx_Currency_Adapter::MODE_OCTOLIZE === $adapter->get_engine() ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
@@ -99,7 +110,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 * @return bool
 	 */
 	public function is_available( $package = array() ) {
-		return $this->is_plugin_enabled();
+		return $this->is_plugin_enabled() && $this->is_international_package( $package );
 	}
 
 	/**
@@ -120,7 +131,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 * @param array $package Shipping package data.
 	 */
 	public function calculate_shipping( $package = array() ) {
-		if ( ! $this->is_plugin_enabled() ) {
+		if ( ! $this->is_available( $package ) ) {
 			return;
 		}
 
@@ -130,56 +141,59 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	}
 
 	/**
-	 * Append FedEx rates to every cart package when the method is not
-	 * managed through a WooCommerce shipping zone.
+	 * Append FedEx rates after WooCommerce has calculated the matching zone.
+	 * This makes FedEx the international default without requiring a zone.
 	 *
-	 * @param array $packages Cart packages.
+	 * @param array $rates   Calculated package rates.
+	 * @param array $package Current shipping package.
 	 * @return array
 	 */
-	public function inject_global_rates( $packages ) {
-		if ( ! $this->is_plugin_enabled() || ! is_array( $packages ) ) {
-			return $packages;
+	public function inject_global_rates( $rates, $package ) {
+		if ( ! $this->is_available( $package ) || ! is_array( $rates ) ) {
+			return $rates;
 		}
 
-		foreach ( $packages as $key => $package ) {
-			if ( ! empty( $package['rates'] ) ) {
-				foreach ( $package['rates'] as $rate ) {
-					if ( $rate instanceof WC_Shipping_Rate && 'lwc_fedex' === $rate->get_method_id() ) {
-						// A zone instance already provides FedEx rates.
-						continue 2;
-					}
-				}
-			}
-
-			$rates = $this->build_rates_for_package( $package );
-			if ( empty( $rates ) ) {
-				continue;
-			}
-
-			if ( ! isset( $packages[ $key ]['rates'] ) || ! is_array( $packages[ $key ]['rates'] ) ) {
-				$packages[ $key ]['rates'] = array();
-			}
-
-			foreach ( $rates as $rate_args ) {
-				$rate = new WC_Shipping_Rate(
-					$rate_args['id'],
-					$rate_args['label'],
-					$rate_args['cost'],
-					array(),
-					'lwc_fedex'
-				);
-
-				if ( ! empty( $rate_args['meta_data'] ) && is_array( $rate_args['meta_data'] ) ) {
-					foreach ( $rate_args['meta_data'] as $meta_key => $meta_value ) {
-						$rate->add_meta_data( $meta_key, $meta_value );
-					}
-				}
-
-				$packages[ $key ]['rates'][ $rate_args['id'] ] = $rate;
+		foreach ( $rates as $rate ) {
+			if ( $rate instanceof WC_Shipping_Rate && 'lwc_fedex' === $rate->get_method_id() ) {
+				// A zone instance already provided the built-in FedEx rates.
+				return $rates;
 			}
 		}
 
-		return $packages;
+		foreach ( $this->build_rates_for_package( $package ) as $rate_args ) {
+			$rate = new WC_Shipping_Rate(
+				$rate_args['id'],
+				$rate_args['label'],
+				$rate_args['cost'],
+				array(),
+				'lwc_fedex'
+			);
+
+			if ( ! empty( $rate_args['meta_data'] ) && is_array( $rate_args['meta_data'] ) ) {
+				foreach ( $rate_args['meta_data'] as $meta_key => $meta_value ) {
+					$rate->add_meta_data( $meta_key, $meta_value );
+				}
+			}
+
+			$rates[ $rate_args['id'] ] = $rate;
+		}
+
+		return $rates;
+	}
+
+	/**
+	 * FedEx is the default carrier outside Indonesia. Domestic packages are
+	 * intentionally left to J&T and shipping-zone methods such as JNE.
+	 *
+	 * @param array $package Shipping package data.
+	 * @return bool
+	 */
+	private function is_international_package( $package ) {
+		$country = isset( $package['destination']['country'] )
+			? strtoupper( trim( (string) $package['destination']['country'] ) )
+			: '';
+
+		return '' !== $country && 'ID' !== $country;
 	}
 
 	/**
@@ -191,11 +205,13 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 */
 	private function build_rates_for_package( $package = array() ) {
 		$max_package_weight_kg = $this->resolve_max_package_weight();
+		$this->debug( 'shipping_method_start', array( 'instance_id' => $this->instance_id, 'country' => isset( $package['destination']['country'] ) ? $package['destination']['country'] : '' ) );
 		$quotes = $this->get_live_quotes( $package, $max_package_weight_kg );
 
 		if ( ! empty( $quotes ) ) {
 			$enabled = $this->get_enabled_services();
 			$rates = array();
+			$this->debug( 'service_filter', array( 'enabled' => implode( ', ', $enabled ), 'returned' => implode( ', ', wp_list_pluck( $quotes, 'service_type' ) ) ) );
 
 			foreach ( $quotes as $quote ) {
 				if ( ! empty( $enabled ) && ! in_array( $quote['service_type'], $enabled, true ) ) {
@@ -222,11 +238,15 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 			}
 
 			if ( ! empty( $rates ) ) {
+				$this->debug( 'rates_published', array( 'count' => count( $rates ), 'services' => implode( ', ', wp_list_pluck( $rates, 'label' ) ) ) );
 				return $rates;
 			}
+
+			$this->debug( 'services_filtered_out', array( 'reason' => 'Returned quotes did not match the selected service types.' ) );
 		}
 
-		if ( 'yes' !== $this->get_option( 'fallback_enabled', 'yes' ) ) {
+		if ( 'yes' !== $this->get_option( 'fallback_enabled', 'no' ) ) {
+			$this->debug( 'no_rate_published', array( 'reason' => 'Live quote unavailable and fallback is disabled.' ) );
 			return array();
 		}
 
@@ -262,7 +282,11 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 			$cost = LWC_Currency_Converter::round_for_currency( $cost );
 		}
 
-		return $this->maybe_convert_rate_cost( $cost );
+		$cost = $this->maybe_convert_rate_cost( $cost );
+
+		// A small base-currency fallback can round to zero after conversion;
+		// never turn a failed FedEx quote into a misleading "Free" method.
+		return $cost > 0 ? $cost : null;
 	}
 
 	/**
@@ -301,15 +325,29 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	 */
 	private function get_enabled_services() {
 		$services = (array) get_option( 'lwc_fedex_services', array() );
+		$legacy_aliases = array(
+			'FEDEX_STANDARD_OVERNIGHT'       => 'STANDARD_OVERNIGHT',
+			'FEDEX_PRIORITY_OVERNIGHT'       => 'PRIORITY_OVERNIGHT',
+			'FEDEX_FIRST_OVERNIGHT'          => 'FIRST_OVERNIGHT',
+			'INTERNATIONAL_PRIORITY'         => 'FEDEX_INTERNATIONAL_PRIORITY',
+			'INTERNATIONAL_PRIORITY_EXPRESS' => 'FEDEX_INTERNATIONAL_PRIORITY_EXPRESS',
+			'INTERNATIONAL_CONNECT_PLUS'     => 'FEDEX_INTERNATIONAL_CONNECT_PLUS',
+		);
 
 		if ( is_string( $services ) ) {
 			$services = array_filter( array_map( 'trim', explode( ',', $services ) ) );
 		}
 
 		$services = array_filter( array_map( 'strtoupper', (array) $services ) );
+		$services = array_map(
+			function ( $service ) use ( $legacy_aliases ) {
+				return isset( $legacy_aliases[ $service ] ) ? $legacy_aliases[ $service ] : $service;
+			},
+			$services
+		);
 
 		if ( empty( $services ) ) {
-			$services = array( 'FEDEX_GROUND', 'FEDEX_EXPRESS_SAVER', 'INTERNATIONAL_ECONOMY', 'INTERNATIONAL_PRIORITY' );
+			$services = array( 'FEDEX_GROUND', 'FEDEX_EXPRESS_SAVER', 'INTERNATIONAL_ECONOMY', 'FEDEX_INTERNATIONAL_PRIORITY' );
 		}
 
 		return $services;
@@ -358,5 +396,17 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 			: ( function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2 );
 
 		return round( $cost / $manual_rate, $decimals );
+	}
+
+	/**
+	 * Write a safe event to the opt-in checkout diagnostics.
+	 *
+	 * @param string $stage   Diagnostic stage.
+	 * @param array  $context Safe diagnostic values.
+	 */
+	private function debug( $stage, $context = array() ) {
+		if ( function_exists( 'lwc_fedex_checkout_debug_log' ) ) {
+			lwc_fedex_checkout_debug_log( $stage, $context );
+		}
 	}
 }

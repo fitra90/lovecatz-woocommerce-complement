@@ -46,7 +46,7 @@
                         account_number: accountNumber,
                         api_key: apiKey,
                         api_secret: apiSecret,
-                        test_mode: $('#lwc_fedex_test_mode').is(':checked') ? 'yes' : 'no'
+                        test_mode: $('input[name="lwc_fedex_test_mode"][type="checkbox"]').is(':checked') ? 'yes' : 'no'
                     },
                     success: function (response) {
                         if (response && response.success && response.data) {

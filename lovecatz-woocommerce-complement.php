@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.4
+ * Version:     1.0.13
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.4' );
+define( 'LWC_VERSION', '1.0.13' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -129,10 +129,144 @@ add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' )
 add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
+add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
+add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
+add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
+add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
+add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
 register_activation_hook( __FILE__, 'lwc_activate' );
 register_deactivation_hook( __FILE__, 'lwc_deactivate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
 add_action( 'init', 'lwc_maybe_flush_rewrite_rules' );
+
+/**
+ * Store a credential-free diagnostic event in the current checkout session.
+ *
+ * @param string $stage   Short diagnostic stage.
+ * @param array  $context Safe fields only; never credentials or tokens.
+ */
+function lwc_fedex_checkout_debug_log( $stage, $context = array() ) {
+	if ( ! function_exists( 'WC' ) || ! WC()->session || 'yes' !== WC()->session->get( 'lwc_fedex_debug_enabled' ) ) {
+		return;
+	}
+
+	$events   = (array) WC()->session->get( 'lwc_fedex_debug_events', array() );
+	$events[] = array(
+		'id'      => wp_generate_uuid4(),
+		'time'    => gmdate( 'H:i:s' ),
+		'stage'   => sanitize_key( $stage ),
+		'context' => map_deep( (array) $context, 'sanitize_text_field' ),
+	);
+
+	WC()->session->set( 'lwc_fedex_debug_events', array_slice( $events, -60 ) );
+}
+
+/**
+ * Load the opt-in checkout debug client. It activates only when the checkout
+ * URL contains ?lwc_fedex_debug=1.
+ */
+function lwc_enqueue_fedex_checkout_debug() {
+	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
+		return;
+	}
+
+	wp_enqueue_script( 'lwc-fedex-checkout-debug', LWC_PLUGIN_URL . 'shipping/fedex/fedex-checkout-debug.js', array(), LWC_VERSION, true );
+	wp_localize_script(
+		'lwc-fedex-checkout-debug',
+		'lwcFedexCheckoutDebug',
+		array(
+			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+			'nonce'   => wp_create_nonce( 'lwc_fedex_checkout_debug' ),
+		)
+	);
+}
+
+/**
+ * Enable/poll diagnostics for the current WooCommerce session.
+ */
+function lwc_fedex_checkout_debug_response() {
+	check_ajax_referer( 'lwc_fedex_checkout_debug', 'nonce' );
+
+	if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+		wp_send_json_error( array( 'message' => 'WooCommerce session is unavailable.' ) );
+	}
+
+	if ( isset( $_POST['enable'] ) && 'yes' === sanitize_text_field( wp_unslash( $_POST['enable'] ) ) ) {
+		WC()->session->set( 'lwc_fedex_debug_enabled', 'yes' );
+	}
+	if ( isset( $_POST['clear'] ) && 'yes' === sanitize_text_field( wp_unslash( $_POST['clear'] ) ) ) {
+		WC()->session->set( 'lwc_fedex_debug_events', array() );
+	}
+
+	wp_send_json_success( array( 'events' => (array) WC()->session->get( 'lwc_fedex_debug_events', array() ) ) );
+}
+
+/**
+ * Run an explicit, user-triggered FedEx quote from the checkout debug panel.
+ */
+function lwc_fedex_checkout_debug_quote() {
+	check_ajax_referer( 'lwc_fedex_checkout_debug', 'nonce' );
+
+	if ( ! function_exists( 'WC' ) ) {
+		wp_send_json_error( array( 'message' => 'WooCommerce is unavailable.' ) );
+	}
+
+	if ( function_exists( 'wc_load_cart' ) && ( ! WC()->cart || ! WC()->session ) ) {
+		wc_load_cart();
+	}
+
+	$country  = isset( $_POST['country'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['country'] ) ) ) : '';
+	$state    = isset( $_POST['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['state'] ) ) ) : '';
+	$city     = isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '';
+	$postcode = isset( $_POST['postcode'] ) ? sanitize_text_field( wp_unslash( $_POST['postcode'] ) ) : '';
+
+	if ( ! preg_match( '/^[A-Z]{2}$/', $country ) || '' === $postcode ) {
+		wp_send_json_error( array( 'message' => 'Country and postcode are required for the direct test.' ) );
+	}
+
+	if ( WC()->session ) {
+		WC()->session->set( 'lwc_fedex_debug_enabled', 'yes' );
+	}
+
+	$package = array(
+		'destination' => array(
+			'country'  => $country,
+			'state'    => $state,
+			'city'     => $city,
+			'postcode' => $postcode,
+		),
+		'contents' => WC()->cart ? WC()->cart->get_cart() : array(),
+	);
+
+	lwc_fedex_checkout_debug_log( 'direct_test_started', array( 'country' => $country, 'state' => $state, 'city' => $city, 'postcode' => $postcode ) );
+	$result = ( new LWC_FedEx_API() )->get_rate_quotes( $package, (float) get_option( 'lwc_fedex_max_package_weight_kg', 10 ) );
+
+	if ( empty( $result['success'] ) ) {
+		wp_send_json_error(
+			array(
+				'message' => isset( $result['message'] ) ? $result['message'] : 'FedEx did not return a rate.',
+				'events'  => WC()->session ? (array) WC()->session->get( 'lwc_fedex_debug_events', array() ) : array(),
+			)
+		);
+	}
+
+	$quotes = array();
+	foreach ( (array) $result['quotes'] as $quote ) {
+		$quotes[] = array(
+			'service' => isset( $quote['service_type'] ) ? $quote['service_type'] : '',
+			'label'   => isset( $quote['label'] ) ? $quote['label'] : '',
+			'rate'    => isset( $quote['rate'] ) ? $quote['rate'] : '',
+		);
+	}
+
+	wp_send_json_success(
+		array(
+			'message' => sprintf( 'FedEx returned %d quote(s).', count( $quotes ) ),
+			'quotes'  => $quotes,
+			'events'  => WC()->session ? (array) WC()->session->get( 'lwc_fedex_debug_events', array() ) : array(),
+		)
+	);
+}
 
 /**
  * Flush rewrite rules whenever the coupon endpoint rule is missing.

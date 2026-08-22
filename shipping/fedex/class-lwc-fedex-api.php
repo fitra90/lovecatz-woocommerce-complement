@@ -44,28 +44,69 @@ class LWC_FedEx_API {
 	 */
 	public function get_rate_quotes( $package, $max_package_weight_kg = 0 ) {
 		$payload = $this->build_rate_payload( $package, $max_package_weight_kg );
+		$origin  = isset( $payload['requestedShipment']['shipper']['address'] )
+			? $payload['requestedShipment']['shipper']['address']
+			: array();
+		$destination = isset( $payload['requestedShipment']['recipient']['address'] )
+			? $payload['requestedShipment']['recipient']['address']
+			: array();
+
+		$this->debug(
+			'rate_prepare',
+			array(
+				'environment'          => 'yes' === $this->settings['test_mode'] ? 'sandbox' : 'production',
+				'destination_country'  => isset( $destination['countryCode'] ) ? $destination['countryCode'] : '',
+				'destination_state'    => isset( $destination['stateOrProvinceCode'] ) ? $destination['stateOrProvinceCode'] : '',
+				'destination_postcode' => isset( $destination['postalCode'] ) ? $destination['postalCode'] : '',
+				'origin_country'       => isset( $origin['countryCode'] ) ? $origin['countryCode'] : '',
+				'origin_city_present'  => empty( $origin['city'] ) ? 'no' : 'yes',
+				'origin_postcode'      => isset( $origin['postalCode'] ) ? $origin['postalCode'] : '',
+				'package_count'        => isset( $payload['requestedShipment']['requestedPackageLineItems'] ) ? count( $payload['requestedShipment']['requestedPackageLineItems'] ) : 0,
+			)
+		);
+
+		if ( empty( $origin['countryCode'] ) || empty( $origin['postalCode'] ) ) {
+			$this->debug( 'rate_blocked', array( 'reason' => 'WooCommerce store country/postcode is incomplete.' ) );
+			$this->log( 'Rate quote failed: WooCommerce store country/postcode is incomplete.', 'error' );
+			return array(
+				'success' => false,
+				'message' => __( 'Complete the WooCommerce store address and postal code before requesting FedEx rates.', 'lovecatz-wc' ),
+			);
+		}
 
 		// Reuse a recent quote for an identical request so checkout/cart
 		// recalculations do not hit the FedEx API every time.
 		$cache_key = 'lwc_fedex_rates_' . md5( (string) wp_json_encode( $payload ) );
 		$cached = get_transient( $cache_key );
 		if ( is_array( $cached ) && isset( $cached['success'], $cached['quotes'] ) ) {
+			$this->debug( 'rate_cache_hit', array( 'quote_count' => count( $cached['quotes'] ) ) );
 			return $cached;
 		}
 
+		$this->debug( 'oauth_start', array( 'environment' => 'yes' === $this->settings['test_mode'] ? 'sandbox' : 'production' ) );
 		$token = $this->get_access_token();
 		if ( '' === $token ) {
+			$this->debug( 'oauth_failed', array( 'reason' => 'FedEx did not return an access token.' ) );
 			$this->log( 'Rate quote failed: unable to authenticate.', 'error' );
 			return array(
 				'success' => false,
 				'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ),
 			);
 		}
+		$this->debug( 'oauth_success' );
 
+		$this->debug( 'rate_request_sent', array( 'endpoint' => '/rate/v1/rates/quotes' ) );
 		$response = $this->request( '/rate/v1/rates/quotes', $payload, $token );
 		$body = $this->parse_response_body( $response );
 
 		if ( ! $body ) {
+			$this->debug(
+				'rate_response_failed',
+				array(
+					'http_status' => is_wp_error( $response ) ? 0 : wp_remote_retrieve_response_code( $response ),
+					'reason'      => is_wp_error( $response ) ? $response->get_error_message() : 'Empty or invalid JSON response.',
+				)
+			);
 			$this->log( 'Rate quote failed: empty or invalid response.', 'error' );
 			return array(
 				'success' => false,
@@ -75,6 +116,7 @@ class LWC_FedEx_API {
 
 		if ( isset( $body['errors'] ) ) {
 			$message = $this->extract_error_message( $body );
+			$this->debug( 'rate_response_rejected', array( 'http_status' => wp_remote_retrieve_response_code( $response ), 'message' => $message ) );
 			$this->log( 'Rate quote failed: ' . $message, 'error' );
 			return array(
 				'success' => false,
@@ -85,6 +127,7 @@ class LWC_FedEx_API {
 
 		$quotes = $this->extract_quotes_from_body( $body );
 		if ( empty( $quotes ) ) {
+			$this->debug( 'rate_response_empty', $this->summarize_rate_response( $body ) );
 			$this->log( 'Rate quote failed: no usable rate in response.', 'error' );
 			return array(
 				'success' => false,
@@ -97,6 +140,7 @@ class LWC_FedEx_API {
 			'success' => true,
 			'quotes'  => $quotes,
 		);
+		$this->debug( 'rate_response_success', array( 'quote_count' => count( $quotes ), 'services' => implode( ', ', wp_list_pluck( $quotes, 'service_type' ) ) ) );
 
 		$ttl = (int) apply_filters( 'lwc_fedex_rate_cache_ttl', 30 * MINUTE_IN_SECONDS );
 		if ( $ttl > 0 ) {
@@ -224,27 +268,39 @@ class LWC_FedEx_API {
 		$cache_key = 'lwc_fedex_token_' . md5( $this->get_api_base_url() . '|' . $this->settings['api_key'] . '|' . $this->settings['api_secret'] );
 		$cached = get_transient( $cache_key );
 		if ( is_string( $cached ) && '' !== $cached ) {
+			$this->debug( 'oauth_cache_hit' );
 			return $cached;
 		}
 
 		$url = rtrim( $this->get_api_base_url(), '/' ) . '/oauth/token';
-		$headers = array(
-			'Authorization' => 'Basic ' . base64_encode( $this->settings['api_key'] . ':' . $this->settings['api_secret'] ),
-			'Content-Type'  => 'application/x-www-form-urlencoded',
-		);
 		$args = array(
-			'headers' => $headers,
-			'body'    => 'grant_type=client_credentials',
+			'headers' => array(
+				'Content-Type' => 'application/x-www-form-urlencoded',
+			),
+			// FedEx requires the project key and secret as form fields. HTTP
+			// Basic authentication is not accepted by the FedEx OAuth endpoint.
+			'body'    => array(
+				'grant_type'    => 'client_credentials',
+				'client_id'     => $this->settings['api_key'],
+				'client_secret' => $this->settings['api_secret'],
+			),
 			'timeout' => 20,
 		);
-
 		$response = wp_remote_post( $url, $args );
 		if ( is_wp_error( $response ) ) {
+			$this->debug( 'oauth_http_error', array( 'message' => $response->get_error_message() ) );
 			return '';
 		}
 
 		$body = $this->parse_response_body( $response );
 		if ( ! is_array( $body ) || empty( $body['access_token'] ) ) {
+			$this->debug(
+				'oauth_rejected',
+				array(
+					'http_status' => wp_remote_retrieve_response_code( $response ),
+					'message'     => isset( $body['error_description'] ) ? $body['error_description'] : ( isset( $body['error'] ) ? $body['error'] : 'No access token in response.' ),
+				)
+			);
 			return '';
 		}
 
@@ -334,6 +390,9 @@ class LWC_FedEx_API {
 				'value' => $this->settings['account_number'],
 			),
 			'requestedShipment' => array(
+				// Required by the REST Rates API. ACCOUNT returns the merchant's
+				// negotiated FedEx prices rather than an unrelated list estimate.
+				'rateRequestType' => array( 'ACCOUNT' ),
 				'shipper' => array(
 					'address' => $origin,
 				),
@@ -896,14 +955,14 @@ class LWC_FedEx_API {
 				'FEDEX_EXPRESS_SAVER' => __( 'FedEx Express Saver', 'lovecatz-wc' ),
 				'FEDEX_2_DAY' => __( 'FedEx 2Day', 'lovecatz-wc' ),
 				'FEDEX_2_DAY_AM' => __( 'FedEx 2Day A.M.', 'lovecatz-wc' ),
-				'FEDEX_STANDARD_OVERNIGHT' => __( 'FedEx Standard Overnight', 'lovecatz-wc' ),
-				'FEDEX_PRIORITY_OVERNIGHT' => __( 'FedEx Priority Overnight', 'lovecatz-wc' ),
-				'FEDEX_FIRST_OVERNIGHT' => __( 'FedEx First Overnight', 'lovecatz-wc' ),
+				'STANDARD_OVERNIGHT' => __( 'FedEx Standard Overnight', 'lovecatz-wc' ),
+				'PRIORITY_OVERNIGHT' => __( 'FedEx Priority Overnight', 'lovecatz-wc' ),
+				'FIRST_OVERNIGHT' => __( 'FedEx First Overnight', 'lovecatz-wc' ),
 				'INTERNATIONAL_ECONOMY' => __( 'FedEx International Economy', 'lovecatz-wc' ),
-				'INTERNATIONAL_PRIORITY' => __( 'FedEx International Priority', 'lovecatz-wc' ),
-				'INTERNATIONAL_PRIORITY_EXPRESS' => __( 'FedEx International Priority Express', 'lovecatz-wc' ),
+				'FEDEX_INTERNATIONAL_PRIORITY' => __( 'FedEx International Priority', 'lovecatz-wc' ),
+				'FEDEX_INTERNATIONAL_PRIORITY_EXPRESS' => __( 'FedEx International Priority Express', 'lovecatz-wc' ),
 				'INTERNATIONAL_FIRST' => __( 'FedEx International First', 'lovecatz-wc' ),
-				'INTERNATIONAL_CONNECT_PLUS' => __( 'FedEx International Connect Plus', 'lovecatz-wc' ),
+				'FEDEX_INTERNATIONAL_CONNECT_PLUS' => __( 'FedEx International Connect Plus', 'lovecatz-wc' ),
 			)
 		);
 	}
@@ -936,7 +995,11 @@ class LWC_FedEx_API {
 
 		if ( isset( $body['rateReply']['rateReplyDetails'] ) && is_array( $body['rateReply']['rateReplyDetails'] ) ) {
 			$details = $body['rateReply']['rateReplyDetails'];
+		} elseif ( isset( $body['output']['rateReplyDetails'] ) && is_array( $body['output']['rateReplyDetails'] ) ) {
+			// Current FedEx REST Rates API response shape.
+			$details = $body['output']['rateReplyDetails'];
 		} elseif ( isset( $body['output']['rateReply']['rateReplyDetails'] ) && is_array( $body['output']['rateReply']['rateReplyDetails'] ) ) {
+			// Older/alternate wrapper shape.
 			$details = $body['output']['rateReply']['rateReplyDetails'];
 		}
 
@@ -950,12 +1013,25 @@ class LWC_FedEx_API {
 				continue;
 			}
 
-			if ( ! isset( $detail['ratedShipmentDetails'][0]['totalNetCharge']['amount'] ) ) {
+			$rated_detail = isset( $detail['ratedShipmentDetails'][0] ) && is_array( $detail['ratedShipmentDetails'][0] )
+				? $detail['ratedShipmentDetails'][0]
+				: array();
+			$amount = null;
+
+			if ( isset( $rated_detail['totalNetCharge']['amount'] ) ) {
+				$amount = $rated_detail['totalNetCharge']['amount'];
+			} elseif ( isset( $rated_detail['totalNetFedExCharge']['amount'] ) ) {
+				$amount = $rated_detail['totalNetFedExCharge']['amount'];
+			} elseif ( isset( $rated_detail['shipmentRateDetail']['totalNetCharge']['amount'] ) ) {
+				$amount = $rated_detail['shipmentRateDetail']['totalNetCharge']['amount'];
+			}
+
+			if ( null === $amount ) {
 				continue;
 			}
 
 			$service_type = strtoupper( (string) $detail['serviceType'] );
-			$amount = (float) $detail['ratedShipmentDetails'][0]['totalNetCharge']['amount'];
+			$amount = (float) $amount;
 			if ( $amount <= 0 ) {
 				continue;
 			}
@@ -981,6 +1057,56 @@ class LWC_FedEx_API {
 		}
 
 		return array_values( $quotes );
+	}
+
+	/**
+	 * Build a credential-free structural summary when no quote can be parsed.
+	 *
+	 * @param array $body FedEx response body.
+	 * @return array
+	 */
+	private function summarize_rate_response( $body ) {
+		$summary = array(
+			'message'        => 'FedEx returned no usable service price.',
+			'top_level_keys' => implode( ', ', array_keys( (array) $body ) ),
+			'output_keys'    => isset( $body['output'] ) && is_array( $body['output'] ) ? implode( ', ', array_keys( $body['output'] ) ) : '',
+			'details_path'   => 'not_found',
+			'detail_count'   => 0,
+		);
+		$details = array();
+
+		if ( isset( $body['rateReply']['rateReplyDetails'] ) && is_array( $body['rateReply']['rateReplyDetails'] ) ) {
+			$summary['details_path'] = 'rateReply.rateReplyDetails';
+			$details = $body['rateReply']['rateReplyDetails'];
+		} elseif ( isset( $body['output']['rateReplyDetails'] ) && is_array( $body['output']['rateReplyDetails'] ) ) {
+			$summary['details_path'] = 'output.rateReplyDetails';
+			$details = $body['output']['rateReplyDetails'];
+		} elseif ( isset( $body['output']['rateReply']['rateReplyDetails'] ) && is_array( $body['output']['rateReply']['rateReplyDetails'] ) ) {
+			$summary['details_path'] = 'output.rateReply.rateReplyDetails';
+			$details = $body['output']['rateReply']['rateReplyDetails'];
+		}
+
+		$summary['detail_count'] = count( $details );
+		if ( ! empty( $details[0] ) && is_array( $details[0] ) ) {
+			$first = $details[0];
+			$summary['first_service_type'] = isset( $first['serviceType'] ) ? $first['serviceType'] : '';
+			$summary['first_detail_keys'] = implode( ', ', array_keys( $first ) );
+			$rated = isset( $first['ratedShipmentDetails'] ) && is_array( $first['ratedShipmentDetails'] ) ? $first['ratedShipmentDetails'] : array();
+			$summary['rated_detail_count'] = count( $rated );
+			$summary['first_rated_detail_keys'] = ! empty( $rated[0] ) && is_array( $rated[0] ) ? implode( ', ', array_keys( $rated[0] ) ) : '';
+		}
+
+		$alerts = array();
+		if ( isset( $body['output']['alerts'] ) && is_array( $body['output']['alerts'] ) ) {
+			foreach ( array_slice( $body['output']['alerts'], 0, 5 ) as $alert ) {
+				if ( is_array( $alert ) ) {
+					$alerts[] = trim( ( isset( $alert['code'] ) ? $alert['code'] . ': ' : '' ) . ( isset( $alert['message'] ) ? $alert['message'] : '' ) );
+				}
+			}
+		}
+		$summary['alerts'] = implode( ' | ', array_filter( $alerts ) );
+
+		return $summary;
 	}
 
 	/**
@@ -1078,6 +1204,18 @@ class LWC_FedEx_API {
 	private function log( $message, $level = 'info' ) {
 		if ( class_exists( 'LWC_Logger' ) ) {
 			LWC_Logger::log( 'FedEx API: ' . $message, $level, 'lovecatz-wc' );
+		}
+	}
+
+	/**
+	 * Write a safe event to the opt-in checkout diagnostics.
+	 *
+	 * @param string $stage   Diagnostic stage.
+	 * @param array  $context Safe diagnostic values.
+	 */
+	private function debug( $stage, $context = array() ) {
+		if ( function_exists( 'lwc_fedex_checkout_debug_log' ) ) {
+			lwc_fedex_checkout_debug_log( $stage, $context );
 		}
 	}
 }
