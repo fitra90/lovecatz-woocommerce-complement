@@ -338,10 +338,12 @@ class LWC_Admin_Settings {
 				},
 			)
 		);
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_account_number', array( 'sanitize_callback' => 'sanitize_text_field' ) );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_test_mode' );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_environment', array( 'sanitize_callback' => array( $this, 'sanitize_fedex_environment' ) ) );
+		foreach ( array( 'sandbox', 'production' ) as $fedex_environment ) {
+			register_setting( 'lwc_shipping_fedex_options', "lwc_fedex_{$fedex_environment}_account_number", array( 'sanitize_callback' => 'sanitize_text_field' ) );
+			register_setting( 'lwc_shipping_fedex_options', "lwc_fedex_{$fedex_environment}_api_key", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+			register_setting( 'lwc_shipping_fedex_options', "lwc_fedex_{$fedex_environment}_api_secret", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+		}
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_phone', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 
@@ -377,36 +379,16 @@ class LWC_Admin_Settings {
 		);
 
 		add_settings_field(
-			'lwc_fedex_account_number',
-			__( 'Account Number', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_account_number_field' ),
+			'lwc_fedex_environment',
+			__( 'Active API Environment', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_environment_field' ),
 			'lwc_shipping_fedex_options',
 			'lwc_shipping_fedex_section'
 		);
 
-		add_settings_field(
-			'lwc_fedex_api_key',
-			__( 'API Key', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_api_key_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
-
-		add_settings_field(
-			'lwc_fedex_api_secret',
-			__( 'API Secret', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_api_secret_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
-
-		add_settings_field(
-			'lwc_fedex_test_mode',
-			__( 'Enable Test Mode', 'lovecatz-wc' ),
-			array( $this, 'render_fedex_test_mode_field' ),
-			'lwc_shipping_fedex_options',
-			'lwc_shipping_fedex_section'
-		);
+		foreach ( array( 'sandbox' => __( 'Sandbox Credentials', 'lovecatz-wc' ), 'production' => __( 'Production Credentials', 'lovecatz-wc' ) ) as $environment => $label ) {
+			add_settings_field( "lwc_fedex_{$environment}_credentials", $label, array( $this, 'render_fedex_credentials_field' ), 'lwc_shipping_fedex_options', 'lwc_shipping_fedex_section', array( 'environment' => $environment ) );
+		}
 
 		add_settings_field(
 			'lwc_fedex_shipper_name',
@@ -521,7 +503,7 @@ class LWC_Admin_Settings {
 	 * Render introductory text for the FedEx section.
 	 */
 	public function render_fedex_section_intro() {
-		echo '<p>' . esc_html__( 'Enter your FedEx API credentials below. FedEx will appear for international shipments outside Indonesia.', 'lovecatz-wc' ) . '</p>';
+		echo '<p>' . esc_html__( 'Save Sandbox and Production credentials separately, then select the environment to use. FedEx will appear for international shipments outside Indonesia.', 'lovecatz-wc' ) . '</p>';
 
 		$origin_fields = array(
 			get_option( 'woocommerce_store_address', '' ),
@@ -537,13 +519,25 @@ class LWC_Admin_Settings {
 			);
 		}
 
-		$stored_status = get_option( 'lwc_fedex_validation_status', 'pending' );
-		$status_map    = array(
-			'validated' => array( 'connected', __( 'Connected (REST API ready)', 'lovecatz-wc' ) ),
-			'failed'    => array( 'auth_failed', __( 'FedEx rejected the credentials.', 'lovecatz-wc' ) ),
-			'pending'   => array( 'idle', __( 'Waiting for credentials', 'lovecatz-wc' ) ),
-		);
-		$current = isset( $status_map[ $stored_status ] ) ? $status_map[ $stored_status ] : $status_map['pending'];
+		$legacy_environment = 'yes' === get_option( 'lwc_fedex_test_mode', 'no' ) ? 'sandbox' : 'production';
+		$legacy_status      = get_option( 'lwc_fedex_validation_status', 'pending' );
+		$statuses           = array();
+		foreach ( array( 'sandbox', 'production' ) as $environment ) {
+			$fallback_status          = $environment === $legacy_environment ? $legacy_status : 'pending';
+			$statuses[ $environment ] = get_option( 'lwc_fedex_validation_status_' . $environment, $fallback_status );
+		}
+
+		if ( 'validated' === $statuses['sandbox'] && 'validated' === $statuses['production'] ) {
+			$current = array( 'connected', __( 'Sandbox & Production connected (REST API ready)', 'lovecatz-wc' ) );
+		} elseif ( 'failed' === $statuses['sandbox'] || 'failed' === $statuses['production'] ) {
+			$failed  = array();
+			$failed[] = 'failed' === $statuses['sandbox'] ? __( 'Sandbox', 'lovecatz-wc' ) : '';
+			$failed[] = 'failed' === $statuses['production'] ? __( 'Production', 'lovecatz-wc' ) : '';
+			$failed   = array_filter( $failed );
+			$current  = array( 'auth_failed', sprintf( __( '%s connection failed. Both environments must be connected.', 'lovecatz-wc' ), implode( ' & ', $failed ) ) );
+		} else {
+			$current = array( 'partial', __( 'Sandbox or Production credentials are incomplete.', 'lovecatz-wc' ) );
+		}
 		?>
 		<div id="lwc-fedex-connection-status" class="lwc-fedex-connection-status" data-status="<?php echo esc_attr( $current[0] ); ?>">
 			<span class="lwc-fedex-status-dot"></span>
@@ -612,37 +606,33 @@ class LWC_Admin_Settings {
 	}
 
 	/**
-	 * Render the FedEx account number field.
+	 * Render the active FedEx API environment selector.
 	 */
-	public function render_fedex_account_number_field() {
-		$value = get_option( 'lwc_fedex_account_number', '' );
-		echo '<input type="text" id="lwc_fedex_account_number" name="lwc_fedex_account_number" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="off" />';
+	public function render_fedex_environment_field() {
+		$value = $this->get_fedex_environment();
+		echo '<select id="lwc_fedex_environment" name="lwc_fedex_environment" class="lwc-fedex-credential-field">';
+		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option></select>';
+		echo '<p class="description">' . esc_html__( 'All rates, labels, and shipment requests use the selected account.', 'lovecatz-wc' ) . '</p>';
 	}
 
-	/**
-	 * Render the FedEx API key field.
-	 */
-	public function render_fedex_api_key_field() {
-		$value = get_option( 'lwc_fedex_api_key', '' );
-		echo '<input type="text" id="lwc_fedex_api_key" name="lwc_fedex_api_key" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="off" />';
+	public function render_fedex_credentials_field( $args = array() ) {
+		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
+		$legacy_mode = 'yes' === get_option( 'lwc_fedex_test_mode', 'no' ) ? 'sandbox' : 'production';
+		$fallback     = $environment === $legacy_mode;
+		$account      = get_option( "lwc_fedex_{$environment}_account_number", $fallback ? get_option( 'lwc_fedex_account_number', '' ) : '' );
+		$api_key      = get_option( "lwc_fedex_{$environment}_api_key", $fallback ? get_option( 'lwc_fedex_api_key', '' ) : '' );
+		$api_secret   = get_option( "lwc_fedex_{$environment}_api_secret", $fallback ? get_option( 'lwc_fedex_api_secret', '' ) : '' );
+		printf( '<div class="lwc-fedex-credential-group" data-environment="%1$s"><p><label>%2$s<br><input type="text" name="lwc_fedex_%1$s_account_number" value="%3$s" class="regular-text lwc-fedex-credential-field" data-credential="account_number" autocomplete="off"></label></p><p><label>%4$s<br><input type="text" name="lwc_fedex_%1$s_api_key" value="%5$s" class="regular-text lwc-fedex-credential-field" data-credential="api_key" autocomplete="off"></label></p><p><label>%6$s<br><input type="password" name="lwc_fedex_%1$s_api_secret" value="%7$s" class="regular-text lwc-fedex-credential-field" data-credential="api_secret" autocomplete="new-password"></label></p></div>', esc_attr( $environment ), esc_html__( 'Account Number', 'lovecatz-wc' ), esc_attr( $account ), esc_html__( 'API Key', 'lovecatz-wc' ), esc_attr( $api_key ), esc_html__( 'API Secret', 'lovecatz-wc' ), esc_attr( $api_secret ) );
 	}
 
-	/**
-	 * Render the FedEx API secret field.
-	 */
-	public function render_fedex_api_secret_field() {
-		$value = get_option( 'lwc_fedex_api_secret', '' );
-		echo '<input type="password" id="lwc_fedex_api_secret" name="lwc_fedex_api_secret" value="' . esc_attr( $value ) . '" class="regular-text lwc-fedex-credential-field" autocomplete="new-password" />';
+	public function sanitize_fedex_environment( $value ) {
+		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
 	}
 
-	/**
-	 * Render the FedEx test mode field.
-	 */
-	public function render_fedex_test_mode_field() {
-		$value = get_option( 'lwc_fedex_test_mode', 'no' );
-		$checked = 'yes' === $value ? 'checked' : '';
-		echo '<input type="hidden" name="lwc_fedex_test_mode" value="no" />';
-		echo '<input type="checkbox" id="lwc_fedex_test_mode" name="lwc_fedex_test_mode" value="yes" ' . $checked . ' /> ' . esc_html__( 'Check to enable testing mode (uses sandbox API).', 'lovecatz-wc' );
+	private function get_fedex_environment() {
+		$legacy_default = 'yes' === get_option( 'lwc_fedex_test_mode', 'no' ) ? 'sandbox' : 'production';
+		return 'production' === get_option( 'lwc_fedex_environment', $legacy_default ) ? 'production' : 'sandbox';
 	}
 
 	/**

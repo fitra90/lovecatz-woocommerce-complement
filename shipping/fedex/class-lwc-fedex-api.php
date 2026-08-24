@@ -76,7 +76,7 @@ class LWC_FedEx_API {
 
 		// Reuse a recent quote for an identical request so checkout/cart
 		// recalculations do not hit the FedEx API every time.
-		$cache_key = 'lwc_fedex_rates_' . md5( (string) wp_json_encode( $payload ) );
+		$cache_key = 'lwc_fedex_rates_' . md5( $this->settings['test_mode'] . '|' . $this->settings['account_number'] . '|' . (string) wp_json_encode( $payload ) );
 		$cached = get_transient( $cache_key );
 		if ( is_array( $cached ) && isset( $cached['success'], $cached['quotes'] ) ) {
 			$this->debug( 'rate_cache_hit', array( 'quote_count' => count( $cached['quotes'] ) ) );

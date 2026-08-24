@@ -2,6 +2,7 @@
     'use strict';
 
     var fedexCheckTimer;
+    var fedexCheckSequence = 0;
 
     function initDashiconSelectors() {
         $('.lwc-dashicon-choice').on('click', function () {
@@ -22,12 +23,53 @@
     }
 
     function updateFedexConnectionStatus(triggerAjax) {
-        var accountNumber = ($('#lwc_fedex_account_number').val() || '').trim();
-        var apiKey = ($('#lwc_fedex_api_key').val() || '').trim();
-        var apiSecret = ($('#lwc_fedex_api_secret').val() || '').trim();
+        var environments = ['sandbox', 'production'];
+
+        function getCredentials(environment) {
+            var group = $('.lwc-fedex-credential-group[data-environment="' + environment + '"]');
+
+            return {
+                accountNumber: (group.find('[data-credential="account_number"]').val() || '').trim(),
+                apiKey: (group.find('[data-credential="api_key"]').val() || '').trim(),
+                apiSecret: (group.find('[data-credential="api_secret"]').val() || '').trim()
+            };
+        }
+
+        function summarize(results) {
+            var labels = {sandbox: 'Sandbox', production: 'Production'};
+            var connected = environments.filter(function (environment) {
+                return results[environment].status === 'connected';
+            });
+            var failed = environments.filter(function (environment) {
+                return results[environment].status === 'auth_failed' || results[environment].status === 'request_failed';
+            });
+            var incomplete = environments.filter(function (environment) {
+                return results[environment].status !== 'connected' && failed.indexOf(environment) === -1;
+            });
+            var parts = [];
+
+            if (connected.length === environments.length) {
+                setFedexConnectionStatus('connected', 'Sandbox & Production connected (REST API ready)');
+                return;
+            }
+
+            if (failed.length) {
+                parts.push(failed.map(function (environment) { return labels[environment]; }).join(' & ') + ' connection failed');
+            }
+            if (incomplete.length) {
+                parts.push(incomplete.map(function (environment) { return labels[environment]; }).join(' & ') + ' credentials incomplete');
+            }
+            if (connected.length) {
+                parts.push(connected.map(function (environment) { return labels[environment]; }).join(' & ') + ' connected');
+            }
+
+            setFedexConnectionStatus(failed.length ? 'auth_failed' : 'partial', parts.join('; '));
+        }
 
         if (triggerAjax) {
-            setFedexConnectionStatus('checking', 'Checking credentials...');
+            fedexCheckSequence += 1;
+            var checkSequence = fedexCheckSequence;
+            setFedexConnectionStatus('checking', 'Checking Sandbox & Production credentials...');
 
             clearTimeout(fedexCheckTimer);
             fedexCheckTimer = setTimeout(function () {
@@ -36,45 +78,46 @@
                     return;
                 }
 
-                $.ajax({
-                    url: window.lwcFedexSettings.ajax_url,
-                    type: 'POST',
-                    dataType: 'json',
-                    data: {
-                        action: 'lwc_check_fedex_connection',
-                        nonce: window.lwcFedexSettings.nonce,
-                        account_number: accountNumber,
-                        api_key: apiKey,
-                        api_secret: apiSecret,
-                        test_mode: $('input[name="lwc_fedex_test_mode"][type="checkbox"]').is(':checked') ? 'yes' : 'no'
-                    },
-                    success: function (response) {
-                        if (response && response.success && response.data) {
-                            setFedexConnectionStatus(response.data.status, response.data.label);
-                        } else {
-                            setFedexConnectionStatus('idle', 'Waiting for credentials');
+                var checks = environments.map(function (environment) {
+                    var credentials = getCredentials(environment);
+
+                    return $.ajax({
+                        url: window.lwcFedexSettings.ajax_url,
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            action: 'lwc_check_fedex_connection',
+                            nonce: window.lwcFedexSettings.nonce,
+                            account_number: credentials.accountNumber,
+                            api_key: credentials.apiKey,
+                            api_secret: credentials.apiSecret,
+                            environment: environment
                         }
-                    },
-                    error: function () {
-                        setFedexConnectionStatus('idle', 'Waiting for credentials');
+                    }).then(function (response) {
+                        return response && response.success && response.data ? response.data : {status: 'request_failed'};
+                    }, function () {
+                        return {status: 'request_failed'};
+                    });
+                });
+
+                $.when.apply($, checks).done(function (sandboxResult, productionResult) {
+                    if (checkSequence !== fedexCheckSequence) {
+                        return;
                     }
+                    summarize({sandbox: sandboxResult, production: productionResult});
                 });
             }, 300);
             return;
         }
 
-        var status = 'idle';
-        var label = 'Waiting for credentials';
-
-        if (accountNumber && apiKey && apiSecret) {
-            status = 'partial';
-            label = 'Credentials entered';
-        } else if (accountNumber || apiKey || apiSecret) {
-            status = 'partial';
-            label = 'Incomplete credentials';
-        }
-
-        setFedexConnectionStatus(status, label);
+        var preview = {};
+        environments.forEach(function (environment) {
+            var credentials = getCredentials(environment);
+            preview[environment] = {
+                status: credentials.accountNumber && credentials.apiKey && credentials.apiSecret ? 'partial' : 'idle'
+            };
+        });
+        summarize(preview);
     }
 
     function initPromoImageUploader() {
@@ -153,6 +196,8 @@
             $('.lwc-fedex-credential-field').on('input change', function () {
                 updateFedexConnectionStatus(true);
             });
+
+			updateFedexConnectionStatus(true);
         }
 
         if ($('.lwc-promo-image-select').length) {

@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.18
+ * Version:     1.0.21
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.18' );
+define( 'LWC_VERSION', '1.0.21' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -93,6 +93,10 @@ function lwc_init() {
 	// Decrypt stored shipping credentials transparently on read.
 	add_filter( 'option_lwc_fedex_api_key', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_fedex_api_secret', 'lwc_decrypt_secret' );
+	foreach ( array( 'sandbox', 'production' ) as $lwc_fedex_environment ) {
+		add_filter( "option_lwc_fedex_{$lwc_fedex_environment}_api_key", 'lwc_decrypt_secret' );
+		add_filter( "option_lwc_fedex_{$lwc_fedex_environment}_api_secret", 'lwc_decrypt_secret' );
+	}
 	add_filter( 'option_lwc_jt_api_key', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_secret', 'lwc_decrypt_secret' );
 	foreach ( array( 'express', 'cargo' ) as $lwc_jt_provider ) {
@@ -351,7 +355,8 @@ function lwc_check_fedex_connection() {
 	$account_number = isset( $_POST['account_number'] ) ? sanitize_text_field( wp_unslash( $_POST['account_number'] ) ) : '';
 	$api_key        = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 	$api_secret     = isset( $_POST['api_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['api_secret'] ) ) : '';
-	$test_mode      = isset( $_POST['test_mode'] ) && 'yes' === $_POST['test_mode'] ? 'yes' : 'no';
+	$environment    = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
+	$test_mode      = 'sandbox' === $environment ? 'yes' : 'no';
 
 	if ( $account_number && $api_key && $api_secret ) {
 		if ( ! class_exists( 'LWC_FedEx_API' ) ) {
@@ -370,7 +375,7 @@ function lwc_check_fedex_connection() {
 		$result = $api->test_connection();
 
 		if ( ! empty( $result['success'] ) ) {
-			update_option( 'lwc_fedex_validation_status', 'validated' );
+			update_option( 'lwc_fedex_validation_status_' . $environment, 'validated' );
 			wp_send_json_success(
 				array(
 					'status' => 'connected',
@@ -379,7 +384,7 @@ function lwc_check_fedex_connection() {
 			);
 		}
 
-		update_option( 'lwc_fedex_validation_status', 'failed' );
+		update_option( 'lwc_fedex_validation_status_' . $environment, 'failed' );
 		wp_send_json_success(
 			array(
 				'status' => 'auth_failed',
@@ -389,7 +394,7 @@ function lwc_check_fedex_connection() {
 	}
 
 	if ( $account_number || $api_key || $api_secret ) {
-		update_option( 'lwc_fedex_validation_status', 'pending' );
+		update_option( 'lwc_fedex_validation_status_' . $environment, 'pending' );
 		wp_send_json_success(
 			array(
 				'status' => 'partial',
@@ -398,7 +403,7 @@ function lwc_check_fedex_connection() {
 		);
 	}
 
-	update_option( 'lwc_fedex_validation_status', 'pending' );
+	update_option( 'lwc_fedex_validation_status_' . $environment, 'pending' );
 	wp_send_json_success(
 		array(
 			'status' => 'idle',

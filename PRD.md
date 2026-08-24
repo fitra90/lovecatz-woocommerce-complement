@@ -133,6 +133,7 @@ The `lwc_fedex` zone method performs live REST quotes at checkout: it builds a r
 FedEx is managed entirely from the plugin's Shipping tab — no WooCommerce shipping zone setup required:
 
 - **Enable FedEx** (`lwc_fedex_enabled`, default on) — a checkbox toggle on the settings page gates every rate path (`calculate_shipping`, `is_available`, and the global injector).
+- **API environment** (`lwc_fedex_environment`) — Sandbox and Production each retain their own account number, API key, and API secret. Switching the environment immediately selects the matching stored account for rates, labels, and shipments; legacy single-account credentials remain available as a migration fallback.
 - **Worldwide availability without zones** — the method hooks `woocommerce_shipping_packages` and appends its rates to every cart package whenever a zone instance isn't already providing `lwc_fedex` rates, so it works out of the box for all destinations.
 - **Max package weight** (`lwc_fedex_max_package_weight_kg`, default 10, clamped 0–68) — drives package splitting for rating and labels and travels via rate meta to label creation.
 - **Service types** (`lwc_fedex_services`, multiselect from the `lwc_fedex_available_services` catalog; empty selection falls back to Ground/Express Saver/International Economy/Priority).
@@ -143,7 +144,7 @@ Cartons are derived from product data: items are grouped into packages that resp
 
 Checkout currency handling follows Shipping → FedEx: in `currency` mode woo-multi-currency converts the rate like any other method; in `manual` mode the method divides by the manual exchange rate itself and both engines are excluded from currency-plugin conversion.
 
-The connection check in Settings → Shipping → FedEx performs a real OAuth handshake with the typed credentials and reports connected / auth-failed / incomplete states through a status pill; it is test-mode aware.
+The connection check in Settings → Shipping → FedEx performs separate real OAuth handshakes for the stored Sandbox and Production credentials. Its combined status pill is green only when both environments connect, red when either handshake fails, and orange when either credential set is incomplete.
 
 Order edit screen adds a **FedEx Shipping** side metabox (`LWC_FedEx_Order_Admin`) with:
 

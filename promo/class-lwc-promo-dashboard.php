@@ -64,10 +64,42 @@ class LWC_Promo_Dashboard {
 			array(
 				'couponInputSelector' => '.coupon input[name="coupon_code"], .wc-block-components-totals-coupon input',
 				'applyButtonSelector' => '.coupon .button, .wc-block-components-totals-coupon button[type="submit"]',
-				'checkoutUrl' => esc_url_raw( wc_get_checkout_url() ),
+				'checkoutUrl'         => esc_url_raw( wc_get_checkout_url() ),
+				'accountUrl'          => esc_url_raw( add_query_arg( 'redirect_to', wc_get_checkout_url(), wc_get_page_permalink( 'myaccount' ) ) ),
+				'isGuest'             => ! is_user_logged_in(),
+				'hasAccountPromos'    => $this->has_account_only_checkout_promos(),
 				'coupons'             => $this->get_checkout_coupon_data(),
 			)
 		);
+	}
+
+	/**
+	 * Check whether a guest can be invited to unlock an active account promo.
+	 * Coupon details stay private until the customer signs in.
+	 *
+	 * @return bool
+	 */
+	private function has_account_only_checkout_promos() {
+		if ( is_user_logged_in() ) {
+			return false;
+		}
+
+		foreach ( $this->get_promo_coupons() as $coupon ) {
+			if ( $coupon->get_date_expires() && $coupon->get_date_expires()->getTimestamp() < current_time( 'timestamp' ) ) {
+				continue;
+			}
+
+			if ( $coupon->get_usage_limit() && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
+				continue;
+			}
+
+			$eligible_users = array_filter( array_map( 'absint', (array) get_post_meta( $coupon->get_id(), '_lwc_promo_eligible_user_ids', true ) ) );
+			if ( ! empty( $eligible_users ) || ! empty( $coupon->get_email_restrictions() ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

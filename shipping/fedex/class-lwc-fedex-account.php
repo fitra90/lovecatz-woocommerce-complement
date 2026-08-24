@@ -97,6 +97,28 @@ class LWC_FedEx_Account {
 	 * @return mixed
 	 */
 	public static function get_option_value( $option_name, $default = '' ) {
+		$credential_fields = array(
+			'lwc_fedex_account_number' => 'account_number',
+			'lwc_fedex_api_key'        => 'api_key',
+			'lwc_fedex_api_secret'     => 'api_secret',
+		);
+		if ( isset( $credential_fields[ $option_name ] ) ) {
+			$legacy_mode = 'yes' === get_option( 'lwc_fedex_test_mode', 'no' ) ? 'sandbox' : 'production';
+			$environment = get_option( 'lwc_fedex_environment', $legacy_mode );
+			$environment = 'production' === $environment ? 'production' : 'sandbox';
+			$new_value   = get_option( 'lwc_fedex_' . $environment . '_' . $credential_fields[ $option_name ], null );
+			if ( null !== $new_value ) {
+				return $new_value;
+			}
+		}
+
+		if ( 'lwc_fedex_test_mode' === $option_name ) {
+			$environment = get_option( 'lwc_fedex_environment', null );
+			if ( null !== $environment ) {
+				return 'sandbox' === $environment ? 'yes' : 'no';
+			}
+		}
+
 		// The settings page writes these WordPress options. Treat them as the
 		// current source of truth; the custom table is retained as a legacy
 		// fallback for installations migrated from older plugin versions.

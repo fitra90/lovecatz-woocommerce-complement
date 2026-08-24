@@ -104,7 +104,10 @@
             return;
         }
 
-        if (!lwcPromoDashboard.coupons || !lwcPromoDashboard.coupons.length || $('#lwc-checkout-coupon-picker').length) {
+        var coupons = lwcPromoDashboard.coupons || [];
+        var showAccountInvite = !!(lwcPromoDashboard.isGuest && lwcPromoDashboard.hasAccountPromos);
+
+        if ((!coupons.length && !showAccountInvite) || $('#lwc-checkout-coupon-picker').length) {
             return;
         }
 
@@ -113,7 +116,7 @@
             return;
         }
 
-        var modalItems = $.map(lwcPromoDashboard.coupons, function (coupon) {
+        var modalItems = $.map(coupons, function (coupon) {
             var image = $('<span>').text(coupon.image || '').html();
             var code = $('<span>').text(coupon.code).html();
             var description = $('<span>').text(coupon.description).html();
@@ -121,12 +124,17 @@
                 '<img src="' + image + '" alt="" /><span class="lwc-checkout-coupon-option__content"><strong>' + code + '</strong><span>' + description + '</span></span><em>Pilih</em></button>';
         }).join('');
 
-        var picker = '<div id="lwc-checkout-coupon-picker" class="lwc-checkout-coupon-picker">' +
+        var couponPicker = coupons.length ?
             '<button type="button" class="lwc-open-coupon-modal" aria-haspopup="dialog">Pilih kupon tersedia <span aria-hidden="true">›</span></button>' +
             '<div class="lwc-coupon-modal" role="dialog" aria-modal="true" aria-labelledby="lwc-coupon-modal-title" hidden>' +
             '<div class="lwc-coupon-modal__backdrop"></div><div class="lwc-coupon-modal__panel">' +
             '<div class="lwc-coupon-modal__header"><div><h3 id="lwc-coupon-modal-title">Pilih kupon</h3><p>Pilih promo untuk diterapkan pada pesanan ini.</p></div><button type="button" class="lwc-close-coupon-modal" aria-label="Tutup">×</button></div>' +
-            '<div class="lwc-coupon-modal__list">' + modalItems + '</div></div></div></div>';
+            '<div class="lwc-coupon-modal__list">' + modalItems + '</div></div></div>' : '';
+        var accountInvite = showAccountInvite ?
+            '<div class="lwc-checkout-account-promo"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%</span>' +
+            '<span class="lwc-checkout-account-promo__content"><strong>Kupon spesial menantimu!</strong><span>Login atau buat akun gratis untuk membuka promo eksklusif.</span></span>' +
+            '<a class="lwc-checkout-account-promo__link" href="' + $('<span>').text(lwcPromoDashboard.accountUrl).html() + '">Login / Daftar</a></div>' : '';
+        var picker = '<div id="lwc-checkout-coupon-picker" class="lwc-checkout-coupon-picker">' + couponPicker + accountInvite + '</div>';
 
         if (couponArea.is('.ct-order-review')) {
             couponArea.prepend(picker);
