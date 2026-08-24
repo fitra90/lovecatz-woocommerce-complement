@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.21
+ * Version:     1.0.22
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.21' );
+define( 'LWC_VERSION', '1.0.22' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -115,7 +115,6 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
-	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-currency-adapter.php';
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
 
 	// Carry pre-split J&T credentials into the Express provider once.
@@ -659,6 +658,12 @@ function lwc_install() {
 			LWC_JT_Account::create_table( $provider );
 		}
 		LWC_JT_Account::migrate_legacy_credentials();
+	}
+
+	// Octolize integration was removed in 1.0.22. Its settings no longer
+	// control the native FedEx engine and should not linger in the database.
+	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate' ) as $obsolete_option ) {
+		delete_option( $obsolete_option );
 	}
 
 	update_option( 'lwc_schema_version', LWC_VERSION );

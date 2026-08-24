@@ -89,16 +89,6 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 			return false;
 		}
 
-		// Only one FedEx engine may publish checkout rates. When Octolize is
-		// selected, allowing this built-in method to run as well can expose its
-		// fallback rate (historically Rp25) beside the Octolize live quote.
-		if ( class_exists( 'LWC_FedEx_Currency_Adapter' ) ) {
-			$adapter = new LWC_FedEx_Currency_Adapter();
-			if ( LWC_FedEx_Currency_Adapter::MODE_OCTOLIZE === $adapter->get_engine() ) {
-				return false;
-			}
-		}
-
 		return true;
 	}
 
@@ -266,7 +256,7 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 	}
 
 	/**
-	 * Round and convert a live quote into the active checkout currency.
+	 * Validate and round a live quote for the active checkout currency.
 	 *
 	 * @param float $cost Rate cost in the FedEx base currency.
 	 * @return float|null Null when the cost is not usable.
@@ -281,8 +271,6 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 		if ( class_exists( 'LWC_Currency_Converter' ) ) {
 			$cost = LWC_Currency_Converter::round_for_currency( $cost );
 		}
-
-		$cost = $this->maybe_convert_rate_cost( $cost );
 
 		// A small base-currency fallback can round to zero after conversion;
 		// never turn a failed FedEx quote into a misleading "Free" method.
@@ -351,51 +339,6 @@ class LWC_Shipping_FedEx extends WC_Shipping_Method {
 		}
 
 		return $services;
-	}
-
-	/**
-	 * Convert a rate from the FedEx base currency to the active checkout
-	 * currency using the configured manual exchange rate.
-	 *
-	 * Skipped when a global converter owns conversion: the built-in
-	 * LWC_Currency_Converter or woo-multi-currency converts every shipping
-	 * method already, so converting here as well would double the amount.
-	 *
-	 * @param float $cost Rate cost in the FedEx base currency.
-	 * @return float
-	 */
-	private function maybe_convert_rate_cost( $cost ) {
-		if ( class_exists( 'LWC_Currency_Converter' ) && LWC_Currency_Converter::instance()->is_active() ) {
-			return $cost;
-		}
-
-		if ( ! class_exists( 'LWC_FedEx_Currency_Adapter' ) || ! function_exists( 'get_woocommerce_currency' ) ) {
-			return $cost;
-		}
-
-		$adapter = new LWC_FedEx_Currency_Adapter();
-
-		if ( LWC_FedEx_Currency_Adapter::MODE_MANUAL !== $adapter->get_conversion_mode() ) {
-			return $cost;
-		}
-
-		$base_currency = $adapter->get_base_currency();
-		$active_currency = strtoupper( (string) get_woocommerce_currency() );
-
-		if ( '' === $base_currency || $base_currency === $active_currency ) {
-			return $cost;
-		}
-
-		$manual_rate = $adapter->get_manual_rate();
-		if ( $manual_rate <= 0 || $cost <= 0 ) {
-			return $cost;
-		}
-
-		$decimals = class_exists( 'LWC_Currency_Converter' )
-			? LWC_Currency_Converter::get_currency_decimals( $active_currency )
-			: ( function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2 );
-
-		return round( $cost / $manual_rate, $decimals );
 	}
 
 	/**

@@ -1,7 +1,7 @@
 # LoveCatz WooCommerce Complement — Product Requirements and Design
 
 Last code review: 2026-08-21
-Current plugin version: 1.0.4
+Current plugin version: 1.0.22
 
 ## Purpose
 
@@ -13,7 +13,6 @@ The plugin extends WooCommerce with:
 - per-product purchase quantity limits;
 - member import, management, printable cards, and customer card access;
 - native LoveCatz FedEx live rates, order-screen AWB labels, and tracking;
-- an Octolize Flexible Shipping FedEx currency adapter;
 - a built-in manual currency converter that coexists with external plugins;
 - J&T settings and a provisional flat-rate method;
 - a configurable LoveCatz admin workspace.
@@ -34,7 +33,7 @@ The plugin exits early and shows an admin notice when WooCommerce is inactive.
 - `includes/admin/` — active settings and membership implementation plus admin assets.
 - `products/` — quantity limits.
 - `promo/` — promo administration and customer/checkout integration.
-- `shipping/fedex/` — account storage, REST client, native method, currency adapter, and order-screen label controls.
+- `shipping/fedex/` — account storage, REST client, native method, and order-screen label controls.
 - `shipping/jt/` — per-provider account storage and the provisional J&T Express / J&T Cargo methods.
 - `membership/` — duplicate/alternate membership classes which `LWC_Core` does not instantiate.
 - `assets/` — logo and default promo artwork.
@@ -142,7 +141,7 @@ Only display options (method title/description) and the fallback rate remain per
 
 Cartons are derived from product data: items are grouped into packages that respect a per-instance max package weight (kg; 0 disables splitting), and package dimensions come from the cube root of the summed item volume when products have dimensions set. The same packages drive rating and label creation. The split threshold is hard-capped at the FedEx parcel ceiling of 68 kg (150 lbs) — `lwc_fedex_package_weight_ceiling_kg` filter; heavier loads require FedEx Freight, which is out of scope.
 
-Checkout currency handling follows Shipping → FedEx: in `currency` mode woo-multi-currency converts the rate like any other method; in `manual` mode the method divides by the manual exchange rate itself and both engines are excluded from currency-plugin conversion.
+Checkout currency handling uses the global currency owner. The built-in LoveCatz converter converts every shipping method when enabled; when CURCY or another supported external converter is active, LoveCatz steps aside and that converter handles the native FedEx rate.
 
 The connection check in Settings → Shipping → FedEx performs separate real OAuth handshakes for the stored Sandbox and Production credentials. Its combined status pill is green only when both environments connect, red when either handshake fails, and orange when either credential set is incomplete.
 
@@ -156,27 +155,13 @@ Shipment creation sends a complete REST v1 payload: shipper/recipient contacts a
 
 Authenticated AJAX actions are `lwc_check_fedex_connection`, `lwc_fedex_get_rate_quote`, `lwc_fedex_create_shipment`, and `lwc_fedex_download_label`. All require `manage_woocommerce` and the FedEx nonce. The create-shipment response omits the raw API body and returns the tracking number plus a nonce-protected download URL. Label download normalizes and constrains paths to the uploads directory.
 
-### Octolize currency adapter
-
-Shipping → FedEx selects the native engine or Octolize. With Octolize selected and active, the adapter temporarily exposes the store base currency during rate calculation, then lets woo-multi-currency/CURCY convert normally or applies a manual exchange rate. Manual mode excludes both engines (Octolize and `lwc_fedex`) from currency-plugin conversion and caches per package/rate to prevent double conversion.
-
-Options:
-
-- `lwc_fedex_engine` (`lovecatz` or `octolize`);
-- `lwc_fedex_currency_adapter_enabled` (retained in UI, though runtime activation follows Octolize selection/detection);
-- `lwc_fedex_base_currency` (default `IDR`);
-- `lwc_fedex_conversion_mode` (`currency` or `manual`);
-- `lwc_fedex_manual_rate` (default `16500`, base units per target-currency unit).
-
-Task notes report 31 standalone assertions passing, including IDR 750,000 → USD 45.45. Live staging checkout with real credentials and switched USD remains outstanding.
-
 ### Built-in currency converter
 
 `LWC_Currency_Converter` (Currency tab) switches the shop between the base currency and manually configured targets. Rates use one line per currency, `CODE=rate`, where rate is base-currency units per one unit of the target (`USD=16500` means 1 USD = 16,500 IDR; conversion divides). Shoppers switch with `?currency=USD`, persisted in a 30-day `lwc_currency` cookie.
 
 When active it overrides `woocommerce_currency`, maps symbols for common currencies, matches price decimals to the selected currency (zero-decimal currencies such as IDR round to integers), converts product/variation prices and every shipping rate cost/tax via `woocommerce_package_rates`, and recalculates cart totals after a switch. It steps aside automatically when an external converter is detected (CURCY/woo-multi-currency, WOOCS, Aelia, WPML, YayCurrency; filterable via `lwc_currency_external_converter_active`), so conversion never happens twice.
 
-Shared helpers used across shipping: `LWC_Currency_Converter::round_for_currency()` and `get_currency_decimals()` round provider amounts to the active currency's decimals — integer-safe for providers that reject decimals (J&T whole-rupiah amounts) while keeping two decimals for USD-like currencies. The FedEx method skips its own manual conversion whenever a global converter (built-in or external) owns conversion, and the Octolize adapter likewise defers, preventing double conversion in every combination.
+Shared helpers used across shipping: `LWC_Currency_Converter::round_for_currency()` and `get_currency_decimals()` round provider amounts to the active currency's decimals — integer-safe for providers that reject decimals (J&T whole-rupiah amounts) while keeping two decimals for USD-like currencies.
 
 Options: `lwc_currency_enabled`, `lwc_currency_rates`.
 
@@ -225,14 +210,13 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 - Verify multi-service checkout: several FedEx options appear with distinct labels and prices; the chosen service is the one used on the created AWB.
 - Verify package splitting: a cart heavier than the max package weight quotes/labels multiple packages; products without dimensions still rate correctly.
 - On the order screen: verify the quote button uses the ship-to address, label creation stores tracking + note, and the download link streams the PDF only for permitted users.
-- Test currency paths for the own engine: base IDR checkout (integer amounts), USD via CURCY, USD via the built-in converter, and adapter manual mode — confirm no double conversion and correct decimals in each.
-- Test Octolize with IDR base/USD checkout, both conversion modes, taxes, and multiple packages.
+- Test native FedEx currency paths: base IDR checkout (integer amounts), USD via CURCY, and USD via the built-in converter — confirm no double conversion and correct decimals in each.
 - Verify manual partial shipping: uncheck an item, create the AWB, confirm the shipment history grows, the item is marked shipped, and each label downloads individually.
 - Treat J&T Express and J&T Cargo as provisional until live implementations exist.
 
 ## Priorities
 
-1. Complete live FedEx/Octolize staging verification.
+1. Complete live native FedEx staging verification.
 2. Restrict Promo administration to marked coupons or deliberately document all-coupon management.
 3. Remove/migrate the legacy auto-promo path.
 4. Consolidate membership classes.

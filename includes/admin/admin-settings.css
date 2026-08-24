@@ -168,17 +168,3 @@
 	max-width: 160px;
 	border-radius: 4px;
 }
-
-.lwc-fedex-engine-choice {
-	display: inline-block;
-	margin-right: 16px;
-}
-
-.lwc-fedex-adapter-settings .description {
-	margin-top: 4px;
-	max-width: 520px;
-}
-
-.lwc-fedex-manual-rate-field {
-	margin-top: 8px;
-}
