@@ -208,6 +208,21 @@ class LWC_FedEx_API {
 	 * @return array
 	 */
 	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array() ) {
+		$shipper_contact   = $this->build_shipper_contact();
+		$recipient_contact = $this->build_recipient_contact( $order );
+		if ( empty( $shipper_contact['phoneNumber'] ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'FedEx Shipper Phone is empty. Complete it in LoveCatz > Shipping > FedEx, then try again.', 'lovecatz-wc' ),
+			);
+		}
+		if ( empty( $recipient_contact['phoneNumber'] ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'The order recipient phone number is empty. Add a billing or shipping phone to the order, then try again.', 'lovecatz-wc' ),
+			);
+		}
+
 		$token = $this->get_access_token();
 		if ( '' === $token ) {
 			return array(
@@ -244,6 +259,13 @@ class LWC_FedEx_API {
 		}
 
 		$label_path = $this->save_label_from_response( $order, $body, $item_ids );
+		if ( false === $label_path ) {
+			return array(
+				'success'  => false,
+				'message'  => __( 'FedEx created the Sandbox shipment but the label could not be saved. Check the WooCommerce log before retrying to avoid duplicate test shipments.', 'lovecatz-wc' ),
+				'response' => $body,
+			);
+		}
 		return array(
 			'success' => true,
 			'label_path' => $label_path,
@@ -474,9 +496,19 @@ class LWC_FedEx_API {
 				'client_id'     => $this->settings['api_key'],
 				'client_secret' => $this->settings['api_secret'],
 			),
-			'timeout' => 20,
+			'timeout' => 30,
 		);
-		$response = wp_remote_post( $url, $args );
+		$response = null;
+		// A transient DNS/connect timeout should not prevent fulfillment when
+		// the credentials themselves are valid. Retry transport failures once;
+		// never retry an HTTP authentication rejection.
+		for ( $attempt = 1; $attempt <= 2; $attempt++ ) {
+			$response = wp_remote_post( $url, $args );
+			if ( ! is_wp_error( $response ) ) {
+				break;
+			}
+			$this->log( sprintf( 'OAuth transport attempt %1$d failed: %2$s', $attempt, sanitize_text_field( $response->get_error_message() ) ), 'warning' );
+		}
 		if ( is_wp_error( $response ) ) {
 			$this->debug( 'oauth_http_error', array( 'message' => $response->get_error_message() ) );
 			$this->log( 'OAuth request failed: ' . sanitize_text_field( $response->get_error_message() ), 'error' );
@@ -1577,7 +1609,9 @@ class LWC_FedEx_API {
 		if ( isset( $body['output']['transactionShipments'][0] ) && is_array( $body['output']['transactionShipments'][0] ) ) {
 			$shipment = $body['output']['transactionShipments'][0];
 
-			if ( isset( $shipment['pieceResponses'][0]['packageDocuments'][0]['content'] ) ) {
+			if ( isset( $shipment['pieceResponses'][0]['packageDocuments'][0]['encodedLabel'] ) ) {
+				$label_data = (string) $shipment['pieceResponses'][0]['packageDocuments'][0]['encodedLabel'];
+			} elseif ( isset( $shipment['pieceResponses'][0]['packageDocuments'][0]['content'] ) ) {
 				$label_data = (string) $shipment['pieceResponses'][0]['packageDocuments'][0]['content'];
 			}
 
@@ -1585,6 +1619,8 @@ class LWC_FedEx_API {
 				$tracking_number = (string) $shipment['pieceResponses'][0]['trackingNumber'];
 			} elseif ( isset( $shipment['masterTrackingNumber']['trackingNumber'] ) ) {
 				$tracking_number = (string) $shipment['masterTrackingNumber']['trackingNumber'];
+			} elseif ( isset( $shipment['completedShipmentDetail']['masterTrackingId']['trackingNumber'] ) ) {
+				$tracking_number = (string) $shipment['completedShipmentDetail']['masterTrackingId']['trackingNumber'];
 			}
 		}
 
