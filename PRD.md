@@ -129,6 +129,12 @@ Encryption uses AES-256-CBC with a key and deterministic IV derived from the Wor
 
 The `lwc_fedex` zone method performs live REST quotes at checkout: it builds a rate request from the store origin, the package destination, and real cart weight (per item × quantity), authenticates with a cached OAuth token (~1 hour), calls `/rate/v1/rates/quotes`, and caches successful quotes per request payload for 30 minutes (`lwc_fedex_rate_cache_ttl` filter). No `serviceType` is sent, so FedEx returns every applicable service; each enabled service becomes its own checkout option. When no service matches or the live quote fails, an optional flat fallback rate is offered (enabled by default, cost configurable); disabling the fallback hides the method instead.
 
+### RaySpeed RETAIL Sandbox
+
+The `lwc_rayspeed` method is available only for destinations outside Indonesia. It posts the destination, actual cart weight, longest product dimension, category, content type, origin, and Regular/Express selection to the RaySpeed Sandbox pricing endpoint and publishes the returned IDR price with lead time at checkout. It is injected globally like FedEx, so no shipping-zone setup is required. The Shipping page has separate FedEx, J&T, and RaySpeed provider tabs.
+
+International order screens include a RaySpeed panel for creating one development AWB through `awb_post.php` and refreshing its tracking history through `current.php`. The AWB and tracking events are stored in `_lwc_rayspeed_awb` and `_lwc_rayspeed_tracking`. RaySpeed documentation provides no label-download endpoint, so this integration does not claim to generate a printable label. Production endpoints and credentials must be obtained from RaySpeed before live fulfillment is enabled.
+
 FedEx is managed entirely from the plugin's Shipping tab — no WooCommerce shipping zone setup required:
 
 - **Enable FedEx** (`lwc_fedex_enabled`, default on) — a checkbox toggle on the settings page gates every rate path (`calculate_shipping`, `is_available`, and the global injector).

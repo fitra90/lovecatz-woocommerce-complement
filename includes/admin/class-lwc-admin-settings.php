@@ -143,9 +143,9 @@ class LWC_Admin_Settings {
 			$active_tab = 'settings';
 		}
 
-		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'jt';
-		if ( ! in_array( $provider, array( 'jt', 'fedex' ), true ) ) {
-			$provider = 'jt';
+		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'fedex';
+		if ( ! in_array( $provider, array( 'jt', 'fedex', 'rayspeed' ), true ) ) {
+			$provider = 'fedex';
 		}
 		?>
 		<div class="wrap">
@@ -171,14 +171,11 @@ class LWC_Admin_Settings {
 					?>
 				</form>
 			<?php elseif ( 'shipping' === $active_tab ) : ?>
-				<div style="margin: 15px 0;">
-					<a href="?page=lovecatz-wc&tab=shipping&provider=jt" class="button <?php echo 'jt' === $provider ? 'button-primary' : 'button-secondary'; ?>">
-						<?php esc_html_e( 'J&T', 'lovecatz-wc' ); ?>
-					</a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="button <?php echo 'fedex' === $provider ? 'button-primary' : 'button-secondary'; ?>">
-						<?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?>
-					</a>
-				</div>
+				<h2 class="nav-tab-wrapper lwc-shipping-provider-tabs">
+					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="nav-tab <?php echo 'fedex' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?></a>
+					<a href="?page=lovecatz-wc&tab=shipping&provider=jt" class="nav-tab <?php echo 'jt' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T', 'lovecatz-wc' ); ?></a>
+					<a href="?page=lovecatz-wc&tab=shipping&provider=rayspeed" class="nav-tab <?php echo 'rayspeed' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'RaySpeed', 'lovecatz-wc' ); ?></a>
+				</h2>
 
 				<?php if ( 'jt' === $provider ) : ?>
 					<div id="lwc-jt-express">
@@ -200,7 +197,7 @@ class LWC_Admin_Settings {
 							?>
 						</form>
 					</div>
-				<?php else : ?>
+				<?php elseif ( 'fedex' === $provider ) : ?>
 					<div class="notice notice-info inline">
 						<p><?php esc_html_e( 'FedEx will be available for international shipments where the destination country is outside Indonesia.', 'lovecatz-wc' ); ?></p>
 					</div>
@@ -210,6 +207,11 @@ class LWC_Admin_Settings {
 						do_settings_sections( 'lwc_shipping_fedex_options' );
 						submit_button();
 						?>
+					</form>
+				<?php else : ?>
+					<div class="notice notice-info inline"><p><?php esc_html_e( 'RaySpeed RETAIL Sandbox is offered only for shipping destinations outside Indonesia.', 'lovecatz-wc' ); ?></p></div>
+					<form method="post" action="options.php">
+						<?php settings_fields( 'lwc_shipping_rayspeed_options' ); do_settings_sections( 'lwc_shipping_rayspeed_options' ); submit_button(); ?>
 					</form>
 				<?php endif; ?>
 			<?php elseif ( 'promo' === $active_tab ) : ?>
@@ -405,6 +407,26 @@ class LWC_Admin_Settings {
 			'lwc_shipping_fedex_options',
 			'lwc_shipping_fedex_section'
 		);
+
+		// RaySpeed RETAIL Sandbox settings. The development API exposes a
+		// single key rather than OAuth client credentials.
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_origin', array( 'default' => 'JKT', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_origin' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_category', array( 'default' => 'General Package', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_category' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_type', array( 'default' => 'NOC', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_type' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_shipment_type', array( 'default' => 'Regular', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_shipment_type' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_insurance', array( 'default' => 'No', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_insurance' ) ) );
+		register_setting( 'lwc_shipping_rayspeed_options', 'lwc_rayspeed_tax_duty', array( 'default' => 'Receiver', 'sanitize_callback' => array( $this, 'sanitize_rayspeed_tax_duty' ) ) );
+		add_settings_section( 'lwc_shipping_rayspeed_section', __( 'RaySpeed Settings', 'lovecatz-wc' ), array( $this, 'render_rayspeed_section_intro' ), 'lwc_shipping_rayspeed_options' );
+		add_settings_field( 'lwc_rayspeed_enabled', __( 'Enable RaySpeed', 'lovecatz-wc' ), array( $this, 'render_rayspeed_enabled_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_api_key', __( 'Development API Key', 'lovecatz-wc' ), array( $this, 'render_rayspeed_api_key_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_origin', __( 'Pricing Origin', 'lovecatz-wc' ), array( $this, 'render_rayspeed_origin_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_category', __( 'Package Category', 'lovecatz-wc' ), array( $this, 'render_rayspeed_category_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_type', __( 'Shipment Contents', 'lovecatz-wc' ), array( $this, 'render_rayspeed_type_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_shipment_type', __( 'Shipment Type', 'lovecatz-wc' ), array( $this, 'render_rayspeed_shipment_type_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_insurance', __( 'Insurance', 'lovecatz-wc' ), array( $this, 'render_rayspeed_insurance_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
+		add_settings_field( 'lwc_rayspeed_tax_duty', __( 'Destination Tax & Duty', 'lovecatz-wc' ), array( $this, 'render_rayspeed_tax_duty_field' ), 'lwc_shipping_rayspeed_options', 'lwc_shipping_rayspeed_section' );
 
 		// General Settings for admin menu customizations.
 		register_setting( 'lwc_general_options', 'lwc_menu_title', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -652,6 +674,59 @@ class LWC_Admin_Settings {
 		echo '<input type="text" name="lwc_fedex_shipper_phone" value="' . esc_attr( $value ) . '" class="regular-text" />';
 		echo '<p class="description">' . esc_html__( 'Required by FedEx when creating shipments and printing labels.', 'lovecatz-wc' ) . '</p>';
 	}
+
+	public function render_rayspeed_section_intro() {
+		echo '<p>' . esc_html__( 'RaySpeed RETAIL development integration for pricing, test AWB creation, and tracking. Production endpoints and credentials must be supplied by RaySpeed before going live.', 'lovecatz-wc' ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Connection:', 'lovecatz-wc' ) . '</strong> <span id="lwc-rayspeed-connection-status">' . esc_html__( 'Not tested', 'lovecatz-wc' ) . '</span> <button type="button" class="button" id="lwc-rayspeed-test-connection">' . esc_html__( 'Test Sandbox API', 'lovecatz-wc' ) . '</button></p>';
+	}
+
+	public function render_rayspeed_enabled_field() {
+		echo '<label><input type="checkbox" name="lwc_rayspeed_enabled" value="yes" ' . checked( get_option( 'lwc_rayspeed_enabled', 'no' ), 'yes', false ) . '> ' . esc_html__( 'Offer RaySpeed rates for destinations outside Indonesia', 'lovecatz-wc' ) . '</label>';
+	}
+
+	public function render_rayspeed_api_key_field() {
+		echo '<input id="lwc_rayspeed_api_key" type="password" name="lwc_rayspeed_api_key" value="' . esc_attr( get_option( 'lwc_rayspeed_api_key', '' ) ) . '" class="regular-text" autocomplete="new-password">';
+	}
+
+	public function render_rayspeed_origin_field() {
+		$this->render_select( 'lwc_rayspeed_origin', array( 'JKT' => 'Jakarta (JKT)', 'SBY' => 'Surabaya (SBY)', 'MES' => 'Medan (MES)' ), 'JKT' );
+	}
+
+	public function render_rayspeed_category_field() {
+		$this->render_select( 'lwc_rayspeed_category', array( 'General Package' => __( 'General Package', 'lovecatz-wc' ), 'Food' => __( 'Food', 'lovecatz-wc' ) ), 'General Package' );
+	}
+
+	public function render_rayspeed_type_field() {
+		$this->render_select( 'lwc_rayspeed_type', array( 'NOC' => __( 'Non-document (NOC)', 'lovecatz-wc' ), 'DOC' => __( 'Document (DOC)', 'lovecatz-wc' ) ), 'NOC' );
+	}
+
+	public function render_rayspeed_shipment_type_field() {
+		$this->render_select( 'lwc_rayspeed_shipment_type', array( 'Regular' => __( 'Regular', 'lovecatz-wc' ), 'Express' => __( 'Express', 'lovecatz-wc' ) ), 'Regular' );
+	}
+
+	public function render_rayspeed_insurance_field() {
+		$this->render_select( 'lwc_rayspeed_insurance', array( 'No' => __( 'No', 'lovecatz-wc' ), 'Yes' => __( 'Yes', 'lovecatz-wc' ) ), 'No' );
+	}
+
+	public function render_rayspeed_tax_duty_field() {
+		$this->render_select( 'lwc_rayspeed_tax_duty', array( 'Receiver' => __( 'Receiver', 'lovecatz-wc' ), 'Shipper' => __( 'Shipper', 'lovecatz-wc' ) ), 'Receiver' );
+	}
+
+	private function render_select( $name, $options, $default ) {
+		$current = get_option( $name, $default );
+		echo '<select name="' . esc_attr( $name ) . '">';
+		foreach ( $options as $value => $label ) {
+			echo '<option value="' . esc_attr( $value ) . '"' . selected( $current, $value, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select>';
+	}
+
+	public function sanitize_rayspeed_origin( $value ) { return in_array( $value, array( 'JKT', 'SBY', 'MES' ), true ) ? $value : 'JKT'; }
+	public function sanitize_rayspeed_category( $value ) { return 'Food' === $value ? 'Food' : 'General Package'; }
+	public function sanitize_rayspeed_type( $value ) { return 'DOC' === $value ? 'DOC' : 'NOC'; }
+	public function sanitize_rayspeed_shipment_type( $value ) { return 'Express' === $value ? 'Express' : 'Regular'; }
+	public function sanitize_rayspeed_insurance( $value ) { return 'Yes' === $value ? 'Yes' : 'No'; }
+	public function sanitize_rayspeed_tax_duty( $value ) { return 'Shipper' === $value ? 'Shipper' : 'Receiver'; }
 
 	/**
 	 * Render introductory text for the general settings section.

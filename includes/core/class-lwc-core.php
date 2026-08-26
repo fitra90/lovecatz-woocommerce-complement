@@ -18,6 +18,9 @@ class LWC_Core {
 	 */
 	private $fedex_global_method = null;
 
+	/** @var LWC_Shipping_RaySpeed|null */
+	private $rayspeed_global_method = null;
+
 	/**
 	 * Initialize the core functionality.
 	 */
@@ -104,6 +107,9 @@ class LWC_Core {
 			$fedex_order_admin = new LWC_FedEx_Order_Admin();
 			$fedex_order_admin->init();
 		}
+		if ( class_exists( 'LWC_RaySpeed_Order_Admin' ) ) {
+			( new LWC_RaySpeed_Order_Admin() )->init();
+		}
 
 		// Product quantity limits — load from organized path.
 		if ( file_exists( LWC_PLUGIN_DIR . 'products/class-lwc-product-quantity-limits.php' ) ) {
@@ -116,6 +122,9 @@ class LWC_Core {
 		// merchant has not added FedEx to a WooCommerce shipping zone.
 		if ( class_exists( 'LWC_Shipping_FedEx' ) ) {
 			add_filter( 'woocommerce_package_rates', array( $this, 'add_global_fedex_rates' ), 5, 2 );
+		}
+		if ( class_exists( 'LWC_Shipping_RaySpeed' ) ) {
+			add_filter( 'woocommerce_package_rates', array( $this, 'add_global_rayspeed_rates' ), 6, 2 );
 		}
 
 		// Built-in currency converter (idle when an external one is active).
@@ -165,6 +174,14 @@ class LWC_Core {
 		return $this->fedex_global_method->inject_global_rates( $rates, $package );
 	}
 
+	/** Add RaySpeed rates globally for international packages. */
+	public function add_global_rayspeed_rates( $rates, $package ) {
+		if ( null === $this->rayspeed_global_method ) {
+			$this->rayspeed_global_method = new LWC_Shipping_RaySpeed();
+		}
+		return $this->rayspeed_global_method->inject_global_rates( $rates, $package );
+	}
+
 	/**
 	 * Register the available shipping methods.
 	 *
@@ -178,6 +195,7 @@ class LWC_Core {
 		// Legacy alias: pre-split J&T zone instances keep working as Express.
 		$methods['lwc_jt'] = 'LWC_Shipping_JT_Express';
 		$methods['lwc_fedex'] = 'LWC_Shipping_FedEx';
+		$methods['lwc_rayspeed'] = 'LWC_Shipping_RaySpeed';
 		return $methods;
 	}
 }

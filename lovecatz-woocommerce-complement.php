@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.22
+ * Version:     1.0.23
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.22' );
+define( 'LWC_VERSION', '1.0.23' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -103,6 +103,7 @@ function lwc_init() {
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_key", 'lwc_decrypt_secret' );
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
 	}
+	add_filter( 'option_lwc_rayspeed_api_key', 'lwc_decrypt_secret' );
 
 	// Include core plugin classes.
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-logger.php';
@@ -115,6 +116,9 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-rayspeed-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-shipping-rayspeed.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-rayspeed-order-admin.php';
 	require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-core.php';
 
 	// Carry pre-split J&T credentials into the Express provider once.
@@ -132,6 +136,7 @@ add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' )
 add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
+add_action( 'wp_ajax_lwc_check_rayspeed_connection', 'lwc_check_rayspeed_connection' );
 add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
 add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
@@ -580,8 +585,23 @@ function lwc_register_shipping_methods( $methods ) {
 	$methods['lwc_jt'] = 'LWC_Shipping_JT_Express';
 	$methods['lwc_shipping_fedex'] = 'LWC_Shipping_FedEx';
 	$methods['lwc_fedex'] = 'LWC_Shipping_FedEx';
+	$methods['lwc_rayspeed'] = 'LWC_Shipping_RaySpeed';
 
 	return $methods;
+}
+
+/** Test a RaySpeed development key without storing it. */
+function lwc_check_rayspeed_connection() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Permission denied.', 'lovecatz-wc' ) ), 403 );
+	}
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+	$key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+	$result = ( new LWC_RaySpeed_API( $key ) )->test_connection();
+	if ( empty( $result['success'] ) ) {
+		wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : __( 'RaySpeed connection failed.', 'lovecatz-wc' ) ) );
+	}
+	wp_send_json_success( array( 'message' => $result['message'] ) );
 }
 
 /**

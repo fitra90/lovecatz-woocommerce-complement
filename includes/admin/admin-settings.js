@@ -165,6 +165,27 @@
         toggleMaximumDiscount();
     }
 
+    function initRaySpeedConnectionTest() {
+        $('#lwc-rayspeed-test-connection').on('click', function () {
+            var button = $(this);
+            var status = $('#lwc-rayspeed-connection-status');
+            button.prop('disabled', true);
+            status.text('Checking Sandbox API...');
+            $.post(window.lwcFedexSettings.ajax_url, {
+                action: 'lwc_check_rayspeed_connection',
+                nonce: window.lwcFedexSettings.nonce,
+                api_key: $('#lwc_rayspeed_api_key').val()
+            }).done(function (response) {
+                var data = response && response.data ? response.data : {};
+                status.text(data.message || (response.success ? 'Connected.' : 'Connection failed.'));
+            }).fail(function () {
+                status.text('Connection request failed.');
+            }).always(function () {
+                button.prop('disabled', false);
+            });
+        });
+    }
+
     $(document).ready(function () {
         if ($('#lwc_menu_icon_class').length) {
             initDashiconSelectors();
@@ -184,6 +205,10 @@
 
         if ($('#lwc_promo_discount_type').length) {
             initPromoDiscountType();
+        }
+
+        if ($('#lwc-rayspeed-test-connection').length) {
+            initRaySpeedConnectionTest();
         }
 
 	});
