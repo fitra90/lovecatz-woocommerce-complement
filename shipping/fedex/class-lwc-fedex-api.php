@@ -221,10 +221,15 @@ class LWC_FedEx_API {
 		$body = $this->parse_response_body( $response );
 
 		if ( ! $body ) {
-			$this->log( 'Shipment request failed: empty or invalid response.', 'error' );
+			$message = $this->describe_invalid_response( $response );
+			$this->log( 'Shipment request failed: ' . $message, 'error' );
 			return array(
 				'success' => false,
-				'message' => __( 'FedEx shipment request returned no response.', 'lovecatz-wc' ),
+				'message' => sprintf(
+					/* translators: %s: safe HTTP/transport error detail. */
+					__( 'FedEx shipment request failed: %s', 'lovecatz-wc' ),
+					$message
+				),
 			);
 		}
 
@@ -474,18 +479,21 @@ class LWC_FedEx_API {
 		$response = wp_remote_post( $url, $args );
 		if ( is_wp_error( $response ) ) {
 			$this->debug( 'oauth_http_error', array( 'message' => $response->get_error_message() ) );
+			$this->log( 'OAuth request failed: ' . sanitize_text_field( $response->get_error_message() ), 'error' );
 			return '';
 		}
 
 		$body = $this->parse_response_body( $response );
 		if ( ! is_array( $body ) || empty( $body['access_token'] ) ) {
+			$error_message = isset( $body['error_description'] ) ? $body['error_description'] : ( isset( $body['error'] ) ? $body['error'] : $this->describe_invalid_response( $response ) );
 			$this->debug(
 				'oauth_rejected',
 				array(
 					'http_status' => wp_remote_retrieve_response_code( $response ),
-					'message'     => isset( $body['error_description'] ) ? $body['error_description'] : ( isset( $body['error'] ) ? $body['error'] : 'No access token in response.' ),
+					'message'     => $error_message,
 				)
 			);
+			$this->log( 'OAuth request rejected: ' . sanitize_text_field( $error_message ), 'error' );
 			return '';
 		}
 
@@ -537,6 +545,36 @@ class LWC_FedEx_API {
 
 		$decoded = json_decode( $body, true );
 		return is_array( $decoded ) ? $decoded : false;
+	}
+
+	/**
+	 * Describe a failed response without exposing credentials or label data.
+	 *
+	 * @param array|WP_Error $response WordPress HTTP response.
+	 * @return string
+	 */
+	private function describe_invalid_response( $response ) {
+		if ( is_wp_error( $response ) ) {
+			return sanitize_text_field( $response->get_error_message() );
+		}
+
+		$status       = (int) wp_remote_retrieve_response_code( $response );
+		$content_type = (string) wp_remote_retrieve_header( $response, 'content-type' );
+		$body         = trim( (string) wp_remote_retrieve_body( $response ) );
+
+		if ( '' === $body ) {
+			return sprintf( 'HTTP %d returned an empty response.', $status );
+		}
+
+		// FedEx errors are JSON. For HTML/proxy failures, record only a short,
+		// tag-free excerpt so logs never contain credentials or label content.
+		$excerpt = sanitize_text_field( wp_strip_all_tags( substr( $body, 0, 300 ) ) );
+		return sprintf(
+			'HTTP %1$d returned invalid JSON%2$s%3$s',
+			$status,
+			'' !== $content_type ? ' (' . sanitize_text_field( $content_type ) . ')' : '',
+			'' !== $excerpt ? ': ' . $excerpt : '.'
+		);
 	}
 
 	/**
@@ -828,7 +866,6 @@ class LWC_FedEx_API {
 					'labelFormatType' => 'COMMON2D',
 					'labelStockType' => 'PAPER_4X6',
 					'imageType' => 'PDF',
-					'labelPrintingOrientation' => 'BOTTOM_EDGE_OF_LABEL',
 				),
 				'requestedPackageLineItems' => $this->format_package_line_items( $packages ),
 			),
