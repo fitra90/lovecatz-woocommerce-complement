@@ -18,6 +18,9 @@ class LWC_Core {
 	 */
 	private $fedex_global_method = null;
 
+	/** @var LWC_Shipping_JT_Express|null */
+	private $jt_express_global_method = null;
+
 	/** @var LWC_Shipping_RaySpeed|null */
 	private $rayspeed_global_method = null;
 
@@ -110,6 +113,9 @@ class LWC_Core {
 		if ( class_exists( 'LWC_RaySpeed_Order_Admin' ) ) {
 			( new LWC_RaySpeed_Order_Admin() )->init();
 		}
+		if ( class_exists( 'LWC_JT_Order_Admin' ) ) {
+			( new LWC_JT_Order_Admin() )->init();
+		}
 
 		// Product quantity limits — load from organized path.
 		if ( file_exists( LWC_PLUGIN_DIR . 'products/class-lwc-product-quantity-limits.php' ) ) {
@@ -125,6 +131,9 @@ class LWC_Core {
 		}
 		if ( class_exists( 'LWC_Shipping_RaySpeed' ) ) {
 			add_filter( 'woocommerce_package_rates', array( $this, 'add_global_rayspeed_rates' ), 6, 2 );
+		}
+		if ( class_exists( 'LWC_Shipping_JT_Express' ) ) {
+			add_filter( 'woocommerce_package_rates', array( $this, 'add_global_jt_express_rates' ), 7, 2 );
 		}
 
 		// Built-in currency converter (idle when an external one is active).
@@ -180,6 +189,14 @@ class LWC_Core {
 			$this->rayspeed_global_method = new LWC_Shipping_RaySpeed();
 		}
 		return $this->rayspeed_global_method->inject_global_rates( $rates, $package );
+	}
+
+	/** Add J&T Express globally for domestic Indonesian packages. */
+	public function add_global_jt_express_rates( $rates, $package ) {
+		if ( null === $this->jt_express_global_method ) {
+			$this->jt_express_global_method = new LWC_Shipping_JT_Express();
+		}
+		return $this->jt_express_global_method->inject_global_rates( $rates, $package );
 	}
 
 	/**

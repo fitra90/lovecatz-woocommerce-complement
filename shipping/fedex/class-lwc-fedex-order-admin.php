@@ -15,7 +15,7 @@ class LWC_FedEx_Order_Admin {
 	 * Initialize hooks.
 	 */
 	public function init() {
-		add_action( 'add_meta_boxes', array( $this, 'register_metabox' ) );
+		add_action( 'add_meta_boxes', array( $this, 'register_metabox' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_customer_assets' ) );
 		add_action( 'wp_ajax_lwc_fedex_refresh_tracking', array( $this, 'ajax_refresh_tracking' ) );
@@ -33,7 +33,12 @@ class LWC_FedEx_Order_Admin {
 	 * Both the classic shop_order screen and the HPOS orders screen are
 	 * registered; unknown screens are ignored by WordPress.
 	 */
-	public function register_metabox() {
+	public function register_metabox( $post_type = '', $post_or_order = null ) {
+		$order = $this->resolve_admin_order( $post_or_order );
+		if ( ! $this->order_uses_fedex( $order ) ) {
+			return;
+		}
+
 		add_meta_box(
 			'lwc_fedex_shipping',
 			__( 'FedEx Shipping', 'lovecatz-wc' ),
@@ -52,10 +57,43 @@ class LWC_FedEx_Order_Admin {
 		if ( ! $screen || ! in_array( $screen->id, array( 'shop_order', 'woocommerce_page_wc-orders' ), true ) ) {
 			return;
 		}
+		if ( ! $this->order_uses_fedex( $this->resolve_admin_order() ) ) {
+			return;
+		}
 
 		wp_enqueue_style( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.css', array(), LWC_VERSION );
 		wp_enqueue_script( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.js', array( 'jquery' ), LWC_VERSION, true );
 		wp_localize_script( 'lwc-fedex-order-admin', 'lwcFedexOrder', $this->get_script_config() );
+	}
+
+	/** Resolve an order on both classic and HPOS admin screens. */
+	private function resolve_admin_order( $post_or_order = null ) {
+		if ( $post_or_order instanceof WC_Order ) {
+			return $post_or_order;
+		}
+		if ( $post_or_order instanceof WP_Post ) {
+			return wc_get_order( $post_or_order->ID );
+		}
+		$order_id = 0;
+		if ( isset( $_GET['id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = absint( wp_unslash( $_GET['id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = absint( wp_unslash( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		return $order_id ? wc_get_order( $order_id ) : false;
+	}
+
+	/** Whether the customer selected FedEx for this order. */
+	private function order_uses_fedex( $order ) {
+		if ( ! $order instanceof WC_Order ) {
+			return false;
+		}
+		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
+			if ( 'lwc_fedex' === $shipping_item->get_method_id() ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

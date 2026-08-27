@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.23
+ * Version:     1.0.30
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.23' );
+define( 'LWC_VERSION', '1.0.30' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -102,6 +102,12 @@ function lwc_init() {
 	foreach ( array( 'express', 'cargo' ) as $lwc_jt_provider ) {
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_key", 'lwc_decrypt_secret' );
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
+		foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
+			add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_api_key", 'lwc_decrypt_secret' );
+			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
+				add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
+			}
+		}
 	}
 	add_filter( 'option_lwc_rayspeed_api_key', 'lwc_decrypt_secret' );
 
@@ -110,11 +116,14 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-express-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-route-mapper.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-base.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-order-admin.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-rayspeed-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-shipping-rayspeed.php';
@@ -142,6 +151,10 @@ add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
+add_action( 'wp_enqueue_scripts', 'lwc_enqueue_shipping_accordion' );
+add_action( 'woocommerce_after_checkout_validation', 'lwc_validate_jt_checkout_contact', 10, 2 );
+add_action( 'woocommerce_store_api_checkout_update_order_meta', 'lwc_validate_jt_store_api_order' );
+add_filter( 'woocommerce_hidden_order_itemmeta', 'lwc_hide_shipping_technical_meta' );
 register_activation_hook( __FILE__, 'lwc_activate' );
 register_deactivation_hook( __FILE__, 'lwc_deactivate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
@@ -588,6 +601,91 @@ function lwc_register_shipping_methods( $methods ) {
 	$methods['lwc_rayspeed'] = 'LWC_Shipping_RaySpeed';
 
 	return $methods;
+}
+
+/** Load the compact shipping-method accordion on checkout. */
+function lwc_enqueue_shipping_accordion() {
+	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
+		return;
+	}
+
+	wp_enqueue_style( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.css', array(), LWC_VERSION );
+	wp_enqueue_script( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.js', array( 'jquery' ), LWC_VERSION, true );
+	wp_localize_script(
+		'lwc-shipping-accordion',
+		'lwcShippingAccordion',
+		array(
+			'caption'      => __( 'Shipping method', 'lovecatz-wc' ),
+			'noneSelected' => __( 'Select a shipping method', 'lovecatz-wc' ),
+		)
+	);
+}
+
+/** Require the recipient fields needed by J&T before checkout can finish. */
+function lwc_validate_jt_checkout_contact( $data, $errors ) {
+	$chosen = function_exists( 'WC' ) && WC()->session ? (array) WC()->session->get( 'chosen_shipping_methods', array() ) : array();
+	$uses_jt = false;
+	foreach ( $chosen as $method ) {
+		if ( 0 === strpos( (string) $method, 'lwc_jt_express' ) || 0 === strpos( (string) $method, 'lwc_jt:' ) ) {
+			$uses_jt = true;
+			break;
+		}
+	}
+	if ( ! $uses_jt ) {
+		return;
+	}
+	if ( empty( $data['billing_phone'] ) ) {
+		$errors->add( 'lwc_jt_phone_required', __( 'A recipient phone number is required for J&T Express shipping.', 'lovecatz-wc' ) );
+	}
+	$postcode = ! empty( $data['shipping_postcode'] ) ? $data['shipping_postcode'] : ( isset( $data['billing_postcode'] ) ? $data['billing_postcode'] : '' );
+	if ( '' === trim( (string) $postcode ) ) {
+		$errors->add( 'lwc_jt_postcode_required', __( 'A recipient postal code is required for J&T Express shipping.', 'lovecatz-wc' ) );
+	}
+}
+
+/**
+ * Apply the same required recipient checks to Checkout Block / Store API.
+ * WooCommerce explicitly supports aborting this hook with an exception.
+ *
+ * @param WC_Order $order Draft checkout order.
+ * @throws Exception When J&T receiver details are incomplete.
+ */
+function lwc_validate_jt_store_api_order( $order ) {
+	if ( ! $order instanceof WC_Order ) {
+		return;
+	}
+
+	$uses_jt = false;
+	foreach ( $order->get_items( 'shipping' ) as $item ) {
+		if ( in_array( $item->get_method_id(), array( 'lwc_jt_express', 'lwc_jt' ), true ) ) {
+			$uses_jt = true;
+			break;
+		}
+	}
+	if ( ! $uses_jt ) {
+		return;
+	}
+
+	$postcode = $order->get_shipping_postcode() ? $order->get_shipping_postcode() : $order->get_billing_postcode();
+	if ( '' === trim( (string) $order->get_billing_phone() ) || '' === trim( (string) $postcode ) ) {
+		throw new Exception( esc_html__( 'A recipient phone number and postal code are required for J&T Express shipping.', 'lovecatz-wc' ) );
+	}
+}
+
+/** Hide internal courier routing data from order line-item tables. */
+function lwc_hide_shipping_technical_meta( $hidden ) {
+	return array_values(
+		array_unique(
+			array_merge(
+				(array) $hidden,
+				array(
+					'lwc_jt_provider',
+					'lwc_jt_max_weight',
+					'lwc_jt_environment',
+				)
+			)
+		)
+	);
 }
 
 /** Test a RaySpeed development key without storing it. */

@@ -1,0 +1,23 @@
+.lwc-jt-order-box .button {
+	margin-bottom: 6px;
+}
+
+#lwc-jt-order-status {
+	margin: 8px 0;
+}
+
+#lwc-jt-order-status.is-error {
+	color: #b32d2e;
+}
+
+#lwc-jt-order-status.is-success {
+	color: #008a20;
+}
+
+.lwc-jt-tracking-events {
+	margin: 10px 0 0 18px;
+}
+
+.lwc-jt-tracking-events li {
+	margin-bottom: 8px;
+}

@@ -161,6 +161,8 @@ Shipment creation sends a complete REST v1 payload: shipper/recipient contacts a
 
 Authenticated AJAX actions are `lwc_check_fedex_connection`, `lwc_fedex_get_rate_quote`, `lwc_fedex_create_shipment`, and `lwc_fedex_download_label`. All require `manage_woocommerce` and the FedEx nonce. The create-shipment response omits the raw API body and returns the tracking number plus a nonce-protected download URL. Label download normalizes and constrains paths to the uploads directory.
 
+Order fulfillment metaboxes are provider-specific: FedEx controls and assets load only when an order shipping item has method ID `lwc_fedex`, while RaySpeed controls and assets load only for `lwc_rayspeed`. J&T orders therefore do not display unrelated FedEx or RaySpeed settings. This routing reads the order's shipping items and supports both classic and HPOS order screens.
+
 ### Built-in currency converter
 
 `LWC_Currency_Converter` (Currency tab) switches the shop between the base currency and manually configured targets. Rates use one line per currency, `CODE=rate`, where rate is base-currency units per one unit of the target (`USD=16500` means 1 USD = 16,500 IDR; conversion divides). Shoppers switch with `?currency=USD`, persisted in a 30-day `lwc_currency` cookie.
@@ -178,9 +180,13 @@ J&T is split into two independent providers, each with its own credentials, zone
 - **`lwc_jt_express`** (`LWC_Shipping_JT_Express`) — regular parcels; auto-split threshold default 10 kg, hard ceiling 100 kg (`lwc_jt_express_package_weight_ceiling_kg` filter).
 - **`lwc_jt_cargo`** (`LWC_Shipping_JT_Cargo`) — large/heavy shipments (10 kg minimum billable, tiers H50–H500); auto-split off by default, ceiling 500 kg (`lwc_jt_cargo_package_weight_ceiling_kg` filter).
 
-Both extend `LWC_Shipping_JT_Base`, expose a flat provisional cost and a max-package-weight setting, and stamp the provider plus threshold into rate meta for the future live integration. The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. Credentials live under `lwc_jt_{provider}_*` options/tables; a single "J&T" switcher button opens one page containing both the Express and Cargo forms (each with its own section heading), and legacy pre-split credentials migrate to Express once.
+Both extend `LWC_Shipping_JT_Base` and retain independent configuration. Rates are rejected unless the destination country is Indonesia (`ID`). The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. J&T Express and J&T Cargo appear as independent Shipping provider tabs. Each has its own active Sandbox/Production selector and isolated credential namespace. Express stores the distinct Order, Tariff, Tracking, and Cancellation credentials required by J&T Indonesia; Cargo retains a generic independent account form until its API contract is supplied. Sandbox endpoint URLs are backend constants rather than editable settings; production endpoints are injected later via the `lwc_jt_express_production_endpoints` filter. Settings contain no direct API test actions. Legacy pre-split credentials migrate to Express once.
 
-Neither provider is a live API integration yet: `calculate_shipping()` returns a configurable flat cost regardless of destination or weight. Live rates, waybills, tracking, and estimates are not implemented.
+When checkout contains two or more shipping choices, the frontend progressively enhances each shipping-method list into a compact accordion. Its header displays the selected courier, expands accessibly to show all choices, and closes after selection. The enhancement is reapplied after classic checkout AJAX refreshes and WooCommerce Blocks DOM updates; a single shipping choice remains unchanged.
+
+J&T Express is a live sandbox integration. At checkout it resolves the Indonesian destination through a postcode mapping (`postcode|city_code|area_code|tariff_area`), calls the J&T Tariff endpoint, and publishes the returned services. Sandbox may use its explicitly configured route and price fallbacks; Production fails closed when its endpoint, credentials, or postcode mapping are incomplete. The selected environment, service, route, weight, and rate source are copied to private shipping-item metadata.
+
+When a J&T Express order enters **Processing**, `LWC_JT_Order_Admin` validates shipper and recipient fields, creates the J&T order exactly once, saves the AWB/order ID/ETD, and immediately requests tracking. Failures are retained in order metadata and order notes without issuing duplicate orders on later status changes. The provider-specific order metabox offers retry, tracking refresh, and cancellation controls; AWB and stored tracking events are also displayed to the customer. Classic checkout and Checkout Block both require the recipient phone and postcode when J&T is selected. J&T Cargo remains provisional and has no Express API coupling.
 
 ### Manual partial shipping (FedEx)
 
@@ -193,7 +199,7 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 - Product meta: `_lwc_minimum_quantity`, `_lwc_maximum_quantity`.
 - User meta: `lwc_customer_id` plus WooCommerce billing/shipping fields.
 - Coupon meta: LoveCatz promo fields listed above.
-- Order meta: `_lwc_fedex_label_path`, `_lwc_fedex_tracking_number`.
+- Order meta: `_lwc_fedex_label_path`, `_lwc_fedex_tracking_number`, `_lwc_jt_awb`, `_lwc_jt_order_id`, `_lwc_jt_etd`, `_lwc_jt_tracking`, `_lwc_jt_create_error`, `_lwc_jt_tracking_error`, `_lwc_jt_cancelled`.
 
 ## Known architecture issues
 
@@ -218,7 +224,7 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 - On the order screen: verify the quote button uses the ship-to address, label creation stores tracking + note, and the download link streams the PDF only for permitted users.
 - Test native FedEx currency paths: base IDR checkout (integer amounts), USD via CURCY, and USD via the built-in converter — confirm no double conversion and correct decimals in each.
 - Verify manual partial shipping: uncheck an item, create the AWB, confirm the shipment history grows, the item is marked shipped, and each label downloads individually.
-- Treat J&T Express and J&T Cargo as provisional until live implementations exist.
+- Verify J&T Express end to end: live tariff at checkout, required recipient data, transition to Processing, one AWB only, immediate/manual tracking, cancellation, and customer tracking output. Keep Cargo isolated and provisional.
 
 ## Priorities
 
@@ -228,5 +234,5 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 4. Consolidate membership classes.
 5. Consolidate shipping registration without changing persisted IDs.
 6. Implement or remove the Currency placeholder.
-7. Replace provisional J&T pricing before advertising real-time support.
+7. Add the official J&T Production endpoints and complete postcode/area mappings before enabling Production.
 8. Define uninstall retention for options, metadata, coupons, tables, and labels.

@@ -104,6 +104,20 @@ class LWC_JT_Account {
 
 	public static function get_option_value( $option_name, $default = '', $provider = 'express' ) {
 		$provider = self::normalize_provider( $provider );
+		$credential_fields = array(
+			"lwc_jt_{$provider}_api_key" => 'api_key',
+		);
+		if ( isset( $credential_fields[ $option_name ] ) ) {
+			$legacy      = 'yes' === get_option( "lwc_jt_{$provider}_test_mode", 'no' ) ? 'sandbox' : 'production';
+			$environment = 'production' === get_option( "lwc_jt_{$provider}_environment", $legacy ) ? 'production' : 'sandbox';
+			$value       = get_option( "lwc_jt_{$provider}_{$environment}_{$credential_fields[ $option_name ]}", null );
+			if ( null !== $value ) {
+				return $value;
+			}
+		}
+		if ( "lwc_jt_{$provider}_test_mode" === $option_name && null !== get_option( "lwc_jt_{$provider}_environment", null ) ) {
+			return 'sandbox' === get_option( "lwc_jt_{$provider}_environment" ) ? 'yes' : 'no';
+		}
 		$account = self::get_account( $provider );
 		$field_map = array(
 			"lwc_jt_{$provider}_api_key"    => 'api_key',
@@ -116,6 +130,34 @@ class LWC_JT_Account {
 		}
 
 		return get_option( $option_name, $default );
+	}
+
+	/** Return the active credential set for a provider. */
+	public static function get_active_credentials( $provider = 'express' ) {
+		$provider    = self::normalize_provider( $provider );
+		$legacy      = 'yes' === get_option( "lwc_jt_{$provider}_test_mode", 'no' ) ? 'sandbox' : 'production';
+		$environment = 'production' === get_option( "lwc_jt_{$provider}_environment", $legacy ) ? 'production' : 'sandbox';
+		return self::get_credentials( $provider, $environment );
+	}
+
+	/** Return one provider/environment credential set. */
+	public static function get_credentials( $provider = 'express', $environment = 'sandbox' ) {
+		$provider    = self::normalize_provider( $provider );
+		$environment = 'production' === $environment ? 'production' : 'sandbox';
+		$prefix      = "lwc_jt_{$provider}_{$environment}";
+
+		$credentials = array(
+			'provider'    => $provider,
+			'environment' => $environment,
+		);
+		$fields = 'express' === $provider
+			? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'cancel_username', 'cancel_api_key', 'cancel_key' )
+			: array( 'username', 'api_key', 'api_secret' );
+		foreach ( $fields as $field ) {
+			$credentials[ $field ] = get_option( "{$prefix}_{$field}", '' );
+		}
+
+		return $credentials;
 	}
 
 	public static function sync_from_options( $provider = 'express' ) {

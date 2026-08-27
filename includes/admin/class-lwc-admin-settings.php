@@ -144,7 +144,12 @@ class LWC_Admin_Settings {
 		}
 
 		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'fedex';
-		if ( ! in_array( $provider, array( 'jt', 'fedex', 'rayspeed' ), true ) ) {
+		// Keep old bookmarked J&T URLs working while presenting both carriers as
+		// independent providers in the settings navigation.
+		if ( 'jt' === $provider ) {
+			$provider = 'jt_express';
+		}
+		if ( ! in_array( $provider, array( 'jt_express', 'jt_cargo', 'fedex', 'rayspeed' ), true ) ) {
 			$provider = 'fedex';
 		}
 		?>
@@ -173,30 +178,21 @@ class LWC_Admin_Settings {
 			<?php elseif ( 'shipping' === $active_tab ) : ?>
 				<h2 class="nav-tab-wrapper lwc-shipping-provider-tabs">
 					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="nav-tab <?php echo 'fedex' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?></a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=jt" class="nav-tab <?php echo 'jt' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T', 'lovecatz-wc' ); ?></a>
+					<a href="?page=lovecatz-wc&tab=shipping&provider=jt_express" class="nav-tab <?php echo 'jt_express' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?></a>
+					<a href="?page=lovecatz-wc&tab=shipping&provider=jt_cargo" class="nav-tab <?php echo 'jt_cargo' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T Cargo', 'lovecatz-wc' ); ?></a>
 					<a href="?page=lovecatz-wc&tab=shipping&provider=rayspeed" class="nav-tab <?php echo 'rayspeed' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'RaySpeed', 'lovecatz-wc' ); ?></a>
 				</h2>
 
-				<?php if ( 'jt' === $provider ) : ?>
-					<div id="lwc-jt-express">
-						<form method="post" action="options.php">
-							<?php
-							settings_fields( 'lwc_shipping_jt_express_options' );
-							do_settings_sections( 'lwc_shipping_jt_express_options' );
-							submit_button();
-							?>
-						</form>
-					</div>
-
-					<div id="lwc-jt-cargo">
-						<form method="post" action="options.php">
-							<?php
-							settings_fields( 'lwc_shipping_jt_cargo_options' );
-							do_settings_sections( 'lwc_shipping_jt_cargo_options' );
-							submit_button();
-							?>
-						</form>
-					</div>
+				<?php if ( in_array( $provider, array( 'jt_express', 'jt_cargo' ), true ) ) : ?>
+					<?php $jt_provider = 'jt_cargo' === $provider ? 'cargo' : 'express'; ?>
+					<div class="notice notice-info inline"><p><?php echo esc_html( 'express' === $jt_provider ? __( 'J&T Express is available only for domestic shipments within Indonesia.', 'lovecatz-wc' ) : __( 'J&T Cargo is an independent domestic provider. Its credentials and future API workflow are not shared with J&T Express.', 'lovecatz-wc' ) ); ?></p></div>
+					<form method="post" action="options.php">
+						<?php
+						settings_fields( "lwc_shipping_jt_{$jt_provider}_options" );
+						do_settings_sections( "lwc_shipping_jt_{$jt_provider}_options" );
+						submit_button();
+						?>
+					</form>
 				<?php elseif ( 'fedex' === $provider ) : ?>
 					<div class="notice notice-info inline">
 						<p><?php esc_html_e( 'FedEx will be available for international shipments where the destination country is outside Indonesia.', 'lovecatz-wc' ); ?></p>
@@ -247,9 +243,28 @@ class LWC_Admin_Settings {
 			$group = "lwc_shipping_jt_{$jt_provider}_options";
 			$section = "lwc_shipping_jt_{$jt_provider}_section";
 
-			register_setting( $group, "lwc_jt_{$jt_provider}_api_key", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-			register_setting( $group, "lwc_jt_{$jt_provider}_api_secret", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-			register_setting( $group, "lwc_jt_{$jt_provider}_test_mode" );
+			register_setting( $group, "lwc_jt_{$jt_provider}_environment", array( 'sanitize_callback' => array( $this, 'sanitize_jt_environment' ) ) );
+			foreach ( array( 'sandbox', 'production' ) as $jt_environment ) {
+				$prefix = "lwc_jt_{$jt_provider}_{$jt_environment}";
+				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'cancel_username' ) : array( 'username' );
+				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
+				foreach ( $text_fields as $field ) {
+					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
+				}
+				foreach ( $secret_fields as $field ) {
+					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+				}
+			}
+			if ( 'express' === $jt_provider ) {
+				register_setting( $group, 'lwc_jt_express_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+				register_setting( $group, 'lwc_jt_express_checkout_cost', array( 'default' => 10000, 'sanitize_callback' => array( $this, 'sanitize_non_negative_number' ) ) );
+				register_setting( $group, 'lwc_jt_express_fallback_enabled', array( 'default' => 'yes', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+				foreach ( array( 'origin_tariff_code', 'origin_city_code', 'shipper_name', 'shipper_phone', 'shipper_address', 'sandbox_destination_city_code', 'sandbox_destination_area_code', 'sandbox_tariff_area' ) as $field ) {
+					register_setting( $group, "lwc_jt_express_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
+				}
+				register_setting( $group, 'lwc_jt_express_service_type', array( 'default' => '6', 'sanitize_callback' => array( $this, 'sanitize_jt_service_type' ) ) );
+				register_setting( $group, 'lwc_jt_express_area_mapping', array( 'sanitize_callback' => 'sanitize_textarea_field' ) );
+			}
 
 			add_settings_section(
 				$section,
@@ -268,32 +283,16 @@ class LWC_Admin_Settings {
 				$group
 			);
 
-			add_settings_field(
-				"lwc_jt_{$jt_provider}_api_key",
-				__( 'API Key', 'lovecatz-wc' ),
-				array( $this, 'render_jt_api_key_field' ),
-				$group,
-				$section,
-				array( 'provider' => $jt_provider )
-			);
-
-			add_settings_field(
-				"lwc_jt_{$jt_provider}_api_secret",
-				__( 'API Secret', 'lovecatz-wc' ),
-				array( $this, 'render_jt_api_secret_field' ),
-				$group,
-				$section,
-				array( 'provider' => $jt_provider )
-			);
-
-			add_settings_field(
-				"lwc_jt_{$jt_provider}_test_mode",
-				__( 'Enable Test Mode', 'lovecatz-wc' ),
-				array( $this, 'render_jt_test_mode_field' ),
-				$group,
-				$section,
-				array( 'provider' => $jt_provider )
-			);
+			add_settings_field( "lwc_jt_{$jt_provider}_environment", __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jt_environment_field' ), $group, $section, array( 'provider' => $jt_provider ) );
+			if ( 'express' === $jt_provider ) {
+				add_settings_field( 'lwc_jt_express_enabled', __( 'Enable J&T Express', 'lovecatz-wc' ), array( $this, 'render_jt_express_enabled_field' ), $group, $section );
+				add_settings_field( 'lwc_jt_express_checkout_cost', __( 'Checkout fallback cost', 'lovecatz-wc' ), array( $this, 'render_jt_express_checkout_cost_field' ), $group, $section );
+				add_settings_field( 'lwc_jt_express_route_settings', __( 'Origin & Route Mapping', 'lovecatz-wc' ), array( $this, 'render_jt_express_route_settings' ), $group, $section );
+				add_settings_field( 'lwc_jt_express_shipper_settings', __( 'J&T Shipper', 'lovecatz-wc' ), array( $this, 'render_jt_express_shipper_settings' ), $group, $section );
+			}
+			foreach ( array( 'sandbox' => __( 'Sandbox Credentials', 'lovecatz-wc' ), 'production' => __( 'Production Credentials', 'lovecatz-wc' ) ) as $jt_environment => $label ) {
+				add_settings_field( "lwc_jt_{$jt_provider}_{$jt_environment}_credentials", $label, array( $this, 'render_jt_credentials_field' ), $group, $section, array( 'provider' => $jt_provider, 'environment' => $jt_environment ) );
+			}
 		}
 
 		register_setting(
@@ -636,6 +635,98 @@ class LWC_Admin_Settings {
 		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
 		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option></select>';
 		echo '<p class="description">' . esc_html__( 'All rates, labels, and shipment requests use the selected account.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the active API environment for one J&T provider. */
+	public function render_jt_environment_field( $args = array() ) {
+		$provider = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
+		$value    = $this->get_jt_environment( $provider );
+		$name     = "lwc_jt_{$provider}_environment";
+		echo '<select name="' . esc_attr( $name ) . '">';
+		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option>';
+		echo '</select>';
+	}
+
+	/** Render a complete, environment-specific J&T credential set. */
+	public function render_jt_credentials_field( $args = array() ) {
+		$provider    = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
+		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
+		$prefix      = "lwc_jt_{$provider}_{$environment}";
+		$fields = 'express' === $provider ? array(
+			'order_username'       => array( __( 'Order Username', 'lovecatz-wc' ), 'text' ),
+			'order_api_key'        => array( __( 'Order API Key', 'lovecatz-wc' ), 'password' ),
+			'order_key'            => array( __( 'Order Signing Key', 'lovecatz-wc' ), 'password' ),
+			'tariff_customer_name' => array( __( 'Tariff Customer Name', 'lovecatz-wc' ), 'text' ),
+			'tariff_check_key'     => array( __( 'Tariff Check Key', 'lovecatz-wc' ), 'password' ),
+			'tracking_password'    => array( __( 'Tracking Authorization Password', 'lovecatz-wc' ), 'password' ),
+			'tracking_company_id'  => array( __( 'Tracking Authorization Username / E-company ID', 'lovecatz-wc' ), 'text' ),
+			'cancel_username'      => array( __( 'Cancellation Username', 'lovecatz-wc' ), 'text' ),
+			'cancel_api_key'       => array( __( 'Cancellation API Key', 'lovecatz-wc' ), 'password' ),
+			'cancel_key'           => array( __( 'Cancellation Signing Key', 'lovecatz-wc' ), 'password' ),
+		) : array(
+			'username'   => array( __( 'Username / Account ID', 'lovecatz-wc' ), 'text' ),
+			'api_key'    => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
+			'api_secret' => array( __( 'API Secret', 'lovecatz-wc' ), 'password' ),
+		);
+
+		echo '<div class="lwc-jt-credential-group" data-provider="' . esc_attr( $provider ) . '" data-environment="' . esc_attr( $environment ) . '">';
+		foreach ( $fields as $field => $definition ) {
+			$name  = "{$prefix}_{$field}";
+			$value = get_option( $name, '' );
+			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
+		}
+		echo '<p class="description">' . esc_html__( 'API URLs are selected automatically in the backend according to the active environment and are not stored with credentials.', 'lovecatz-wc' ) . '</p></div>';
+	}
+
+	public function render_jt_express_enabled_field() {
+		echo '<input type="hidden" name="lwc_jt_express_enabled" value="no">';
+		echo '<label><input type="checkbox" name="lwc_jt_express_enabled" value="yes" ' . checked( get_option( 'lwc_jt_express_enabled', 'no' ), 'yes', false ) . '> ' . esc_html__( 'Offer J&T Express at checkout for Indonesian destinations without requiring a WooCommerce Shipping Zone.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	public function render_jt_express_checkout_cost_field() {
+		echo '<input type="hidden" name="lwc_jt_express_fallback_enabled" value="no">';
+		echo '<label><input type="checkbox" name="lwc_jt_express_fallback_enabled" value="yes" ' . checked( get_option( 'lwc_jt_express_fallback_enabled', 'yes' ), 'yes', false ) . '> ' . esc_html__( 'Use fallback if the live tariff request fails', 'lovecatz-wc' ) . '</label><br>';
+		echo '<input type="number" name="lwc_jt_express_checkout_cost" value="' . esc_attr( get_option( 'lwc_jt_express_checkout_cost', 10000 ) ) . '" min="0" step="1" class="regular-text">';
+		echo '<p class="description">' . esc_html__( 'Used only when J&T live tariff lookup is unavailable.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	public function render_jt_express_route_settings() {
+		echo '<p><label>' . esc_html__( 'Tariff origin name', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_origin_tariff_code" value="' . esc_attr( get_option( 'lwc_jt_express_origin_tariff_code', 'JAKARTA' ) ) . '" class="regular-text" placeholder="JAKARTA"></label></p>';
+		echo '<p><label>' . esc_html__( 'Order origin city code', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_origin_city_code" value="' . esc_attr( get_option( 'lwc_jt_express_origin_city_code', 'JKT' ) ) . '" class="regular-text" placeholder="JKT"></label></p>';
+		echo '<p><strong>' . esc_html__( 'Sandbox fallback route', 'lovecatz-wc' ) . '</strong></p>';
+		echo '<p><label>' . esc_html__( 'Destination city code', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_sandbox_destination_city_code" value="' . esc_attr( get_option( 'lwc_jt_express_sandbox_destination_city_code', 'JKT' ) ) . '" class="regular-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Destination area code', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_sandbox_destination_area_code" value="' . esc_attr( get_option( 'lwc_jt_express_sandbox_destination_area_code', 'JKT001' ) ) . '" class="regular-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Tariff destination area', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_sandbox_tariff_area" value="' . esc_attr( get_option( 'lwc_jt_express_sandbox_tariff_area', 'KALIDERES' ) ) . '" class="regular-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Postcode mapping', 'lovecatz-wc' ) . '<br><textarea name="lwc_jt_express_area_mapping" rows="7" class="large-text code" placeholder="57554|SOC|SOC001|SUKOHARJO">' . esc_textarea( get_option( 'lwc_jt_express_area_mapping', '' ) ) . '</textarea></label></p>';
+		echo '<p class="description">' . esc_html__( 'One route per line: postcode|city_code|area_code|tariff_area. Production checkout requires a matching postcode. Sandbox uses its fallback route when no mapping exists.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	public function render_jt_express_shipper_settings() {
+		$address = trim( implode( ', ', array_filter( array( get_option( 'woocommerce_store_address', '' ), get_option( 'woocommerce_store_address_2', '' ), get_option( 'woocommerce_store_city', '' ) ) ) ) );
+		echo '<p><label>' . esc_html__( 'Shipper name', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_shipper_name" value="' . esc_attr( get_option( 'lwc_jt_express_shipper_name', get_bloginfo( 'name' ) ) ) . '" class="regular-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Shipper phone (+62...)', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_shipper_phone" value="' . esc_attr( get_option( 'lwc_jt_express_shipper_phone', get_option( 'lwc_fedex_shipper_phone', '' ) ) ) . '" class="regular-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Shipper address', 'lovecatz-wc' ) . '<br><input type="text" name="lwc_jt_express_shipper_address" value="' . esc_attr( get_option( 'lwc_jt_express_shipper_address', $address ) ) . '" class="large-text"></label></p>';
+		echo '<p><label>' . esc_html__( 'Service type', 'lovecatz-wc' ) . '<br><select name="lwc_jt_express_service_type"><option value="6"' . selected( get_option( 'lwc_jt_express_service_type', '6' ), '6', false ) . '>' . esc_html__( 'Drop Off', 'lovecatz-wc' ) . '</option><option value="1"' . selected( get_option( 'lwc_jt_express_service_type', '6' ), '1', false ) . '>' . esc_html__( 'Pickup', 'lovecatz-wc' ) . '</option></select></label></p>';
+	}
+
+	public function sanitize_non_negative_number( $value ) {
+		return max( 0, (float) str_replace( ',', '.', (string) $value ) );
+	}
+
+	public function sanitize_jt_service_type( $value ) {
+		return '1' === (string) $value ? '1' : '6';
+	}
+
+	/** Normalize a J&T environment value. */
+	public function sanitize_jt_environment( $value ) {
+		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
+	}
+
+	/** Resolve the current environment, including the legacy test-mode fallback. */
+	private function get_jt_environment( $provider ) {
+		$legacy = 'yes' === get_option( "lwc_jt_{$provider}_test_mode", 'no' ) ? 'sandbox' : 'production';
+		return 'production' === get_option( "lwc_jt_{$provider}_environment", $legacy ) ? 'production' : 'sandbox';
 	}
 
 	public function render_fedex_credentials_field( $args = array() ) {

@@ -7,14 +7,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LWC_RaySpeed_Order_Admin {
 	public function init() {
-		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
+		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_ajax_lwc_rayspeed_create_awb', array( $this, 'ajax_create_awb' ) );
 		add_action( 'wp_ajax_lwc_rayspeed_track', array( $this, 'ajax_track' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'render_customer_tracking' ) );
 	}
 
-	public function add_meta_box() {
+	public function add_meta_box( $post_type = '', $post_or_order = null ) {
+		$order = $this->resolve_admin_order( $post_or_order );
+		if ( ! $this->order_uses_rayspeed( $order ) ) {
+			return;
+		}
 		$screen = function_exists( 'wc_get_page_screen_id' ) ? wc_get_page_screen_id( 'shop-order' ) : 'shop_order';
 		add_meta_box( 'lwc-rayspeed-shipping', __( 'RaySpeed Shipping', 'lovecatz-wc' ), array( $this, 'render_meta_box' ), $screen, 'side', 'default' );
 	}
@@ -47,8 +51,39 @@ class LWC_RaySpeed_Order_Admin {
 		if ( ! $screen || ! in_array( $screen->id, array( 'shop_order', 'woocommerce_page_wc-orders' ), true ) ) {
 			return;
 		}
+		if ( ! $this->order_uses_rayspeed( $this->resolve_admin_order() ) ) {
+			return;
+		}
 		wp_enqueue_script( 'lwc-rayspeed-order', LWC_PLUGIN_URL . 'shipping/rayspeed/rayspeed-order-admin.js', array( 'jquery' ), LWC_VERSION, true );
 		wp_localize_script( 'lwc-rayspeed-order', 'lwcRaySpeedOrder', array( 'ajax_url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'lwc_rayspeed_order' ) ) );
+	}
+
+	private function resolve_admin_order( $post_or_order = null ) {
+		if ( $post_or_order instanceof WC_Order ) {
+			return $post_or_order;
+		}
+		if ( $post_or_order instanceof WP_Post ) {
+			return wc_get_order( $post_or_order->ID );
+		}
+		$order_id = 0;
+		if ( isset( $_GET['id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = absint( wp_unslash( $_GET['id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = absint( wp_unslash( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		return $order_id ? wc_get_order( $order_id ) : false;
+	}
+
+	private function order_uses_rayspeed( $order ) {
+		if ( ! $order instanceof WC_Order ) {
+			return false;
+		}
+		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
+			if ( 'lwc_rayspeed' === $shipping_item->get_method_id() ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public function ajax_create_awb() {

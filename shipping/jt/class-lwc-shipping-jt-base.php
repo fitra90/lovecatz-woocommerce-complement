@@ -71,6 +71,25 @@ abstract class LWC_Shipping_JT_Base extends WC_Shipping_Method {
 	public function init() {
 		$this->init_form_fields();
 		$this->init_settings();
+		$config      = $this->get_provider_config();
+		$this->title = $this->get_option( 'title', $config['title'] );
+	}
+
+	/** Restrict all J&T providers to domestic Indonesian destinations. */
+	public function is_available( $package = array() ) {
+		$country = isset( $package['destination']['country'] ) ? strtoupper( trim( (string) $package['destination']['country'] ) ) : '';
+		if ( 'ID' !== $country ) {
+			return false;
+		}
+		if ( 'express' === $this->provider ) {
+			if ( 'yes' !== get_option( 'lwc_jt_express_enabled', 'no' ) ) {
+				return false;
+			}
+			// The globally injected instance has no zone settings. Real zone
+			// instances must still respect their own Enable/Disable control.
+			return 0 === $this->instance_id ? true : parent::is_available( $package );
+		}
+		return parent::is_available( $package );
 	}
 
 	/**
@@ -134,7 +153,13 @@ abstract class LWC_Shipping_JT_Base extends WC_Shipping_Method {
 	 * @param array $package Shipping package data.
 	 */
 	public function calculate_shipping( $package = array() ) {
-		$cost = (float) $this->get_option( 'flat_cost', 10 );
+		if ( ! $this->is_available( $package ) ) {
+			return;
+		}
+
+		$cost = 'express' === $this->provider
+			? (float) get_option( 'lwc_jt_express_checkout_cost', 10000 )
+			: (float) $this->get_option( 'flat_cost', 10 );
 
 		if ( class_exists( 'LWC_Currency_Converter' ) ) {
 			$cost = LWC_Currency_Converter::round_for_currency( $cost );
@@ -149,6 +174,7 @@ abstract class LWC_Shipping_JT_Base extends WC_Shipping_Method {
 				'meta_data' => array(
 					'lwc_jt_provider' => $this->provider,
 					'lwc_jt_max_weight' => $this->get_max_package_weight(),
+					'lwc_jt_environment' => 'production' === get_option( "lwc_jt_{$this->provider}_environment", 'sandbox' ) ? 'production' : 'sandbox',
 				),
 			)
 		);
