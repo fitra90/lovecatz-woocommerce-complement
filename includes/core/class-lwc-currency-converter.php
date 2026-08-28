@@ -22,8 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 class LWC_Currency_Converter {
 
 	const COOKIE_NAME = 'lwc_currency';
+	const COUNTRY_COOKIE_NAME = 'lwc_currency_country';
 	const OPT_ENABLED = 'lwc_currency_enabled';
 	const OPT_RATES   = 'lwc_currency_rates';
+	const OPT_GEO_ENABLED = 'lwc_currency_geo_enabled';
+	const OPT_SWITCHER_SIZE = 'lwc_currency_switcher_size';
 	const META_BASE_CURRENCY = '_lwc_currency_base';
 	const META_ORDER_RATE    = '_lwc_currency_rate';
 	const META_BASE_TOTAL    = '_lwc_currency_base_total';
@@ -139,6 +142,13 @@ class LWC_Currency_Converter {
 		add_filter( 'woocommerce_product_variation_get_regular_price', array( $this, 'convert_price' ) );
 		add_filter( 'woocommerce_product_variation_get_sale_price', array( $this, 'convert_price' ) );
 
+		// Variable-product ranges are built directly from stored variation prices
+		// and use a persistent hash cache, bypassing the getters above.
+		add_filter( 'woocommerce_variation_prices_price', array( $this, 'convert_variation_range_price' ), 10, 3 );
+		add_filter( 'woocommerce_variation_prices_regular_price', array( $this, 'convert_variation_range_price' ), 10, 3 );
+		add_filter( 'woocommerce_variation_prices_sale_price', array( $this, 'convert_variation_range_price' ), 10, 3 );
+		add_filter( 'woocommerce_get_variation_prices_hash', array( $this, 'add_currency_to_variation_price_hash' ), 10, 3 );
+
 		// Shipping rates for every method, including the LoveCatz providers.
 		add_filter( 'woocommerce_package_rates', array( $this, 'convert_shipping_rates' ), 10, 2 );
 	}
@@ -177,6 +187,11 @@ class LWC_Currency_Converter {
 	 */
 	public function is_enabled() {
 		return 'yes' === get_option( self::OPT_ENABLED, 'no' );
+	}
+
+	/** Whether IP-country currency selection is enabled. */
+	public function is_geo_enabled() {
+		return 'yes' === get_option( self::OPT_GEO_ENABLED, 'yes' );
 	}
 
 	/**
@@ -249,8 +264,58 @@ class LWC_Currency_Converter {
 			}
 		}
 
+		// A manual URL/cookie choice always wins. Only first-time visitors fall
+		// back to IP-country detection: Indonesia uses the base currency and every
+		// other known country uses USD when a USD rate has been configured.
+		if ( $this->is_geo_enabled() ) {
+			$country = $this->detect_country();
+			if ( 'ID' === $country ) {
+				$this->selected = $this->get_base_currency();
+				return $this->selected;
+			}
+			if ( '' !== $country && $this->get_rate_for( 'USD' ) > 0 ) {
+				$this->selected = 'USD';
+				return 'USD';
+			}
+		}
+
 		$this->selected = '';
 		return '';
+	}
+
+	/**
+	 * Resolve and briefly cache the visitor country using WooCommerce's trusted
+	 * proxy headers, MaxMind database, or cached geolocation API fallback.
+	 *
+	 * @return string Two-letter country code or an empty string.
+	 */
+	public function detect_country() {
+		if ( isset( $_COOKIE[ self::COUNTRY_COOKIE_NAME ] ) ) {
+			$cached = strtoupper( preg_replace( '/[^A-Za-z]/', '', sanitize_text_field( wp_unslash( $_COOKIE[ self::COUNTRY_COOKIE_NAME ] ) ) ) );
+			if ( 2 === strlen( $cached ) ) {
+				return $cached;
+			}
+		}
+
+		if ( ( is_admin() && ! wp_doing_ajax() ) || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) || ! class_exists( 'WC_Geolocation' ) ) {
+			return '';
+		}
+
+		$location = WC_Geolocation::geolocate_ip( '', false, true );
+		$country  = isset( $location['country'] ) ? strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $location['country'] ) ) : '';
+		if ( 2 !== strlen( $country ) ) {
+			return '';
+		}
+
+		if ( ! headers_sent() ) {
+			if ( function_exists( 'wc_setcookie' ) ) {
+				wc_setcookie( self::COUNTRY_COOKIE_NAME, $country, time() + DAY_IN_SECONDS );
+			} else {
+				setcookie( self::COUNTRY_COOKIE_NAME, $country, time() + DAY_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN );
+			}
+		}
+
+		return $country;
 	}
 
 	/**
@@ -389,6 +454,36 @@ class LWC_Currency_Converter {
 		$converted = $this->convert_amount( (float) $price );
 
 		return null === $converted ? $price : $converted;
+	}
+
+	/**
+	 * Convert raw prices used to construct a variable-product price range.
+	 *
+	 * @param mixed                $price     Stored variation price.
+	 * @param WC_Product_Variation $variation Variation object.
+	 * @param WC_Product_Variable  $product   Parent product.
+	 * @return mixed
+	 */
+	public function convert_variation_range_price( $price, $variation = null, $product = null ) {
+		return $this->convert_price( $price );
+	}
+
+	/**
+	 * Separate WooCommerce's variation-price cache by currency and rate.
+	 *
+	 * @param array               $price_hash Existing hash inputs.
+	 * @param WC_Product_Variable $product    Variable product.
+	 * @param bool                $for_display Whether prices include display taxes.
+	 * @return array
+	 */
+	public function add_currency_to_variation_price_hash( $price_hash, $product = null, $for_display = false ) {
+		$currency = $this->get_selected_currency();
+		$currency = '' !== $currency ? $currency : $this->get_base_currency();
+
+		$price_hash['lwc_currency'] = $currency;
+		$price_hash['lwc_currency_rate'] = $currency === $this->get_base_currency() ? 1.0 : $this->get_rate_for( $currency );
+
+		return $price_hash;
 	}
 
 	/**
@@ -570,13 +665,16 @@ class LWC_Currency_Converter {
 		$selected   = '' !== $selected ? $selected : $base;
 		$currencies = array_merge( array( $base => 1.0 ), $this->get_rates() );
 		$action     = remove_query_arg( 'currency' );
+		$size       = $this->get_switcher_size();
+		$form_style = 'small' === $size ? 'display:inline-block;margin:0;line-height:1;' : '';
+		$select_style = 'small' === $size ? 'width:auto!important;min-width:72px!important;max-width:110px!important;height:30px!important;min-height:30px!important;padding:2px 24px 2px 8px!important;margin:0!important;font-size:12px!important;line-height:1.2!important;' : '';
 
 		ob_start();
 		?>
-		<form class="lwc-currency-switcher" method="get" action="<?php echo esc_url( $action ); ?>">
+		<form class="lwc-currency-switcher lwc-currency-switcher--<?php echo esc_attr( $size ); ?>" method="get" action="<?php echo esc_url( $action ); ?>" style="<?php echo esc_attr( $form_style ); ?>">
 			<label>
 				<span class="screen-reader-text"><?php esc_html_e( 'Choose currency', 'lovecatz-wc' ); ?></span>
-				<select name="currency" onchange="this.form.submit()">
+				<select name="currency" onchange="this.form.submit()" style="<?php echo esc_attr( $select_style ); ?>">
 					<?php foreach ( $currencies as $code => $rate ) : ?>
 						<option value="<?php echo esc_attr( $code ); ?>" <?php selected( $selected, $code ); ?>><?php echo esc_html( $code ); ?></option>
 					<?php endforeach; ?>
@@ -586,6 +684,11 @@ class LWC_Currency_Converter {
 		</form>
 		<?php
 		return (string) ob_get_clean();
+	}
+
+	/** Return the configured frontend switcher size. */
+	public function get_switcher_size() {
+		return 'small' === get_option( self::OPT_SWITCHER_SIZE, 'normal' ) ? 'small' : 'normal';
 	}
 
 	/**
@@ -638,6 +741,8 @@ class LWC_Currency_Converter {
 	 */
 	public function register_admin_settings() {
 		register_setting( 'lwc_currency_options', self::OPT_ENABLED, array( 'sanitize_callback' => array( $this, 'sanitize_yes_no' ) ) );
+		register_setting( 'lwc_currency_options', self::OPT_GEO_ENABLED, array( 'sanitize_callback' => array( $this, 'sanitize_yes_no' ) ) );
+		register_setting( 'lwc_currency_options', self::OPT_SWITCHER_SIZE, array( 'sanitize_callback' => array( $this, 'sanitize_switcher_size' ) ) );
 		register_setting( 'lwc_currency_options', self::OPT_RATES, array( 'sanitize_callback' => array( $this, 'sanitize_rates' ) ) );
 
 		add_settings_section(
@@ -651,6 +756,22 @@ class LWC_Currency_Converter {
 			self::OPT_ENABLED,
 			__( 'Enable Converter', 'lovecatz-wc' ),
 			array( $this, 'render_enabled_field' ),
+			'lwc_currency_options',
+			'lwc_currency_section'
+		);
+
+		add_settings_field(
+			self::OPT_GEO_ENABLED,
+			__( 'Automatic country detection', 'lovecatz-wc' ),
+			array( $this, 'render_geo_enabled_field' ),
+			'lwc_currency_options',
+			'lwc_currency_section'
+		);
+
+		add_settings_field(
+			self::OPT_SWITCHER_SIZE,
+			__( 'Currency dropdown size', 'lovecatz-wc' ),
+			array( $this, 'render_switcher_size_field' ),
 			'lwc_currency_options',
 			'lwc_currency_section'
 		);
@@ -688,6 +809,25 @@ class LWC_Currency_Converter {
 		esc_html_e( 'Enable the built-in currency converter.', 'lovecatz-wc' );
 	}
 
+	/** Render automatic country detection toggle. */
+	public function render_geo_enabled_field() {
+		$value = $this->is_geo_enabled() ? 'yes' : 'no';
+		echo '<input type="hidden" name="' . esc_attr( self::OPT_GEO_ENABLED ) . '" value="no" />';
+		echo '<input type="checkbox" name="' . esc_attr( self::OPT_GEO_ENABLED ) . '" value="yes" ' . checked( 'yes', $value, false ) . ' /> ';
+		esc_html_e( 'Use IDR for Indonesia and USD for every other detected country. A shopper\'s manual selection takes priority.', 'lovecatz-wc' );
+		echo '<p class="description">' . esc_html__( 'Requires a valid USD rate. Country results are cached for one day to reduce geolocation requests.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the frontend dropdown size selector. */
+	public function render_switcher_size_field() {
+		$value = $this->get_switcher_size();
+		echo '<select name="' . esc_attr( self::OPT_SWITCHER_SIZE ) . '">';
+		echo '<option value="normal"' . selected( $value, 'normal', false ) . '>' . esc_html__( 'Normal', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="small"' . selected( $value, 'small', false ) . '>' . esc_html__( 'Small', 'lovecatz-wc' ) . '</option>';
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Small is optimized for compact headers and navigation bars.', 'lovecatz-wc' ) . '</p>';
+	}
+
 	/**
 	 * Render the rates field.
 	 */
@@ -705,6 +845,11 @@ class LWC_Currency_Converter {
 	 */
 	public function sanitize_yes_no( $value ) {
 		return 'yes' === $value ? 'yes' : 'no';
+	}
+
+	/** Sanitize the currency dropdown size. */
+	public function sanitize_switcher_size( $value ) {
+		return 'small' === sanitize_key( $value ) ? 'small' : 'normal';
 	}
 
 	/**
