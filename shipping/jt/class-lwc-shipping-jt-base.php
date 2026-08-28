@@ -157,9 +157,7 @@ abstract class LWC_Shipping_JT_Base extends WC_Shipping_Method {
 			return;
 		}
 
-		$cost = 'express' === $this->provider
-			? (float) get_option( 'lwc_jt_express_checkout_cost', 10000 )
-			: (float) $this->get_option( 'flat_cost', 10 );
+		$cost = (float) $this->get_option( 'flat_cost', 10 );
 
 		if ( class_exists( 'LWC_Currency_Converter' ) ) {
 			$cost = LWC_Currency_Converter::round_for_currency( $cost );

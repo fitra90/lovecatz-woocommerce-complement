@@ -98,27 +98,19 @@ class LWC_Shipping_JT_Express extends LWC_Shipping_JT_Base {
 		$postcode    = isset( $package['destination']['postcode'] ) ? $package['destination']['postcode'] : '';
 		$route       = LWC_JT_Route_Mapper::resolve( $postcode, $environment );
 		$weight      = $this->get_package_weight_kg( $package );
-		$quotes      = array();
-		$rate_source = 'fallback';
-
-		if ( ! is_wp_error( $route ) ) {
-			$result = ( new LWC_JT_Express_API() )->get_tariff(
-				$weight,
-				strtoupper( (string) get_option( 'lwc_jt_express_origin_tariff_code', 'JAKARTA' ) ),
-				$route['tariff_area']
-			);
-			if ( ! is_wp_error( $result ) && ! empty( $result['services'] ) ) {
-				$quotes      = $result['services'];
-				$rate_source = 'live_tariff';
-			}
+		if ( is_wp_error( $route ) ) {
+			return array();
 		}
 
-		if ( empty( $quotes ) ) {
-			if ( 'yes' !== get_option( 'lwc_jt_express_fallback_enabled', 'yes' ) || is_wp_error( $route ) ) {
-				return array();
-			}
-			$quotes[] = array( 'name' => 'EZ', 'cost' => get_option( 'lwc_jt_express_checkout_cost', 10000 ) );
+		$result = ( new LWC_JT_Express_API() )->get_tariff(
+			$weight,
+			LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ),
+			$route['tariff_area']
+		);
+		if ( is_wp_error( $result ) || empty( $result['services'] ) ) {
+			return array();
 		}
+		$quotes = $result['services'];
 
 		$rates = array();
 		foreach ( $quotes as $quote ) {
@@ -132,9 +124,9 @@ class LWC_Shipping_JT_Express extends LWC_Shipping_JT_Base {
 				'_lwc_jt_environment'           => $environment,
 				'_lwc_jt_service'               => $service,
 				'_lwc_jt_weight_kg'             => $weight,
-				'_lwc_jt_rate_source'           => $rate_source,
+				'_lwc_jt_rate_source'           => 'live_tariff',
 				'_lwc_jt_route_source'          => $route['source'],
-				'_lwc_jt_origin_city_code'      => strtoupper( (string) get_option( 'lwc_jt_express_origin_city_code', 'JKT' ) ),
+				'_lwc_jt_origin_city_code'      => LWC_JT_Route_Mapper::get_origin_city_code( $environment ),
 				'_lwc_jt_destination_city_code' => $route['destination_city_code'],
 				'_lwc_jt_destination_area_code' => $route['destination_area_code'],
 			);

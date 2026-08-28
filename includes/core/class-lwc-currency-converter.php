@@ -24,6 +24,9 @@ class LWC_Currency_Converter {
 	const COOKIE_NAME = 'lwc_currency';
 	const OPT_ENABLED = 'lwc_currency_enabled';
 	const OPT_RATES   = 'lwc_currency_rates';
+	const META_BASE_CURRENCY = '_lwc_currency_base';
+	const META_ORDER_RATE    = '_lwc_currency_rate';
+	const META_BASE_TOTAL    = '_lwc_currency_base_total';
 
 	/**
 	 * Shared instance.
@@ -108,13 +111,21 @@ class LWC_Currency_Converter {
 	public function init() {
 		add_action( 'admin_init', array( $this, 'register_admin_settings' ) );
 		add_action( 'init', array( $this, 'capture_currency_switch' ), 1 );
+		add_shortcode( 'lwc_currency_switcher', array( $this, 'render_currency_switcher' ) );
+		add_action( 'woocommerce_admin_order_totals_after_total', array( $this, 'render_admin_base_total' ) );
 
 		// Keep cart totals consistent when the shopper switches currency.
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'maybe_recalculate_cart' ) );
 
-		if ( ! $this->is_active() ) {
+		if ( ! $this->owns_currency_conversion() ) {
 			return;
 		}
+
+		// Freeze the checkout rate on the order. Reporting must never depend on
+		// a future rate change, otherwise historical revenue would move over time.
+		add_action( 'woocommerce_checkout_create_order', array( $this, 'snapshot_order_currency' ), 20, 2 );
+		add_action( 'woocommerce_store_api_checkout_update_order_meta', array( $this, 'snapshot_store_api_order_currency' ), 20, 1 );
+		add_filter( 'woocommerce_analytics_update_order_stats_data', array( $this, 'normalize_order_stats' ), 20, 2 );
 
 		add_filter( 'woocommerce_currency', array( $this, 'override_currency' ), 99 );
 		add_filter( 'woocommerce_currency_symbol', array( $this, 'filter_currency_symbol' ), 10, 2 );
@@ -138,11 +149,7 @@ class LWC_Currency_Converter {
 	 * @return bool
 	 */
 	public function is_active() {
-		if ( ! $this->is_enabled() ) {
-			return false;
-		}
-
-		if ( $this->has_external_converter() ) {
+		if ( ! $this->owns_currency_conversion() ) {
 			return false;
 		}
 
@@ -152,6 +159,15 @@ class LWC_Currency_Converter {
 		}
 
 		return $this->get_rate_for( $selected ) > 0;
+	}
+
+	/**
+	 * Whether LoveCatz, rather than another plugin, owns currency conversion.
+	 *
+	 * @return bool
+	 */
+	public function owns_currency_conversion() {
+		return $this->is_enabled() && ! $this->has_external_converter();
 	}
 
 	/**
@@ -198,7 +214,9 @@ class LWC_Currency_Converter {
 	 * @return string
 	 */
 	public function get_base_currency() {
-		$base = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : get_option( 'woocommerce_currency', '' );
+		// Read the stored option directly. get_woocommerce_currency() applies our
+		// own filter and would incorrectly report the shopper currency as the base.
+		$base = get_option( 'woocommerce_currency', '' );
 
 		return strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $base ) );
 	}
@@ -225,7 +243,7 @@ class LWC_Currency_Converter {
 
 		foreach ( $candidates as $candidate ) {
 			$code = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $candidate ) );
-			if ( 3 === strlen( $code ) && isset( $this->get_rates()[ $code ] ) ) {
+			if ( 3 === strlen( $code ) && ( $code === $this->get_base_currency() || isset( $this->get_rates()[ $code ] ) ) ) {
 				$this->selected = $code;
 				return $code;
 			}
@@ -244,14 +262,18 @@ class LWC_Currency_Converter {
 		}
 
 		$code = strtoupper( preg_replace( '/[^A-Za-z]/', '', sanitize_text_field( wp_unslash( $_GET['currency'] ) ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( 3 !== strlen( $code ) || ! isset( $this->get_rates()[ $code ] ) ) {
+		if ( 3 !== strlen( $code ) || ( $code !== $this->get_base_currency() && ! isset( $this->get_rates()[ $code ] ) ) ) {
 			return;
 		}
 
 		$this->selected = $code;
 
 		if ( ! headers_sent() ) {
-			setcookie( self::COOKIE_NAME, $code, time() + 30 * DAY_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN );
+			if ( function_exists( 'wc_setcookie' ) ) {
+				wc_setcookie( self::COOKIE_NAME, $code, time() + 30 * DAY_IN_SECONDS );
+			} else {
+				setcookie( self::COOKIE_NAME, $code, time() + 30 * DAY_IN_SECONDS, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN );
+			}
 		}
 	}
 
@@ -420,6 +442,146 @@ class LWC_Currency_Converter {
 	}
 
 	/**
+	 * Save the exact checkout rate and IDR/base equivalent on a classic order.
+	 *
+	 * @param WC_Order $order Checkout order.
+	 * @param array    $data  Checkout data.
+	 */
+	public function snapshot_order_currency( $order, $data = array() ) {
+		$this->save_order_currency_snapshot( $order );
+	}
+
+	/**
+	 * Save the checkout rate for a Checkout Block / Store API order.
+	 *
+	 * @param WC_Order $order Checkout order.
+	 */
+	public function snapshot_store_api_order_currency( $order ) {
+		$this->save_order_currency_snapshot( $order );
+	}
+
+	/**
+	 * Store an immutable conversion snapshot on an order.
+	 *
+	 * @param WC_Order $order Order object.
+	 */
+	private function save_order_currency_snapshot( $order ) {
+		if ( ! $order instanceof WC_Order ) {
+			return;
+		}
+
+		$base     = $this->get_base_currency();
+		$currency = strtoupper( (string) $order->get_currency() );
+		$rate     = $currency === $base ? 1.0 : $this->get_rate_for( $currency );
+
+		if ( '' === $base || $rate <= 0 ) {
+			return;
+		}
+
+		$order->update_meta_data( self::META_BASE_CURRENCY, $base );
+		$order->update_meta_data( self::META_ORDER_RATE, (string) $rate );
+		$order->update_meta_data(
+			self::META_BASE_TOTAL,
+			(string) self::round_for_currency( (float) $order->get_total() * $rate, $base )
+		);
+	}
+
+	/**
+	 * Normalize WooCommerce Analytics revenue into the store base currency.
+	 *
+	 * @param array    $order_data Lookup-table row being generated.
+	 * @param WC_Order $order      Source order.
+	 * @return array
+	 */
+	public function normalize_order_stats( $order_data, $order ) {
+		if ( ! $order instanceof WC_Order ) {
+			return $order_data;
+		}
+
+		$rate = (float) $order->get_meta( self::META_ORDER_RATE, true );
+		if ( $rate <= 0 ) {
+			$currency = strtoupper( (string) $order->get_currency() );
+			$rate     = $currency === $this->get_base_currency() ? 1.0 : $this->get_rate_for( $currency );
+		}
+
+		if ( $rate <= 0 || 1.0 === $rate ) {
+			return $order_data;
+		}
+
+		foreach ( array( 'total_sales', 'tax_total', 'shipping_total', 'net_total' ) as $field ) {
+			if ( isset( $order_data[ $field ] ) && is_numeric( $order_data[ $field ] ) ) {
+				$order_data[ $field ] = (float) $order_data[ $field ] * $rate;
+			}
+		}
+
+		return $order_data;
+	}
+
+	/**
+	 * Show the frozen base-currency value beside the original order total.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function render_admin_base_total( $order_id ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		$base  = strtoupper( (string) $order->get_meta( self::META_BASE_CURRENCY, true ) );
+		$rate  = (float) $order->get_meta( self::META_ORDER_RATE, true );
+		$total = $order->get_meta( self::META_BASE_TOTAL, true );
+
+		if ( '' === $base || $rate <= 0 || ! is_numeric( $total ) || strtoupper( (string) $order->get_currency() ) === $base ) {
+			return;
+		}
+		?>
+		<tr>
+			<td class="label"><?php esc_html_e( 'Base-currency total:', 'lovecatz-wc' ); ?></td>
+			<td width="1%"></td>
+			<td class="total">
+				<?php echo wp_kses_post( wc_price( (float) $total, array( 'currency' => $base ) ) ); ?>
+				<small style="display:block"><?php echo esc_html( sprintf( __( 'Checkout rate: 1 %1$s = %2$s %3$s', 'lovecatz-wc' ), $order->get_currency(), wc_format_decimal( $rate ), $base ) ); ?></small>
+			</td>
+		</tr>
+		<?php
+	}
+
+	/**
+	 * Currency dropdown for headers, footers, widgets, or page builders.
+	 * Usage: [lwc_currency_switcher]
+	 *
+	 * @return string
+	 */
+	public function render_currency_switcher() {
+		if ( ! $this->owns_currency_conversion() ) {
+			return '';
+		}
+
+		$base       = $this->get_base_currency();
+		$selected   = $this->get_selected_currency();
+		$selected   = '' !== $selected ? $selected : $base;
+		$currencies = array_merge( array( $base => 1.0 ), $this->get_rates() );
+		$action     = remove_query_arg( 'currency' );
+
+		ob_start();
+		?>
+		<form class="lwc-currency-switcher" method="get" action="<?php echo esc_url( $action ); ?>">
+			<label>
+				<span class="screen-reader-text"><?php esc_html_e( 'Choose currency', 'lovecatz-wc' ); ?></span>
+				<select name="currency" onchange="this.form.submit()">
+					<?php foreach ( $currencies as $code => $rate ) : ?>
+						<option value="<?php echo esc_attr( $code ); ?>" <?php selected( $selected, $code ); ?>><?php echo esc_html( $code ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</label>
+			<noscript><button type="submit"><?php esc_html_e( 'Apply', 'lovecatz-wc' ); ?></button></noscript>
+		</form>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
 	 * Recalculate cart totals after a currency switch.
 	 *
 	 * @param WC_Cart $cart Cart object.
@@ -503,7 +665,8 @@ class LWC_Currency_Converter {
 	 */
 	public function render_currency_section_intro() {
 		?>
-		<p><?php esc_html_e( 'Let shoppers switch the store between your base currency and configured target currencies. Rates are manual: one line per currency.', 'lovecatz-wc' ); ?></p>
+		<p><?php esc_html_e( 'Let shoppers switch currencies while each order keeps its checkout currency, frozen exchange rate, and base-currency reporting total. Rates are manual: one line per currency.', 'lovecatz-wc' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Place [lwc_currency_switcher] in a page, header, footer, or shortcode block to show the selector.', 'lovecatz-wc' ); ?></p>
 		<?php if ( $this->has_external_converter() ) : ?>
 			<p class="description" style="color:#b32d2e;">
 				<?php esc_html_e( 'An external currency plugin is active, so this built-in converter stays idle to avoid double conversion.', 'lovecatz-wc' ); ?>

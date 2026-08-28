@@ -114,10 +114,24 @@ class LWC_JT_Order_Admin {
 		if ( is_wp_error( $route ) ) {
 			return $this->save_create_error( $order, $route );
 		}
-		$shipper_name    = (string) get_option( 'lwc_jt_express_shipper_name', get_bloginfo( 'name' ) );
-		$shipper_phone   = $this->normalize_phone( get_option( 'lwc_jt_express_shipper_phone', get_option( 'lwc_fedex_shipper_phone', '' ) ) );
 		$default_shipper_address = trim( implode( ', ', array_filter( array( get_option( 'woocommerce_store_address', '' ), get_option( 'woocommerce_store_address_2', '' ), get_option( 'woocommerce_store_city', '' ) ) ) ) );
-		$shipper_address = (string) get_option( 'lwc_jt_express_shipper_address', $default_shipper_address );
+		$shipper = wp_parse_args(
+			(array) apply_filters(
+				'lwc_jt_express_shipper',
+				array(
+					'name'         => get_bloginfo( 'name' ),
+					'phone'        => get_option( 'woocommerce_store_phone', get_option( 'lwc_fedex_shipper_phone', '' ) ),
+					'address'      => $default_shipper_address,
+					'service_type' => 6,
+				),
+				$order,
+				$environment
+			),
+			array( 'name' => '', 'phone' => '', 'address' => '', 'service_type' => 6 )
+		);
+		$shipper_name    = (string) $shipper['name'];
+		$shipper_phone   = $this->normalize_phone( $shipper['phone'] );
+		$shipper_address = (string) $shipper['address'];
 		if ( '' === trim( $shipper_phone ) || '' === trim( $shipper_address ) ) {
 			return $this->save_create_error( $order, new WP_Error( 'lwc_jt_shipper_incomplete', __( 'J&T shipper phone and address must be configured before creating an AWB.', 'lovecatz-wc' ) ) );
 		}
@@ -166,7 +180,7 @@ class LWC_JT_Order_Admin {
 			'qty'              => max( 1, $qty ),
 			'weight'           => max( 0.01, round( $weight, 2 ) ),
 			'goodsdesc'        => substr( $this->sanitize_goods_text( implode( ' ', $names ) ), 0, 40 ),
-			'servicetype'      => (int) get_option( 'lwc_jt_express_service_type', '6' ),
+			'servicetype'      => 1 === (int) $shipper['service_type'] ? 1 : 6,
 			'insurance'        => 0,
 			'orderdate'        => $now,
 			'item_name'        => substr( $this->sanitize_goods_text( reset( $names ) ), 0, 50 ),
@@ -236,7 +250,7 @@ class LWC_JT_Order_Admin {
 				$area = $item->get_meta( '_lwc_jt_destination_area_code', true );
 				$origin = $item->get_meta( '_lwc_jt_origin_city_code', true );
 				if ( $city && $area ) {
-					return array( 'origin_city_code' => $origin ? $origin : strtoupper( (string) get_option( 'lwc_jt_express_origin_city_code', 'JKT' ) ), 'destination_city_code' => $city, 'destination_area_code' => $area );
+					return array( 'origin_city_code' => $origin ? $origin : LWC_JT_Route_Mapper::get_origin_city_code( $environment ), 'destination_city_code' => $city, 'destination_area_code' => $area );
 				}
 			}
 		}
@@ -244,7 +258,7 @@ class LWC_JT_Order_Admin {
 		if ( is_wp_error( $route ) ) {
 			return $route;
 		}
-		$route['origin_city_code'] = strtoupper( (string) get_option( 'lwc_jt_express_origin_city_code', 'JKT' ) );
+		$route['origin_city_code'] = LWC_JT_Route_Mapper::get_origin_city_code( $environment );
 		return $route;
 	}
 

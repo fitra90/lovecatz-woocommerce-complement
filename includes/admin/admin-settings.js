@@ -3,6 +3,17 @@
 
     var fedexCheckTimer;
     var fedexCheckSequence = 0;
+    var jtCheckTimer;
+    var jtCheckSequence = 0;
+    var rayspeedCheckTimer;
+
+    function setProviderStatus(statusEl, status, label) {
+        if (!statusEl.length) {
+            return;
+        }
+        statusEl.attr('data-status', status);
+        statusEl.find('.lwc-provider-status-label').text(label);
+    }
 
     function initDashiconSelectors() {
         $('.lwc-dashicon-choice').on('click', function () {
@@ -73,7 +84,7 @@
 
             clearTimeout(fedexCheckTimer);
             fedexCheckTimer = setTimeout(function () {
-                if (!window.lwcFedexSettings || !window.lwcFedexSettings.ajax_url) {
+                if (!window.lwcShippingSettings || !window.lwcShippingSettings.ajax_url) {
                     setFedexConnectionStatus('idle', 'Waiting for credentials');
                     return;
                 }
@@ -82,12 +93,12 @@
                     var credentials = getCredentials(environment);
 
                     return $.ajax({
-                        url: window.lwcFedexSettings.ajax_url,
+                        url: window.lwcShippingSettings.ajax_url,
                         type: 'POST',
                         dataType: 'json',
                         data: {
                             action: 'lwc_check_fedex_connection',
-                            nonce: window.lwcFedexSettings.nonce,
+                            nonce: window.lwcShippingSettings.nonce,
                             account_number: credentials.accountNumber,
                             api_key: credentials.apiKey,
                             api_secret: credentials.apiSecret,
@@ -165,25 +176,75 @@
         toggleMaximumDiscount();
     }
 
-    function initRaySpeedConnectionTest() {
-        $('#lwc-rayspeed-test-connection').on('click', function () {
-            var button = $(this);
-            var status = $('#lwc-rayspeed-connection-status');
-            button.prop('disabled', true);
-            status.text('Checking Sandbox API...');
-            $.post(window.lwcFedexSettings.ajax_url, {
+    function updateJtConnectionStatus() {
+        var statusList = $('.lwc-jt-connection-status');
+        if (!statusList.length) {
+            return;
+        }
+
+        jtCheckSequence += 1;
+        var sequence = jtCheckSequence;
+        var provider = statusList.data('provider') || 'express';
+        statusList.find('.lwc-provider-status').each(function () {
+            setProviderStatus($(this), 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
+        });
+
+        clearTimeout(jtCheckTimer);
+        jtCheckTimer = setTimeout(function () {
+            $('.lwc-jt-credential-group[data-provider="' + provider + '"]').each(function () {
+                var group = $(this);
+                var environment = group.data('environment');
+                var statusEl = statusList.find('.lwc-provider-status[data-environment="' + environment + '"]');
+                var credentials = {};
+                group.find('[data-credential]').each(function () {
+                    credentials[$(this).data('credential')] = ($(this).val() || '').trim();
+                });
+
+                $.ajax({
+                    url: window.lwcShippingSettings.ajax_url,
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'lwc_check_jt_connection',
+                        nonce: window.lwcShippingSettings.nonce,
+                        provider: provider,
+                        environment: environment,
+                        credentials: credentials
+                    }
+                }).done(function (response) {
+                    if (sequence !== jtCheckSequence) {
+                        return;
+                    }
+                    var data = response && response.data ? response.data : {};
+                    setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
+                }).fail(function () {
+                    if (sequence === jtCheckSequence) {
+                        setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
+                    }
+                });
+            });
+        }, 300);
+    }
+
+    function updateRaySpeedConnectionStatus() {
+        var status = $('#lwc-rayspeed-connection-status');
+        if (!status.length) {
+            return;
+        }
+        setProviderStatus(status, 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
+        clearTimeout(rayspeedCheckTimer);
+        rayspeedCheckTimer = setTimeout(function () {
+            $.post(window.lwcShippingSettings.ajax_url, {
                 action: 'lwc_check_rayspeed_connection',
-                nonce: window.lwcFedexSettings.nonce,
+                nonce: window.lwcShippingSettings.nonce,
                 api_key: $('#lwc_rayspeed_api_key').val()
             }).done(function (response) {
                 var data = response && response.data ? response.data : {};
-                status.text(data.message || (response.success ? 'Connected.' : 'Connection failed.'));
+                setProviderStatus(status, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
             }).fail(function () {
-                status.text('Connection request failed.');
-            }).always(function () {
-                button.prop('disabled', false);
+                setProviderStatus(status, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
             });
-        });
+        }, 300);
     }
 
     $(document).ready(function () {
@@ -199,6 +260,11 @@
 			updateFedexConnectionStatus(true);
         }
 
+        if ($('.lwc-jt-credential-field').length) {
+            $('.lwc-jt-credential-field').on('input change', updateJtConnectionStatus);
+            updateJtConnectionStatus();
+        }
+
         if ($('.lwc-promo-image-select').length) {
             initPromoImageUploader();
         }
@@ -207,8 +273,9 @@
             initPromoDiscountType();
         }
 
-        if ($('#lwc-rayspeed-test-connection').length) {
-            initRaySpeedConnectionTest();
+        if ($('.lwc-rayspeed-credential-field').length) {
+            $('.lwc-rayspeed-credential-field').on('input change', updateRaySpeedConnectionStatus);
+            updateRaySpeedConnectionStatus();
         }
 
 	});

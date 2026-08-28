@@ -2,6 +2,16 @@
     'use strict';
 
     var storageKey = 'lwc_promo_coupon_code';
+    var couponModalTrigger = null;
+
+    function closeCouponModal() {
+        $('#lwc-coupon-modal').prop('hidden', true);
+        $('html, body').removeClass('lwc-coupon-modal-open');
+        if (couponModalTrigger && document.documentElement.contains(couponModalTrigger)) {
+            $(couponModalTrigger).trigger('focus');
+        }
+        couponModalTrigger = null;
+    }
 
     function getCouponInput() {
         return $(lwcPromoDashboard.couponInputSelector).first();
@@ -116,6 +126,11 @@
             return;
         }
 
+        /* Checkout fragments can remove the trigger without removing a modal
+         * that was portalled to <body>. Clear that orphan before rebuilding. */
+        $('#lwc-coupon-modal').remove();
+        $('html, body').removeClass('lwc-coupon-modal-open');
+
         var modalItems = $.map(coupons, function (coupon) {
             var image = $('<span>').text(coupon.image || '').html();
             var code = $('<span>').text(coupon.code).html();
@@ -125,8 +140,8 @@
         }).join('');
 
         var couponPicker = coupons.length ?
-            '<button type="button" class="lwc-open-coupon-modal" aria-haspopup="dialog">Pilih kupon tersedia <span aria-hidden="true">›</span></button>' +
-            '<div class="lwc-coupon-modal" role="dialog" aria-modal="true" aria-labelledby="lwc-coupon-modal-title" hidden>' +
+            '<button type="button" class="lwc-open-coupon-modal" aria-haspopup="dialog" aria-controls="lwc-coupon-modal" aria-expanded="false">Pilih kupon tersedia <span aria-hidden="true">›</span></button>' +
+            '<div id="lwc-coupon-modal" class="lwc-coupon-modal" role="dialog" aria-modal="true" aria-labelledby="lwc-coupon-modal-title" hidden>' +
             '<div class="lwc-coupon-modal__backdrop"></div><div class="lwc-coupon-modal__panel">' +
             '<div class="lwc-coupon-modal__header"><div><h3 id="lwc-coupon-modal-title">Pilih kupon</h3><p>Pilih promo untuk diterapkan pada pesanan ini.</p></div><button type="button" class="lwc-close-coupon-modal" aria-label="Tutup">×</button></div>' +
             '<div class="lwc-coupon-modal__list">' + modalItems + '</div></div></div>' : '';
@@ -138,10 +153,13 @@
 
         if (couponArea.is('.ct-order-review')) {
             couponArea.prepend(picker);
-            return;
+        } else {
+            couponArea.append(picker);
         }
 
-        couponArea.append(picker);
+        /* Keep the fixed modal outside checkout/payment stacking contexts.
+         * PayPal and card iframes otherwise paint above a nested modal. */
+        $('#lwc-checkout-coupon-picker #lwc-coupon-modal').detach().appendTo(document.body);
     }
 
     $(document).ready(function () {
@@ -167,11 +185,15 @@
         });
 
         $(document).on('click', '.lwc-open-coupon-modal', function () {
-            $(this).siblings('.lwc-coupon-modal').prop('hidden', false).find('.lwc-close-coupon-modal').trigger('focus');
+            couponModalTrigger = this;
+            $(this).attr('aria-expanded', 'true');
+            $('html, body').addClass('lwc-coupon-modal-open');
+            $('#lwc-coupon-modal').prop('hidden', false).find('.lwc-close-coupon-modal').trigger('focus');
         });
 
         $(document).on('click', '.lwc-close-coupon-modal, .lwc-coupon-modal__backdrop', function () {
-            $(this).closest('.lwc-coupon-modal').prop('hidden', true);
+            $('.lwc-open-coupon-modal').attr('aria-expanded', 'false');
+            closeCouponModal();
         });
 
         $(document).on('updated_checkout wc-blocks_checkout_update checkout_error', function () {
@@ -181,12 +203,14 @@
         $(document).on('click', '.lwc-checkout-coupon-option', function () {
             var couponCode = $(this).data('coupon');
             applyCoupon(couponCode);
-            $(this).closest('.lwc-coupon-modal').prop('hidden', true);
+            $('.lwc-open-coupon-modal').attr('aria-expanded', 'false');
+            closeCouponModal();
         });
 
         $(document).on('keydown', function (event) {
             if ('Escape' === event.key) {
-                $('.lwc-coupon-modal').prop('hidden', true);
+                $('.lwc-open-coupon-modal').attr('aria-expanded', 'false');
+                closeCouponModal();
             }
         });
 

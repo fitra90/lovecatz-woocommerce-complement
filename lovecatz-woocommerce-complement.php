@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.30
+ * Version:     1.0.33
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.30' );
+define( 'LWC_VERSION', '1.0.33' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -142,6 +142,7 @@ function lwc_init() {
 add_action( 'plugins_loaded', 'lwc_init', 20 );
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'lwc_plugin_action_links' );
 add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' );
+add_action( 'wp_ajax_lwc_check_jt_connection', 'lwc_check_jt_connection' );
 add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
@@ -603,6 +604,68 @@ function lwc_register_shipping_methods( $methods ) {
 	return $methods;
 }
 
+/**
+ * Check one J&T provider/environment credential set without creating an AWB.
+ * Express authenticates through the read-only Tariff API. Cargo reports that
+ * validation is unavailable until its separate API contract is configured.
+ */
+function lwc_check_jt_connection() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ), 403 );
+	}
+
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+	$provider    = isset( $_POST['provider'] ) && 'cargo' === sanitize_key( wp_unslash( $_POST['provider'] ) ) ? 'cargo' : 'express';
+	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
+	$posted      = isset( $_POST['credentials'] ) && is_array( $_POST['credentials'] ) ? wp_unslash( $_POST['credentials'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+	$fields      = 'express' === $provider
+		? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'cancel_username', 'cancel_api_key', 'cancel_key' )
+		: array( 'username', 'api_key', 'api_secret' );
+	$credentials = array( 'provider' => $provider, 'environment' => $environment );
+	$filled      = 0;
+	foreach ( $fields as $field ) {
+		$value = isset( $posted[ $field ] ) ? sanitize_text_field( $posted[ $field ] ) : '';
+		$credentials[ $field ] = $value;
+		$filled += '' !== trim( $value ) ? 1 : 0;
+	}
+
+	if ( 0 === $filled ) {
+		wp_send_json_success( array( 'status' => 'idle', 'label' => __( 'Waiting for credentials', 'lovecatz-wc' ) ) );
+	}
+	if ( $filled < count( $fields ) ) {
+		wp_send_json_success( array( 'status' => 'partial', 'label' => sprintf( __( 'Credentials incomplete (%1$d of %2$d fields filled)', 'lovecatz-wc' ), $filled, count( $fields ) ) ) );
+	}
+	if ( 'cargo' === $provider ) {
+		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Fields complete; Cargo API validation is not available yet', 'lovecatz-wc' ) ) );
+	}
+
+	$endpoints = LWC_JT_Express_API::get_endpoints( $environment );
+	if ( empty( $endpoints['tariff'] ) ) {
+		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials complete; this environment endpoint is not configured', 'lovecatz-wc' ) ) );
+	}
+	$route = LWC_JT_Route_Mapper::resolve( '', $environment );
+	if ( is_wp_error( $route ) || '' === LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ) ) {
+		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials complete; backend route is not configured', 'lovecatz-wc' ) ) );
+	}
+
+	$result = ( new LWC_JT_Express_API() )->get_tariff( 1, LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ), $route['tariff_area'], $credentials );
+	if ( is_wp_error( $result ) ) {
+		$transport_error = in_array( $result->get_error_code(), array( 'http_request_failed', 'lwc_jt_invalid_response' ), true );
+		update_option( "lwc_jt_{$provider}_validation_status_{$environment}", $transport_error ? 'unavailable' : 'failed' );
+		wp_send_json_success(
+			array(
+				'status' => $transport_error ? 'unavailable' : 'auth_failed',
+				'label'  => $transport_error
+					? sprintf( __( 'API unavailable; credentials could not be verified: %s', 'lovecatz-wc' ), $result->get_error_message() )
+					: $result->get_error_message(),
+			)
+		);
+	}
+
+	update_option( "lwc_jt_{$provider}_validation_status_{$environment}", 'validated' );
+	wp_send_json_success( array( 'status' => 'connected', 'label' => __( 'Tariff API connected; all credential fields are complete', 'lovecatz-wc' ) ) );
+}
+
 /** Load the compact shipping-method accordion on checkout. */
 function lwc_enqueue_shipping_accordion() {
 	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
@@ -695,11 +758,17 @@ function lwc_check_rayspeed_connection() {
 	}
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 	$key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+	if ( '' === trim( $key ) ) {
+		wp_send_json_success( array( 'status' => 'idle', 'label' => __( 'Waiting for credentials', 'lovecatz-wc' ) ) );
+	}
 	$result = ( new LWC_RaySpeed_API( $key ) )->test_connection();
 	if ( empty( $result['success'] ) ) {
-		wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : __( 'RaySpeed connection failed.', 'lovecatz-wc' ) ) );
+		$transport_error = isset( $result['error_type'] ) && 'transport' === $result['error_type'];
+		update_option( 'lwc_rayspeed_validation_status', $transport_error ? 'unavailable' : 'failed' );
+		wp_send_json_success( array( 'status' => $transport_error ? 'unavailable' : 'auth_failed', 'label' => isset( $result['message'] ) ? $result['message'] : __( 'RaySpeed connection failed.', 'lovecatz-wc' ) ) );
 	}
-	wp_send_json_success( array( 'message' => $result['message'] ) );
+	update_option( 'lwc_rayspeed_validation_status', 'validated' );
+	wp_send_json_success( array( 'status' => 'connected', 'label' => $result['message'] ) );
 }
 
 /**

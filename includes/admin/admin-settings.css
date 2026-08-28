@@ -168,3 +168,61 @@
 	max-width: 160px;
 	border-radius: 4px;
 }
+
+.lwc-provider-status-list {
+	display: grid;
+	gap: 8px;
+	margin: 10px 0 16px;
+}
+
+.lwc-provider-status {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: fit-content;
+	max-width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #d0d5dd;
+	border-radius: 999px;
+	background: #f8fafc;
+	color: #475467;
+	font-weight: 500;
+}
+
+.lwc-provider-status[data-status="connected"] {
+	border-color: #a7f3d0;
+	background: #ecfdf3;
+	color: #067647;
+}
+
+.lwc-provider-status[data-status="partial"],
+.lwc-provider-status[data-status="unavailable"] {
+	border-color: #fdba74;
+	background: #fff7ed;
+	color: #c2410c;
+}
+
+.lwc-provider-status[data-status="auth_failed"],
+.lwc-provider-status[data-status="request_failed"] {
+	border-color: #fda29b;
+	background: #fef3f2;
+	color: #b42318;
+}
+
+.lwc-provider-status[data-status="checking"] {
+	border-color: #b2ddff;
+	background: #eff8ff;
+	color: #175cd3;
+}
+
+.lwc-provider-status-dot {
+	width: 10px;
+	height: 10px;
+	flex: 0 0 10px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.lwc-provider-status-label {
+	min-width: 0;
+}

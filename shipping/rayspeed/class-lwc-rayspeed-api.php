@@ -161,17 +161,17 @@ class LWC_RaySpeed_API {
 
 	private function parse( $response, $success_key ) {
 		if ( is_wp_error( $response ) ) {
-			return array( 'success' => false, 'message' => $response->get_error_message() );
+			return array( 'success' => false, 'message' => $response->get_error_message(), 'error_type' => 'transport' );
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $body ) ) {
-			return array( 'success' => false, 'message' => sprintf( __( 'RaySpeed returned invalid JSON (HTTP %d).', 'lovecatz-wc' ), $status ) );
+			return array( 'success' => false, 'message' => sprintf( __( 'RaySpeed returned invalid JSON (HTTP %d).', 'lovecatz-wc' ), $status ), 'error_type' => 'transport' );
 		}
 		$ok = ! empty( $body[ $success_key ] );
 		if ( ! $ok ) {
 			$message = isset( $body['reason'] ) ? $body['reason'] : ( isset( $body['message'] ) ? $body['message'] : __( 'RaySpeed rejected the request.', 'lovecatz-wc' ) );
-			return array( 'success' => false, 'message' => sanitize_text_field( $message ), 'response' => $body );
+			return array( 'success' => false, 'message' => sanitize_text_field( $message ), 'response' => $body, 'error_type' => 'authentication' );
 		}
 		return array( 'success' => true, 'data' => $body );
 	}
