@@ -905,7 +905,7 @@ class LWC_Membership_Admin {
      * @return array
      */
     private function parse_xml_spreadsheet( $xml ) {
-        $document = simplexml_load_string( $xml, 'SimpleXMLElement', LIBXML_NOCDATA );
+        $document = simplexml_load_string( $xml, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA );
         if ( ! $document ) {
             return array();
         }
@@ -1050,6 +1050,12 @@ class LWC_Membership_Admin {
 
         $zip = new ZipArchive();
         if ( true !== $zip->open( $file_path ) ) {
+            return false;
+        }
+
+        $stat = $zip->statName( $archive_file );
+        if ( ! is_array( $stat ) || empty( $stat['size'] ) || $stat['size'] > 10 * MB_IN_BYTES || ( ! empty( $stat['comp_size'] ) && $stat['size'] / $stat['comp_size'] > 100 ) ) {
+            $zip->close();
             return false;
         }
 

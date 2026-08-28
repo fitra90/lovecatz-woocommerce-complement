@@ -116,7 +116,7 @@ class LWC_RaySpeed_API {
 			'totalNettWeight'      => $metrics['weight'],
 			'totalGrossWeight'     => $metrics['weight'],
 			'dimension'            => $metrics['dimension'],
-			'invoiceValue'         => round( max( 0.01, $value ), 2 ),
+			'invoiceValue'         => (int) ceil( max( 0.01, $value ) ),
 			'coverByInsurance'     => get_option( 'lwc_rayspeed_insurance', 'No' ),
 			'taxDutyAtDestination' => get_option( 'lwc_rayspeed_tax_duty', 'Receiver' ),
 			'specialInstruction'   => $order->get_customer_note(),
@@ -130,7 +130,7 @@ class LWC_RaySpeed_API {
 			'qty'                  => max( 1, $quantity ),
 			'unit'                 => 'Pcs',
 			'currency'             => $currency,
-			'value'                => round( max( 0.01, $value ), 2 ),
+			'value'                => (int) ceil( max( 0.01, $value ) ),
 		);
 		$result = $this->post( 'awb_post.php', $payload );
 		if ( empty( $result['success'] ) || empty( $result['data']['airwaybill'] ) ) {

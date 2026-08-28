@@ -38,11 +38,24 @@ function lwc_encrypt_secret( $value ) {
 		return $value;
 	}
 
-	if ( 0 === strpos( $value, 'lwc1:' ) ) {
+	if ( 0 === strpos( $value, 'lwc1:' ) || 0 === strpos( $value, 'lwc2:' ) ) {
 		return $value;
 	}
 
-	$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+	$key = hash( 'sha256', wp_salt( 'auth' ), true );
+	if ( function_exists( 'random_bytes' ) && in_array( 'aes-256-gcm', openssl_get_cipher_methods(), true ) ) {
+		try {
+			$iv     = random_bytes( 12 );
+			$tag    = '';
+			$cipher = openssl_encrypt( $value, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, 'lovecatz-wc' );
+			if ( false !== $cipher && 16 === strlen( $tag ) ) {
+				return 'lwc2:' . base64_encode( $iv . $tag . $cipher );
+			}
+		} catch ( Exception $exception ) {
+			// Fall through to the backwards-compatible cipher below.
+		}
+	}
+
 	$iv     = substr( hash( 'sha256', $key ), 0, 16 );
 	$cipher = openssl_encrypt( $value, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
 
@@ -58,13 +71,30 @@ function lwc_encrypt_secret( $value ) {
  * @return string
  */
 function lwc_decrypt_secret( $value ) {
-	if ( ! is_string( $value ) || 0 !== strpos( $value, 'lwc1:' ) || ! function_exists( 'openssl_decrypt' ) ) {
+	if ( ! is_string( $value ) || ! function_exists( 'openssl_decrypt' ) ) {
 		return $value;
 	}
 
-	$key    = hash( 'sha256', wp_salt( 'auth' ), true );
+	$key = hash( 'sha256', wp_salt( 'auth' ), true );
+	if ( 0 === strpos( $value, 'lwc2:' ) ) {
+		$raw = base64_decode( substr( $value, 5 ), true );
+		if ( false === $raw || strlen( $raw ) < 29 ) {
+			return $value;
+		}
+		$iv     = substr( $raw, 0, 12 );
+		$tag    = substr( $raw, 12, 16 );
+		$cipher = substr( $raw, 28 );
+		$plain  = openssl_decrypt( $cipher, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, 'lovecatz-wc' );
+
+		return ( false === $plain ) ? $value : $plain;
+	}
+
+	if ( 0 !== strpos( $value, 'lwc1:' ) ) {
+		return $value;
+	}
+
 	$iv     = substr( hash( 'sha256', $key ), 0, 16 );
-	$raw    = base64_decode( substr( $value, 5 ) );
+	$raw    = base64_decode( substr( $value, 5 ), true );
 	$plain  = ( false === $raw ) ? false : openssl_decrypt( $raw, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
 
 	return ( false === $plain ) ? $value : $plain;
@@ -148,9 +178,7 @@ add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
 add_action( 'wp_ajax_lwc_check_rayspeed_connection', 'lwc_check_rayspeed_connection' );
 add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
-add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_response' );
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
-add_action( 'wp_ajax_nopriv_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_shipping_accordion' );
 add_action( 'woocommerce_after_checkout_validation', 'lwc_validate_jt_checkout_contact', 10, 2 );
@@ -188,7 +216,8 @@ function lwc_fedex_checkout_debug_log( $stage, $context = array() ) {
  * URL contains ?lwc_fedex_debug=1.
  */
 function lwc_enqueue_fedex_checkout_debug() {
-	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
+	$debug_requested = isset( $_GET['lwc_fedex_debug'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['lwc_fedex_debug'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	if ( ! $debug_requested || ! current_user_can( 'manage_woocommerce' ) || ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
 		return;
 	}
 
@@ -207,6 +236,9 @@ function lwc_enqueue_fedex_checkout_debug() {
  * Enable/poll diagnostics for the current WooCommerce session.
  */
 function lwc_fedex_checkout_debug_response() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => 'Permission denied.' ), 403 );
+	}
 	check_ajax_referer( 'lwc_fedex_checkout_debug', 'nonce' );
 
 	if ( ! function_exists( 'WC' ) || ! WC()->session ) {
@@ -227,6 +259,9 @@ function lwc_fedex_checkout_debug_response() {
  * Run an explicit, user-triggered FedEx quote from the checkout debug panel.
  */
 function lwc_fedex_checkout_debug_quote() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => 'Permission denied.' ), 403 );
+	}
 	check_ajax_referer( 'lwc_fedex_checkout_debug', 'nonce' );
 
 	if ( ! function_exists( 'WC' ) ) {

@@ -987,11 +987,11 @@ class LWC_FedEx_API {
 				'quantity' => $quantity,
 				'quantityUnits' => 'PCS',
 				'unitPrice' => array(
-					'amount' => round( $unit_price, 2 ),
+					'amount' => LWC_Currency_Converter::round_for_currency( $unit_price, $currency ),
 					'currency' => $currency,
 				),
 				'customsValue' => array(
-					'amount' => round( $line_total, 2 ),
+					'amount' => LWC_Currency_Converter::round_for_currency( $line_total, $currency ),
 					'currency' => $currency,
 				),
 				'weight' => array(
@@ -1015,11 +1015,11 @@ class LWC_FedEx_API {
 				'quantity' => 1,
 				'quantityUnits' => 'PCS',
 				'unitPrice' => array(
-					'amount' => round( $total, 2 ),
+					'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
 					'currency' => $currency,
 				),
 				'customsValue' => array(
-					'amount' => round( $total, 2 ),
+					'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
 					'currency' => $currency,
 				),
 				'weight' => array(
@@ -1039,7 +1039,7 @@ class LWC_FedEx_API {
 			'invoiceDate' => $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d' ) : current_time( 'Y-m-d' ),
 			'commodities' => $commodities,
 			'totalCustomsValue' => array(
-				'amount' => round( $total, 2 ),
+				'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
 				'currency' => $currency,
 			),
 		);
@@ -1639,6 +1639,14 @@ class LWC_FedEx_API {
 		$data = base64_decode( $label_data, true );
 		if ( false === $data ) {
 			$data = $label_data;
+		}
+
+		// The integration explicitly requests PDF labels. Reject oversized or
+		// unexpected content so a compromised upstream response cannot be used to
+		// fill uploads or place executable content on the site.
+		if ( strlen( $data ) > 10 * MB_IN_BYTES || 0 !== strncmp( $data, '%PDF-', 5 ) ) {
+			$this->log( 'FedEx returned an invalid or oversized PDF label.', 'error' );
+			return false;
 		}
 
 		$upload_dir = wp_upload_dir();

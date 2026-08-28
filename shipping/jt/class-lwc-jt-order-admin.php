@@ -184,11 +184,11 @@ class LWC_JT_Order_Admin {
 			'insurance'        => 0,
 			'orderdate'        => $now,
 			'item_name'        => substr( $this->sanitize_goods_text( reset( $names ) ), 0, 50 ),
-			'cod'              => 'cod' === $order->get_payment_method() ? min( 99999999, (int) round( $order->get_total() ) ) : 0,
+			'cod'              => 'cod' === $order->get_payment_method() ? min( 99999999, (int) ceil( $order->get_total() ) ) : 0,
 			'sendstarttime'    => $now,
 			'sendendtime'      => current_datetime()->modify( '+4 hours' )->format( 'Y-m-d H:i:s' ),
 			'expresstype'      => '1',
-			'goodsvalue'       => min( 99999999, max( 1, (int) round( $value ) ) ),
+			'goodsvalue'       => min( 99999999, max( 1, (int) ceil( $value ) ) ),
 		);
 		$result = ( new LWC_JT_Express_API() )->create_order( $data, LWC_JT_Account::get_credentials( 'express', $environment ) );
 		if ( is_wp_error( $result ) ) {

@@ -66,8 +66,8 @@ class LWC_JT_Account {
 		$provider = self::normalize_provider( $provider );
 		$table_name = self::get_table_name( $provider );
 		$payload = array(
-			'api_key'    => isset( $data['api_key'] ) ? sanitize_text_field( wp_unslash( $data['api_key'] ) ) : '',
-			'api_secret' => isset( $data['api_secret'] ) ? sanitize_text_field( wp_unslash( $data['api_secret'] ) ) : '',
+			'api_key'    => isset( $data['api_key'] ) ? self::encrypt_credential( sanitize_text_field( wp_unslash( $data['api_key'] ) ) ) : '',
+			'api_secret' => isset( $data['api_secret'] ) ? self::encrypt_credential( sanitize_text_field( wp_unslash( $data['api_secret'] ) ) ) : '',
 			'test_mode'  => isset( $data['test_mode'] ) ? sanitize_text_field( wp_unslash( $data['test_mode'] ) ) : 'no',
 			'updated_at' => current_time( 'mysql' ),
 		);
@@ -126,7 +126,11 @@ class LWC_JT_Account {
 		);
 
 		if ( isset( $field_map[ $option_name ] ) && isset( $account[ $field_map[ $option_name ] ] ) ) {
-			return $account[ $field_map[ $option_name ] ];
+			$value = $account[ $field_map[ $option_name ] ];
+			if ( 'api_key' === $field_map[ $option_name ] || 'api_secret' === $field_map[ $option_name ] ) {
+				$value = self::decrypt_credential( $value );
+			}
+			return $value;
 		}
 
 		return get_option( $option_name, $default );
@@ -202,5 +206,15 @@ class LWC_JT_Account {
 
 		$provider = self::normalize_provider( $provider );
 		return $wpdb->prefix . 'lwc_jt_' . $provider . '_accounts';
+	}
+
+	/** Encrypt a legacy-table credential at rest. */
+	private static function encrypt_credential( $value ) {
+		return '' !== $value && function_exists( 'lwc_encrypt_secret' ) ? lwc_encrypt_secret( $value ) : $value;
+	}
+
+	/** Decrypt both modern and legacy credential formats. */
+	private static function decrypt_credential( $value ) {
+		return '' !== $value && function_exists( 'lwc_decrypt_secret' ) ? lwc_decrypt_secret( $value ) : $value;
 	}
 }

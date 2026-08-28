@@ -357,16 +357,22 @@ class LWC_Currency_Converter {
 	}
 
 	/**
-	 * Match price decimals to the selected currency so wc_price and all
-	 * rounding helpers agree (IDR → 0 decimals, USD → 2, ...).
+	 * Display converted prices as whole units for predictable courier payloads.
 	 *
 	 * @param mixed $value Stored decimals option.
 	 * @return int
 	 */
 	public function filter_price_decimals_option( $value ) {
-		$decimals = self::get_currency_decimals( $this->get_selected_currency() );
+		$selected = $this->get_selected_currency();
 
-		return $decimals;
+		// Returning through wc_get_price_decimals() here would read this same
+		// option again and recurse until PHP exhausts its memory. With no shopper
+		// currency selected, preserve WooCommerce's stored base-currency setting.
+		if ( '' === $selected || $selected === $this->get_base_currency() ) {
+			return (int) $value;
+		}
+
+		return 0;
 	}
 
 	/**
@@ -508,9 +514,10 @@ class LWC_Currency_Converter {
 			return $order_data;
 		}
 
+		$base = $this->get_base_currency();
 		foreach ( array( 'total_sales', 'tax_total', 'shipping_total', 'net_total' ) as $field ) {
 			if ( isset( $order_data[ $field ] ) && is_numeric( $order_data[ $field ] ) ) {
-				$order_data[ $field ] = (float) $order_data[ $field ] * $rate;
+				$order_data[ $field ] = self::round_for_currency( (float) $order_data[ $field ] * $rate, $base );
 			}
 		}
 
@@ -593,10 +600,10 @@ class LWC_Currency_Converter {
 	}
 
 	/**
-	 * Round an amount to the decimals of a currency.
+	 * Round every converted monetary amount upward to a whole unit.
 	 *
-	 * Providers such as J&T accept whole IDR amounts only; zero-decimal
-	 * currencies therefore round to integers while others keep two decimals.
+	 * Courier APIs are deliberately given integer money values. Using ceil()
+	 * also prevents conversion from understating a product or shipping charge.
 	 *
 	 * @param mixed  $amount   Amount to round.
 	 * @param string $currency Currency code; empty means the active currency.
@@ -607,9 +614,7 @@ class LWC_Currency_Converter {
 			return $amount;
 		}
 
-		$decimals = self::get_currency_decimals( $currency );
-
-		return round( (float) $amount, $decimals );
+		return (float) ceil( (float) $amount );
 	}
 
 	/**
@@ -624,9 +629,8 @@ class LWC_Currency_Converter {
 		}
 
 		$currency = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $currency ) );
-		$decimals = in_array( $currency, self::$zero_decimal_currencies, true ) ? 0 : 2;
 
-		return (int) apply_filters( 'lwc_currency_decimals', $decimals, $currency );
+		return (int) apply_filters( 'lwc_currency_decimals', 0, $currency );
 	}
 
 	/**
