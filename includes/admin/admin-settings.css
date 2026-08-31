@@ -226,3 +226,41 @@
 .lwc-provider-status-label {
 	min-width: 0;
 }
+
+/* Compact secondary navigation, matching WooCommerce's blue text links. */
+.lwc-shipping-provider-links {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 10px 0 14px;
+	padding: 6px 8px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.lwc-shipping-provider-links a {
+	display: inline-block;
+	padding: 2px 4px;
+	color: #2271b1;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.lwc-shipping-provider-links a:hover,
+.lwc-shipping-provider-links a:focus {
+	color: #135e96;
+}
+
+.lwc-shipping-provider-links a.is-active {
+	color: #1d2327;
+	font-weight: 700;
+	text-decoration: underline;
+	text-decoration-thickness: 2px;
+	text-underline-offset: 3px;
+	cursor: default;
+}
+
+.lwc-shipping-provider-separator {
+	color: #a7aaad;
+}

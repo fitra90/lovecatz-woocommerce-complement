@@ -107,7 +107,7 @@ class LWC_Admin_Settings {
 	 */
 	public function enqueue_admin_assets( $hook ) {
 		// Menu styling must load on every admin screen (the sidebar is global).
-		wp_enqueue_style( 'lwc-admin-menu', LWC_PLUGIN_URL . 'includes/admin/admin-menu.css', array(), LWC_VERSION );
+		wp_enqueue_style( 'lwc-admin-menu', LWC_PLUGIN_URL . 'includes/admin/admin-menu.css', array(), $this->get_asset_version( 'includes/admin/admin-menu.css' ) );
 
 		if ( get_current_screen() && 'toplevel_page_lovecatz-wc' !== get_current_screen()->id ) {
 			return;
@@ -115,8 +115,8 @@ class LWC_Admin_Settings {
 
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_media();
-		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery' ), LWC_VERSION, true );
+		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array(), $this->get_asset_version( 'includes/admin/admin-settings.css' ) );
+		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery' ), $this->get_asset_version( 'includes/admin/admin-settings.js' ), true );
 
 		wp_localize_script(
 			'lwc-admin-settings',
@@ -129,6 +129,19 @@ class LWC_Admin_Settings {
 				'waiting'          => __( 'Waiting for credentials', 'lovecatz-wc' ),
 			)
 		);
+	}
+
+	/**
+	 * Use an asset's modification time as its cache-busting version.
+	 *
+	 * @param string $relative_path Path relative to the plugin directory.
+	 * @return string
+	 */
+	private function get_asset_version( $relative_path ) {
+		$path = LWC_PLUGIN_DIR . ltrim( $relative_path, '/\\' );
+		$modified = is_file( $path ) ? filemtime( $path ) : false;
+
+		return false !== $modified ? (string) $modified : LWC_VERSION;
 	}
 
 	/**
@@ -179,12 +192,22 @@ class LWC_Admin_Settings {
 					?>
 				</form>
 			<?php elseif ( 'shipping' === $active_tab ) : ?>
-				<h2 class="nav-tab-wrapper lwc-shipping-provider-tabs">
-					<a href="?page=lovecatz-wc&tab=shipping&provider=fedex" class="nav-tab <?php echo 'fedex' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'FedEx', 'lovecatz-wc' ); ?></a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=jt_express" class="nav-tab <?php echo 'jt_express' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T Express', 'lovecatz-wc' ); ?></a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=jt_cargo" class="nav-tab <?php echo 'jt_cargo' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'J&T Cargo', 'lovecatz-wc' ); ?></a>
-					<a href="?page=lovecatz-wc&tab=shipping&provider=rayspeed" class="nav-tab <?php echo 'rayspeed' === $provider ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'RaySpeed', 'lovecatz-wc' ); ?></a>
-				</h2>
+				<?php
+				$shipping_providers = array(
+					'fedex'      => __( 'FedEx', 'lovecatz-wc' ),
+					'jt_express' => __( 'J&T Express', 'lovecatz-wc' ),
+					'jt_cargo'   => __( 'J&T Cargo', 'lovecatz-wc' ),
+					'rayspeed'   => __( 'RaySpeed', 'lovecatz-wc' ),
+				);
+				?>
+				<nav class="lwc-shipping-provider-links" aria-label="<?php esc_attr_e( 'Shipping providers', 'lovecatz-wc' ); ?>">
+					<?php foreach ( $shipping_providers as $provider_key => $provider_label ) : ?>
+						<?php if ( $provider_key !== array_key_first( $shipping_providers ) ) : ?>
+							<span class="lwc-shipping-provider-separator" aria-hidden="true">|</span>
+						<?php endif; ?>
+						<a href="<?php echo esc_url( add_query_arg( array( 'page' => 'lovecatz-wc', 'tab' => 'shipping', 'provider' => $provider_key ), admin_url( 'admin.php' ) ) ); ?>" class="<?php echo $provider_key === $provider ? 'is-active' : ''; ?>" <?php echo $provider_key === $provider ? 'aria-current="page"' : ''; ?>><?php echo esc_html( $provider_label ); ?></a>
+					<?php endforeach; ?>
+				</nav>
 
 				<?php if ( in_array( $provider, array( 'jt_express', 'jt_cargo' ), true ) ) : ?>
 					<?php $jt_provider = 'jt_cargo' === $provider ? 'cargo' : 'express'; ?>
