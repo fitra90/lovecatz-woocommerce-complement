@@ -150,19 +150,31 @@ class LWC_JT_Order_Admin {
 				$weight += (float) wc_get_weight( (float) $product->get_weight() * max( 1, (float) $item->get_quantity() ), 'kg' );
 			}
 		}
-		$now = current_datetime()->format( 'Y-m-d H:i:s' );
+		$now = LWC_JT_Request_Validator::jakarta_timestamp();
 		$receiver_name = trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() );
 		if ( '' === $receiver_name ) {
 			$receiver_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
 		}
-		$receiver_address_parts = array_filter( array( $order->get_shipping_address_1(), $order->get_shipping_address_2(), $order->get_shipping_city(), $order->get_shipping_state() ) );
+		$shipping_district = $order->get_meta( '_lwc_shipping_district_name', true );
+		if ( '' === $shipping_district ) {
+			$shipping_district = $order->get_meta( '_wc_shipping/lwc/indonesia-district', true );
+		}
+		$billing_district = $order->get_meta( '_lwc_billing_district_name', true );
+		if ( '' === $billing_district ) {
+			$billing_district = $order->get_meta( '_wc_billing/lwc/indonesia-district', true );
+		}
+		$receiver_address_parts = array_filter( array( $order->get_shipping_address_1(), $order->get_shipping_address_2(), $shipping_district, $order->get_shipping_city(), $order->get_shipping_state() ) );
 		if ( empty( $receiver_address_parts ) ) {
-			$receiver_address_parts = array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_billing_city(), $order->get_billing_state() ) );
+			$receiver_address_parts = array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $billing_district, $order->get_billing_city(), $order->get_billing_state() ) );
 		}
 		$receiver_phone = $this->normalize_phone( $order->get_billing_phone() );
-		$receiver_zip   = preg_replace( '/\D/', '', $order->get_shipping_postcode() ? $order->get_shipping_postcode() : $order->get_billing_postcode() );
-		if ( '' === $receiver_name || '' === $receiver_phone || empty( $receiver_address_parts ) || '' === $receiver_zip ) {
+		$receiver_zip   = trim( (string) ( $order->get_shipping_postcode() ? $order->get_shipping_postcode() : $order->get_billing_postcode() ) );
+		if ( '' === $receiver_name || ! LWC_JT_Request_Validator::is_valid_phone( $receiver_phone ) || empty( $receiver_address_parts ) || ! LWC_JT_Request_Validator::is_valid_postcode( $receiver_zip ) ) {
 			return $this->save_create_error( $order, new WP_Error( 'lwc_jt_receiver_incomplete', __( 'Recipient name, phone, address, and postal code are required before creating a J&T AWB.', 'lovecatz-wc' ) ) );
+		}
+		$weight_validation = LWC_JT_Request_Validator::validate_weight( $weight );
+		if ( is_wp_error( $weight_validation ) ) {
+			return $this->save_create_error( $order, $weight_validation );
 		}
 		$data = array(
 			'orderid'         => $this->get_jt_order_id( $order ),
@@ -174,7 +186,7 @@ class LWC_JT_Order_Admin {
 			'receiver_name'    => substr( sanitize_text_field( $receiver_name ), 0, 30 ),
 			'receiver_phone'   => substr( $receiver_phone, 0, 15 ),
 			'receiver_addr'    => substr( sanitize_text_field( implode( ', ', $receiver_address_parts ) ), 0, 200 ),
-			'receiver_zip'     => substr( $receiver_zip, 0, 5 ),
+			'receiver_zip'     => $receiver_zip,
 			'destination_code' => $route['destination_city_code'],
 			'receiver_area'    => $route['destination_area_code'],
 			'qty'              => max( 1, $qty ),
@@ -186,7 +198,7 @@ class LWC_JT_Order_Admin {
 			'item_name'        => substr( $this->sanitize_goods_text( reset( $names ) ), 0, 50 ),
 			'cod'              => 'cod' === $order->get_payment_method() ? min( 99999999, (int) ceil( $order->get_total() ) ) : 0,
 			'sendstarttime'    => $now,
-			'sendendtime'      => current_datetime()->modify( '+4 hours' )->format( 'Y-m-d H:i:s' ),
+			'sendendtime'      => LWC_JT_Request_Validator::jakarta_timestamp( '+4 hours' ),
 			'expresstype'      => '1',
 			'goodsvalue'       => min( 99999999, max( 1, (int) ceil( $value ) ) ),
 		);
@@ -250,15 +262,31 @@ class LWC_JT_Order_Admin {
 				$area = $item->get_meta( '_lwc_jt_destination_area_code', true );
 				$origin = $item->get_meta( '_lwc_jt_origin_city_code', true );
 				if ( $city && $area ) {
-					return array( 'origin_city_code' => $origin ? $origin : LWC_JT_Route_Mapper::get_origin_city_code( $environment ), 'destination_city_code' => $city, 'destination_area_code' => $area );
+					$origin_route = LWC_JT_Route_Mapper::get_origin_route( $environment );
+					if ( is_wp_error( $origin_route ) && ! $origin ) {
+						return $origin_route;
+					}
+					return array( 'origin_city_code' => $origin ? $origin : $origin_route['city_code'], 'destination_city_code' => $city, 'destination_area_code' => $area );
 				}
 			}
 		}
-		$route = LWC_JT_Route_Mapper::resolve( $order->get_shipping_postcode(), $environment );
+		$use_shipping = 'ID' === $order->get_shipping_country() && '' !== trim( (string) $order->get_shipping_city() );
+		$state = $use_shipping ? $order->get_shipping_state() : $order->get_billing_state();
+		$city = $use_shipping ? $order->get_shipping_city() : $order->get_billing_city();
+		$postcode = $use_shipping ? $order->get_shipping_postcode() : $order->get_billing_postcode();
+		$district = (string) $order->get_meta( '_lwc_' . ( $use_shipping ? 'shipping' : 'billing' ) . '_district_name', true );
+		if ( '' === $district ) {
+			$district = (string) $order->get_meta( '_wc_' . ( $use_shipping ? 'shipping' : 'billing' ) . '/lwc/indonesia-district', true );
+		}
+		$route = LWC_JT_Route_Mapper::resolve( $postcode, $environment, $state, $city, $district );
 		if ( is_wp_error( $route ) ) {
 			return $route;
 		}
-		$route['origin_city_code'] = LWC_JT_Route_Mapper::get_origin_city_code( $environment );
+		$origin_route = LWC_JT_Route_Mapper::get_origin_route( $environment );
+		if ( is_wp_error( $origin_route ) ) {
+			return $origin_route;
+		}
+		$route['origin_city_code'] = $origin_route['city_code'];
 		return $route;
 	}
 

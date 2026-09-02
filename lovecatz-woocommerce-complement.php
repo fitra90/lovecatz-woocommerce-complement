@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.33
+ * Version:     1.0.42
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.33' );
+define( 'LWC_VERSION', '1.0.42' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -146,6 +146,8 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php';
+	require_once LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-express-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-route-mapper.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
@@ -168,11 +170,11 @@ function lwc_init() {
 	// Run the core class.
 	$core = new LWC_Core();
 	$core->init();
+	LWC_Indonesia_Regions::init();
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'lwc_plugin_action_links' );
 add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' );
-add_action( 'wp_ajax_lwc_check_jt_connection', 'lwc_check_jt_connection' );
 add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
@@ -639,68 +641,6 @@ function lwc_register_shipping_methods( $methods ) {
 	return $methods;
 }
 
-/**
- * Check one J&T provider/environment credential set without creating an AWB.
- * Express authenticates through the read-only Tariff API. Cargo reports that
- * validation is unavailable until its separate API contract is configured.
- */
-function lwc_check_jt_connection() {
-	if ( ! current_user_can( 'manage_woocommerce' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ), 403 );
-	}
-
-	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
-	$provider    = isset( $_POST['provider'] ) && 'cargo' === sanitize_key( wp_unslash( $_POST['provider'] ) ) ? 'cargo' : 'express';
-	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
-	$posted      = isset( $_POST['credentials'] ) && is_array( $_POST['credentials'] ) ? wp_unslash( $_POST['credentials'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$fields      = 'express' === $provider
-		? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'cancel_username', 'cancel_api_key', 'cancel_key' )
-		: array( 'username', 'api_key', 'api_secret' );
-	$credentials = array( 'provider' => $provider, 'environment' => $environment );
-	$filled      = 0;
-	foreach ( $fields as $field ) {
-		$value = isset( $posted[ $field ] ) ? sanitize_text_field( $posted[ $field ] ) : '';
-		$credentials[ $field ] = $value;
-		$filled += '' !== trim( $value ) ? 1 : 0;
-	}
-
-	if ( 0 === $filled ) {
-		wp_send_json_success( array( 'status' => 'idle', 'label' => __( 'Waiting for credentials', 'lovecatz-wc' ) ) );
-	}
-	if ( $filled < count( $fields ) ) {
-		wp_send_json_success( array( 'status' => 'partial', 'label' => sprintf( __( 'Credentials incomplete (%1$d of %2$d fields filled)', 'lovecatz-wc' ), $filled, count( $fields ) ) ) );
-	}
-	if ( 'cargo' === $provider ) {
-		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Fields complete; Cargo API validation is not available yet', 'lovecatz-wc' ) ) );
-	}
-
-	$endpoints = LWC_JT_Express_API::get_endpoints( $environment );
-	if ( empty( $endpoints['tariff'] ) ) {
-		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials complete; this environment endpoint is not configured', 'lovecatz-wc' ) ) );
-	}
-	$route = LWC_JT_Route_Mapper::resolve( '', $environment );
-	if ( is_wp_error( $route ) || '' === LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ) ) {
-		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials complete; backend route is not configured', 'lovecatz-wc' ) ) );
-	}
-
-	$result = ( new LWC_JT_Express_API() )->get_tariff( 1, LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ), $route['tariff_area'], $credentials );
-	if ( is_wp_error( $result ) ) {
-		$transport_error = in_array( $result->get_error_code(), array( 'http_request_failed', 'lwc_jt_invalid_response' ), true );
-		update_option( "lwc_jt_{$provider}_validation_status_{$environment}", $transport_error ? 'unavailable' : 'failed' );
-		wp_send_json_success(
-			array(
-				'status' => $transport_error ? 'unavailable' : 'auth_failed',
-				'label'  => $transport_error
-					? sprintf( __( 'API unavailable; credentials could not be verified: %s', 'lovecatz-wc' ), $result->get_error_message() )
-					: $result->get_error_message(),
-			)
-		);
-	}
-
-	update_option( "lwc_jt_{$provider}_validation_status_{$environment}", 'validated' );
-	wp_send_json_success( array( 'status' => 'connected', 'label' => __( 'Tariff API connected; all credential fields are complete', 'lovecatz-wc' ) ) );
-}
-
 /** Load the compact shipping-method accordion on checkout. */
 function lwc_enqueue_shipping_accordion() {
 	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
@@ -732,12 +672,18 @@ function lwc_validate_jt_checkout_contact( $data, $errors ) {
 	if ( ! $uses_jt ) {
 		return;
 	}
-	if ( empty( $data['billing_phone'] ) ) {
-		$errors->add( 'lwc_jt_phone_required', __( 'A recipient phone number is required for J&T Express shipping.', 'lovecatz-wc' ) );
+	$phone = isset( $data['billing_phone'] ) ? preg_replace( '/[^0-9+]/', '', (string) $data['billing_phone'] ) : '';
+	if ( 0 === strpos( $phone, '0' ) ) {
+		$phone = '+62' . substr( $phone, 1 );
+	} elseif ( 0 === strpos( $phone, '62' ) ) {
+		$phone = '+' . $phone;
+	}
+	if ( ! LWC_JT_Request_Validator::is_valid_phone( $phone ) ) {
+		$errors->add( 'lwc_jt_phone_invalid', __( 'The J&T recipient phone must use a valid Indonesian +62 format.', 'lovecatz-wc' ) );
 	}
 	$postcode = ! empty( $data['shipping_postcode'] ) ? $data['shipping_postcode'] : ( isset( $data['billing_postcode'] ) ? $data['billing_postcode'] : '' );
-	if ( '' === trim( (string) $postcode ) ) {
-		$errors->add( 'lwc_jt_postcode_required', __( 'A recipient postal code is required for J&T Express shipping.', 'lovecatz-wc' ) );
+	if ( ! LWC_JT_Request_Validator::is_valid_postcode( $postcode ) ) {
+		$errors->add( 'lwc_jt_postcode_invalid', __( 'The J&T recipient postal code must contain exactly five digits.', 'lovecatz-wc' ) );
 	}
 }
 
@@ -765,8 +711,14 @@ function lwc_validate_jt_store_api_order( $order ) {
 	}
 
 	$postcode = $order->get_shipping_postcode() ? $order->get_shipping_postcode() : $order->get_billing_postcode();
-	if ( '' === trim( (string) $order->get_billing_phone() ) || '' === trim( (string) $postcode ) ) {
-		throw new Exception( esc_html__( 'A recipient phone number and postal code are required for J&T Express shipping.', 'lovecatz-wc' ) );
+	$phone = preg_replace( '/[^0-9+]/', '', (string) $order->get_billing_phone() );
+	if ( 0 === strpos( $phone, '0' ) ) {
+		$phone = '+62' . substr( $phone, 1 );
+	} elseif ( 0 === strpos( $phone, '62' ) ) {
+		$phone = '+' . $phone;
+	}
+	if ( ! LWC_JT_Request_Validator::is_valid_phone( $phone ) || ! LWC_JT_Request_Validator::is_valid_postcode( $postcode ) ) {
+		throw new Exception( esc_html__( 'A valid +62 recipient phone and an exact five-digit Indonesian postal code are required for J&T Express shipping.', 'lovecatz-wc' ) );
 	}
 }
 
@@ -844,6 +796,13 @@ function lwc_deactivate() {
 	if ( function_exists( 'flush_rewrite_rules' ) ) {
 		flush_rewrite_rules();
 	}
+
+	if ( ! class_exists( 'LWC_Indonesia_Regions' ) && file_exists( LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php';
+	}
+	if ( class_exists( 'LWC_Indonesia_Regions' ) ) {
+		LWC_Indonesia_Regions::unschedule_sync();
+	}
 }
 
 /**
@@ -870,6 +829,12 @@ function lwc_install() {
 	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php' ) ) {
 		require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
 	}
+	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php';
+	}
+	if ( file_exists( LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php';
+	}
 
 	if ( class_exists( 'LWC_FedEx_Account' ) ) {
 		LWC_FedEx_Account::create_table();
@@ -881,10 +846,13 @@ function lwc_install() {
 		}
 		LWC_JT_Account::migrate_legacy_credentials();
 	}
+	if ( class_exists( 'LWC_Indonesia_Regions' ) ) {
+		LWC_Indonesia_Regions::install();
+	}
 
 	// Octolize integration was removed in 1.0.22. Its settings no longer
 	// control the native FedEx engine and should not linger in the database.
-	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate' ) as $obsolete_option ) {
+	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate', 'lwc_jt_area_mapping_meta', 'lwc_jt_sandbox_certification_last_result' ) as $obsolete_option ) {
 		delete_option( $obsolete_option );
 	}
 
@@ -912,6 +880,8 @@ function lwc_uninstall() {
 		$wpdb->prefix . 'lwc_jt_accounts',
 		$wpdb->prefix . 'lwc_jt_express_accounts',
 		$wpdb->prefix . 'lwc_jt_cargo_accounts',
+		$wpdb->prefix . 'lwc_jt_area_map',
+		$wpdb->prefix . 'lwc_indonesia_regions',
 	);
 
 	foreach ( $tables as $table ) {
@@ -930,18 +900,19 @@ function lwc_uninstall() {
 
 	// 4. Post meta: product quantity limits, promo coupon markers, FedEx
 	// tracking/label/shipment records (classic post storage).
-	$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '\\_lwc\\_%'" );
+	$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '\\_lwc\\_%' OR meta_key LIKE '\\_wc\\_billing/lwc/%' OR meta_key LIKE '\\_wc\\_shipping/lwc/%'" );
 
 	// 5. HPOS order meta when WooCommerce high-performance order storage
 	// is active (order meta lives in its own table there).
 	$orders_meta_table = $wpdb->prefix . 'wc_orders_meta';
 	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $orders_meta_table ) ) === $orders_meta_table ) {
-		$wpdb->query( "DELETE FROM {$orders_meta_table} WHERE meta_key LIKE '\\_lwc\\_%'" );
+		$wpdb->query( "DELETE FROM {$orders_meta_table} WHERE meta_key LIKE '\\_lwc\\_%' OR meta_key LIKE '\\_wc\\_billing/lwc/%' OR meta_key LIKE '\\_wc\\_shipping/lwc/%'" );
 	}
 
 	// 6. User meta added by member import. WooCommerce's own billing_*
 	// and shipping_* fields are left untouched.
 	$wpdb->query( "DELETE FROM {$wpdb->usermeta} WHERE meta_key = 'lwc_customer_id'" );
+	$wpdb->query( "DELETE FROM {$wpdb->usermeta} WHERE meta_key LIKE '\\_wc\\_billing/lwc/%' OR meta_key LIKE '\\_wc\\_shipping/lwc/%'" );
 
 	// 7. Generated AWB label PDFs in the uploads directory.
 	$upload_dir = wp_upload_dir();

@@ -486,21 +486,15 @@ class LWC_Admin_Settings {
 		);
 	}
 
-	/** Render provider/environment connection indicators for J&T. */
+	/** Render a short J&T settings introduction. */
 	public function render_jt_section_intro( $section = array() ) {
 		$section_id = isset( $section['id'] ) ? (string) $section['id'] : '';
 		$provider   = false !== strpos( $section_id, 'cargo' ) ? 'cargo' : 'express';
 		if ( 'express' === $provider ) {
-			echo '<p>' . esc_html__( 'Enter your J&T Express API credentials below. Tariff authentication is checked automatically without creating a test order.', 'lovecatz-wc' ) . '</p>';
+			echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
 		} else {
-			echo '<p>' . esc_html__( 'J&T Cargo is isolated from J&T Express. Its credentials cannot be authenticated until the Cargo API contract and endpoint are supplied.', 'lovecatz-wc' ) . '</p>';
+			echo '<p>' . esc_html__( 'Select the J&T Cargo API environment and enter its independent credentials.', 'lovecatz-wc' ) . '</p>';
 		}
-
-		echo '<div class="lwc-provider-status-list lwc-jt-connection-status" data-provider="' . esc_attr( $provider ) . '" aria-live="polite">';
-		foreach ( array( 'sandbox' => __( 'Sandbox', 'lovecatz-wc' ), 'production' => __( 'Production', 'lovecatz-wc' ) ) as $environment => $label ) {
-			echo '<div class="lwc-provider-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
-		}
-		echo '</div>';
 	}
 
 	/**
@@ -653,11 +647,11 @@ class LWC_Admin_Settings {
 			'api_secret' => array( __( 'API Secret', 'lovecatz-wc' ), 'password' ),
 		);
 
-		echo '<div class="lwc-jt-credential-group" data-provider="' . esc_attr( $provider ) . '" data-environment="' . esc_attr( $environment ) . '">';
+		echo '<div class="lwc-jt-credential-group">';
 		foreach ( $fields as $field => $definition ) {
 			$name  = "{$prefix}_{$field}";
 			$value = get_option( $name, '' );
-			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
+			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text" autocomplete="off"></label></p>';
 		}
 		echo '<p class="description">' . esc_html__( 'API URLs are selected automatically in the backend according to the active environment and are not stored with credentials.', 'lovecatz-wc' ) . '</p></div>';
 	}

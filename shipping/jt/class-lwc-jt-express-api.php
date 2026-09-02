@@ -43,6 +43,10 @@ class LWC_JT_Express_API {
 		if ( ! $this->has_credentials( $credentials, $required ) || empty( $endpoints['order'] ) ) {
 			return new WP_Error( 'lwc_jt_incomplete_credentials', __( 'J&T order credentials or endpoint are incomplete.', 'lovecatz-wc' ) );
 		}
+		$validation = LWC_JT_Request_Validator::validate_order( $order );
+		if ( is_wp_error( $validation ) ) {
+			return $validation;
+		}
 
 		$order['username'] = $credentials['order_username'];
 		$order['api_key']  = $credentials['order_api_key'];
@@ -126,6 +130,10 @@ class LWC_JT_Express_API {
 
 	/** Execute a tariff-check request. */
 	public function get_tariff( $weight, $origin_code, $destination_area, $credentials = array() ) {
+		$validation = LWC_JT_Request_Validator::validate_weight( $weight );
+		if ( is_wp_error( $validation ) ) {
+			return $validation;
+		}
 		if ( empty( $credentials ) ) {
 			$credentials = LWC_JT_Account::get_active_credentials( 'express' );
 		}
@@ -167,7 +175,7 @@ class LWC_JT_Express_API {
 		}
 
 		$services = isset( $body['content'] ) && is_string( $body['content'] ) ? json_decode( $body['content'], true ) : array();
-		return array( 'success' => true, 'services' => is_array( $services ) ? $services : array(), 'message' => __( 'J&T Sandbox tariff API connected.', 'lovecatz-wc' ) );
+		return array( 'success' => true, 'services' => is_array( $services ) ? $services : array(), 'message' => sprintf( __( 'J&T %s tariff API connected.', 'lovecatz-wc' ), ucfirst( $environment ) ) );
 	}
 
 	private function post_signed_form( $url, $json, $key, $data_field, $sign_field ) {

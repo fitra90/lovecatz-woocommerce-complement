@@ -95,16 +95,24 @@ class LWC_Shipping_JT_Express extends LWC_Shipping_JT_Base {
 	/** Build live tariff rates, optionally falling back when the API is unavailable. */
 	private function build_checkout_rates( $package ) {
 		$environment = 'production' === get_option( 'lwc_jt_express_environment', 'sandbox' ) ? 'production' : 'sandbox';
-		$postcode    = isset( $package['destination']['postcode'] ) ? $package['destination']['postcode'] : '';
-		$route       = LWC_JT_Route_Mapper::resolve( $postcode, $environment );
+		$destination = isset( $package['destination'] ) ? (array) $package['destination'] : array();
+		$postcode    = isset( $destination['postcode'] ) ? trim( (string) $destination['postcode'] ) : '';
+		$state       = isset( $destination['state'] ) ? $destination['state'] : '';
+		$city        = isset( $destination['city'] ) ? $destination['city'] : '';
+		$district    = isset( $destination['lwc_indonesia_district'] ) ? $destination['lwc_indonesia_district'] : '';
+		if ( '' === $district && class_exists( 'LWC_Indonesia_Regions' ) ) {
+			$district = LWC_Indonesia_Regions::region_cookie_district( $state, $city, 'shipping' );
+		}
+		$route       = LWC_JT_Route_Mapper::resolve( $postcode, $environment, $state, $city, $district );
+		$origin      = LWC_JT_Route_Mapper::get_origin_route( $environment );
 		$weight      = $this->get_package_weight_kg( $package );
-		if ( is_wp_error( $route ) ) {
+		if ( ! LWC_JT_Request_Validator::is_valid_postcode( $postcode ) || is_wp_error( $route ) || is_wp_error( $origin ) ) {
 			return array();
 		}
 
 		$result = ( new LWC_JT_Express_API() )->get_tariff(
 			$weight,
-			LWC_JT_Route_Mapper::get_origin_tariff_code( $environment ),
+			$origin['tariff_city'],
 			$route['tariff_area']
 		);
 		if ( is_wp_error( $result ) || empty( $result['services'] ) ) {
@@ -126,7 +134,7 @@ class LWC_Shipping_JT_Express extends LWC_Shipping_JT_Base {
 				'_lwc_jt_weight_kg'             => $weight,
 				'_lwc_jt_rate_source'           => 'live_tariff',
 				'_lwc_jt_route_source'          => $route['source'],
-				'_lwc_jt_origin_city_code'      => LWC_JT_Route_Mapper::get_origin_city_code( $environment ),
+				'_lwc_jt_origin_city_code'      => $origin['city_code'],
 				'_lwc_jt_destination_city_code' => $route['destination_city_code'],
 				'_lwc_jt_destination_area_code' => $route['destination_area_code'],
 			);

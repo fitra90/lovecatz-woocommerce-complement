@@ -3,8 +3,6 @@
 
     var fedexCheckTimer;
     var fedexCheckSequence = 0;
-    var jtCheckTimer;
-    var jtCheckSequence = 0;
     var rayspeedCheckTimer;
 
     function setProviderStatus(statusEl, status, label) {
@@ -176,56 +174,6 @@
         toggleMaximumDiscount();
     }
 
-    function updateJtConnectionStatus() {
-        var statusList = $('.lwc-jt-connection-status');
-        if (!statusList.length) {
-            return;
-        }
-
-        jtCheckSequence += 1;
-        var sequence = jtCheckSequence;
-        var provider = statusList.data('provider') || 'express';
-        statusList.find('.lwc-provider-status').each(function () {
-            setProviderStatus($(this), 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
-        });
-
-        clearTimeout(jtCheckTimer);
-        jtCheckTimer = setTimeout(function () {
-            $('.lwc-jt-credential-group[data-provider="' + provider + '"]').each(function () {
-                var group = $(this);
-                var environment = group.data('environment');
-                var statusEl = statusList.find('.lwc-provider-status[data-environment="' + environment + '"]');
-                var credentials = {};
-                group.find('[data-credential]').each(function () {
-                    credentials[$(this).data('credential')] = ($(this).val() || '').trim();
-                });
-
-                $.ajax({
-                    url: window.lwcShippingSettings.ajax_url,
-                    type: 'POST',
-                    dataType: 'json',
-                    data: {
-                        action: 'lwc_check_jt_connection',
-                        nonce: window.lwcShippingSettings.nonce,
-                        provider: provider,
-                        environment: environment,
-                        credentials: credentials
-                    }
-                }).done(function (response) {
-                    if (sequence !== jtCheckSequence) {
-                        return;
-                    }
-                    var data = response && response.data ? response.data : {};
-                    setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
-                }).fail(function () {
-                    if (sequence === jtCheckSequence) {
-                        setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
-                    }
-                });
-            });
-        }, 300);
-    }
-
     function updateRaySpeedConnectionStatus() {
         var status = $('#lwc-rayspeed-connection-status');
         if (!status.length) {
@@ -260,10 +208,6 @@
 			updateFedexConnectionStatus(true);
         }
 
-        if ($('.lwc-jt-credential-field').length) {
-            $('.lwc-jt-credential-field').on('input change', updateJtConnectionStatus);
-            updateJtConnectionStatus();
-        }
 
         if ($('.lwc-promo-image-select').length) {
             initPromoImageUploader();
