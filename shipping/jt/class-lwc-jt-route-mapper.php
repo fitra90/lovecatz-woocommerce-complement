@@ -6,12 +6,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class LWC_JT_Route_Mapper {
-	const SANDBOX_ORIGIN_TARIFF           = 'JAKARTA';
-	const SANDBOX_ORIGIN_CITY             = 'JKT';
-	const SANDBOX_DESTINATION_CITY        = 'JKT';
-	const SANDBOX_DESTINATION_AREA        = 'JKT001';
-	const SANDBOX_DESTINATION_TARIFF_AREA = 'KALIDERES';
-
 	/**
 	 * Resolve one destination. Postcode is validated but A+B+C is the route key.
 	 *
@@ -25,20 +19,6 @@ class LWC_JT_Route_Mapper {
 	public static function resolve( $postcode, $environment = 'sandbox', $state = '', $city = '', $district = '' ) {
 		$postcode    = trim( (string) $postcode );
 		$environment = 'production' === $environment ? 'production' : 'sandbox';
-		$route       = apply_filters( 'lwc_jt_express_destination_route', null, $postcode, $environment, $state, $city, $district );
-		if ( is_array( $route ) && ! empty( $route['destination_city_code'] ) && ! empty( $route['destination_area_code'] ) && ! empty( $route['tariff_area'] ) ) {
-			return array(
-				'destination_city_code' => strtoupper( sanitize_text_field( $route['destination_city_code'] ) ),
-				'destination_area_code' => strtoupper( sanitize_text_field( $route['destination_area_code'] ) ),
-				'tariff_area' => strtoupper( sanitize_text_field( $route['tariff_area'] ) ), 'source' => 'backend_route',
-			);
-		}
-		if ( 'sandbox' === $environment ) {
-			return array(
-				'destination_city_code' => self::SANDBOX_DESTINATION_CITY, 'destination_area_code' => self::SANDBOX_DESTINATION_AREA,
-				'tariff_area' => self::SANDBOX_DESTINATION_TARIFF_AREA, 'source' => 'sandbox_backend',
-			);
-		}
 		if ( class_exists( 'LWC_JT_Request_Validator' ) && ! LWC_JT_Request_Validator::is_valid_postcode( $postcode ) ) {
 			return new WP_Error( 'lwc_jt_invalid_postcode', __( 'J&T recipient postal code must contain exactly five digits.', 'lovecatz-wc' ) );
 		}
@@ -52,19 +32,29 @@ class LWC_JT_Route_Mapper {
 		if ( ! $mapped ) {
 			return new WP_Error( 'lwc_jt_route_not_mapped', __( 'The selected province, city, and district are not present in the official J&T mapping.', 'lovecatz-wc' ) );
 		}
-		return array(
+		$route = array(
 			'destination_city_code' => $mapped['jt_city_code'], 'destination_area_code' => $mapped['jt_area_code'],
 			'tariff_area' => $mapped['jt_district_name'], 'source' => 'official_jt_region_mapping',
+		);
+		$route = apply_filters( 'lwc_jt_express_destination_route', $route, $postcode, $environment, $state, $city, $district, $mapped );
+		if ( ! is_array( $route ) || empty( $route['destination_city_code'] ) || empty( $route['destination_area_code'] ) || empty( $route['tariff_area'] ) ) {
+			return new WP_Error( 'lwc_jt_route_not_mapped', __( 'The J&T route mapping is incomplete.', 'lovecatz-wc' ) );
+		}
+		return array(
+			'destination_city_code' => strtoupper( sanitize_text_field( $route['destination_city_code'] ) ),
+			'destination_area_code' => strtoupper( sanitize_text_field( $route['destination_area_code'] ) ),
+			'tariff_area' => strtoupper( sanitize_text_field( $route['tariff_area'] ) ),
+			'source' => isset( $route['source'] ) ? sanitize_key( $route['source'] ) : 'official_jt_region_mapping',
 		);
 	}
 
 	/** Resolve the store origin, requiring a district only when J&T city codes differ. */
 	public static function get_origin_route( $environment = 'sandbox' ) {
 		$environment = 'production' === $environment ? 'production' : 'sandbox';
-		if ( 'sandbox' === $environment ) {
-			return array( 'tariff_city' => self::SANDBOX_ORIGIN_TARIFF, 'city_code' => self::SANDBOX_ORIGIN_CITY, 'source' => 'sandbox_backend' );
-		}
 		$location = self::store_location();
+		if ( 'ID' !== $location['country'] ) {
+			return new WP_Error( 'lwc_jt_origin_country', __( 'The WooCommerce store country must be Indonesia for J&T Express.', 'lovecatz-wc' ) );
+		}
 		$rows = class_exists( 'LWC_Indonesia_Regions' ) ? LWC_Indonesia_Regions::find_city_regions( $location['state'], $location['city'] ) : array();
 		if ( empty( $rows ) ) {
 			return new WP_Error( 'lwc_jt_origin_not_mapped', __( 'The WooCommerce store city is not present in the official J&T region mapping.', 'lovecatz-wc' ) );

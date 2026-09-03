@@ -280,6 +280,11 @@ class LWC_Admin_Settings {
 				foreach ( $secret_fields as $field ) {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 				}
+				if ( 'express' === $jt_provider && 'production' === $jt_environment ) {
+					foreach ( array( 'order_url', 'tariff_url', 'tracking_url', 'cancel_url' ) as $field ) {
+						register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => array( $this, 'sanitize_jt_endpoint_url' ) ) );
+					}
+				}
 			}
 			if ( 'express' === $jt_provider ) {
 				register_setting( $group, 'lwc_jt_express_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
@@ -492,6 +497,11 @@ class LWC_Admin_Settings {
 		$provider   = false !== strpos( $section_id, 'cargo' ) ? 'cargo' : 'express';
 		if ( 'express' === $provider ) {
 			echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
+			echo '<div class="lwc-provider-status-list lwc-jt-connection-status" aria-live="polite">';
+			foreach ( array( 'sandbox' => __( 'Sandbox', 'lovecatz-wc' ), 'production' => __( 'Production', 'lovecatz-wc' ) ) as $environment => $label ) {
+				echo '<div class="lwc-provider-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
+			}
+			echo '</div>';
 		} else {
 			echo '<p>' . esc_html__( 'Select the J&T Cargo API environment and enter its independent credentials.', 'lovecatz-wc' ) . '</p>';
 		}
@@ -647,13 +657,29 @@ class LWC_Admin_Settings {
 			'api_secret' => array( __( 'API Secret', 'lovecatz-wc' ), 'password' ),
 		);
 
-		echo '<div class="lwc-jt-credential-group">';
+		echo '<div class="lwc-jt-credential-group" data-provider="' . esc_attr( $provider ) . '" data-environment="' . esc_attr( $environment ) . '">';
 		foreach ( $fields as $field => $definition ) {
 			$name  = "{$prefix}_{$field}";
 			$value = get_option( $name, '' );
-			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text" autocomplete="off"></label></p>';
+			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
 		}
-		echo '<p class="description">' . esc_html__( 'API URLs are selected automatically in the backend according to the active environment and are not stored with credentials.', 'lovecatz-wc' ) . '</p></div>';
+		if ( 'express' === $provider && 'production' === $environment ) {
+			$endpoint_fields = array(
+				'order_url'    => __( 'Order API URL', 'lovecatz-wc' ),
+				'tariff_url'   => __( 'Tariff API URL', 'lovecatz-wc' ),
+				'tracking_url' => __( 'Tracking API URL', 'lovecatz-wc' ),
+				'cancel_url'   => __( 'Cancellation API URL', 'lovecatz-wc' ),
+			);
+			echo '<h4>' . esc_html__( 'Production API URLs', 'lovecatz-wc' ) . '</h4>';
+			foreach ( $endpoint_fields as $field => $label ) {
+				$name = "{$prefix}_{$field}";
+				echo '<p><label>' . esc_html( $label ) . '<br><input type="url" name="' . esc_attr( $name ) . '" value="' . esc_attr( get_option( $name, '' ) ) . '" class="regular-text code" placeholder="https://" autocomplete="off"></label></p>';
+			}
+			echo '<p class="description">' . esc_html__( 'Enter the exact Production endpoints shown in the J&T API dashboard. Save the settings before checking the Production connection status.', 'lovecatz-wc' ) . '</p>';
+		} else {
+			echo '<p class="description">' . esc_html__( 'Sandbox API URLs are selected automatically according to the active environment.', 'lovecatz-wc' ) . '</p>';
+		}
+		echo '</div>';
 	}
 
 	public function render_jt_express_enabled_field() {
@@ -664,6 +690,12 @@ class LWC_Admin_Settings {
 	/** Normalize a J&T environment value. */
 	public function sanitize_jt_environment( $value ) {
 		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
+	}
+
+	/** Accept only HTTP(S) endpoint URLs supplied in the J&T dashboard. */
+	public function sanitize_jt_endpoint_url( $value ) {
+		$url = esc_url_raw( trim( (string) $value ) );
+		return in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
 	}
 
 	/** Resolve the current environment, including the legacy test-mode fallback. */

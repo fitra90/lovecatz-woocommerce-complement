@@ -169,7 +169,15 @@
                 return;
             }
 
+            if ($(this).hasClass('is-disabled') || 'true' === $(this).attr('aria-disabled')) {
+                return;
+            }
+
             var couponCode = $(this).data('coupon');
+            if (!couponCode) {
+                return;
+            }
+
             window.localStorage.setItem(storageKey, couponCode);
             var href = $(this).attr('href');
             if ( href ) {

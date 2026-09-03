@@ -407,11 +407,12 @@
 		const identity = `${ target.id || '' } ${ target.name || '' }`.toLowerCase();
 		if ( identity.includes( 'country' ) || identity.includes( 'state' ) ) {
 			const group = identity.includes( 'shipping' ) ? 'shipping' : identity.includes( 'billing' ) ? 'billing' : '';
-			if ( event.isTrusted && group ) {
+			const userChangedRegion = Boolean( event.isTrusted && group );
+			if ( userChangedRegion ) {
 				clearRememberedValue( field( group, 'city' ) );
 				clearRememberedValue( districtField( group ) );
 			}
-			window.setTimeout( () => group ? enhanceGroup( group, true ) : enhanceAll( true ), 0 );
+			window.setTimeout( () => group ? enhanceGroup( group, userChangedRegion ) : enhanceAll( false ), 0 );
 		}
 	} );
 

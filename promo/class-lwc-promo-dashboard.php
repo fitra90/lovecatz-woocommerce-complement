@@ -151,15 +151,15 @@ class LWC_Promo_Dashboard {
 			return;
 		}
 
-		echo '<div class="lwc-promo-dashboard-grid">';
+		echo '<div class="lwc-promo-dashboard-grid lwc-promo-dashboard-grid--account" role="list">';
 		foreach ( $coupons as $coupon ) {
 			$coupon_code = $coupon->get_code();
 			$available = $this->is_coupon_available_for_user( $coupon, get_current_user_id() );
 			$image_id = absint( get_post_meta( $coupon->get_id(), $available ? '_lwc_promo_active_image_id' : '_lwc_promo_disabled_image_id', true ) );
 			$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'large' ) : LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
 			$tag = $available ? 'a' : 'div';
-			echo '<' . $tag . ' class="lwc-promo-card' . ( $available ? '' : ' is-disabled' ) . '"' . ( $available ? ' href="' . esc_url( $shop_url ) . '" data-coupon="' . esc_attr( $coupon_code ) . '"' : '' ) . '>';
-			echo '<img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" />';
+			echo '<' . $tag . ' class="lwc-promo-card lwc-promo-card--account' . ( $available ? '' : ' is-disabled' ) . '" role="listitem"' . ( $available ? ' href="' . esc_url( $shop_url ) . '" data-coupon="' . esc_attr( $coupon_code ) . '"' : ' aria-disabled="true"' ) . '>';
+			echo '<img src="' . esc_url( $image_url ) . '" alt="' . esc_attr__( 'Promo coupon image', 'lovecatz-wc' ) . '" loading="lazy" decoding="async" />';
 			echo '<div class="lwc-promo-card-body">';
 			echo '<strong>' . esc_html( $coupon_code ) . '</strong>';
 			echo '<span>' . esc_html( $available ? __( 'Click to use this coupon at checkout.', 'lovecatz-wc' ) : __( 'This coupon is no longer available.', 'lovecatz-wc' ) ) . '</span>';

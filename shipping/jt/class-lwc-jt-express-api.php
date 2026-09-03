@@ -16,7 +16,7 @@ class LWC_JT_Express_API {
 	const SANDBOX_TRACK_URL  = 'https://demo-general.inuat-jntexpress.id/jandt_track/track/trackAction!tracking.action';
 	const SANDBOX_CANCEL_URL = 'https://demo-ecommerce.inuat-jntexpress.id/jts-idn-ecommerce-api/api/order/cancel';
 
-	/** Return backend-managed endpoint URLs for an environment. */
+	/** Return endpoint URLs for an environment. Sandbox is fixed; Production is supplied by J&T. */
 	public static function get_endpoints( $environment = 'sandbox' ) {
 		$environment = 'production' === $environment ? 'production' : 'sandbox';
 		$defaults = 'sandbox' === $environment ? array(
@@ -24,9 +24,19 @@ class LWC_JT_Express_API {
 			'tariff' => self::SANDBOX_TARIFF_URL,
 			'track'  => self::SANDBOX_TRACK_URL,
 			'cancel' => self::SANDBOX_CANCEL_URL,
-		) : array( 'order' => '', 'tariff' => '', 'track' => '', 'cancel' => '' );
+		) : array(
+			'order'  => get_option( 'lwc_jt_express_production_order_url', '' ),
+			'tariff' => get_option( 'lwc_jt_express_production_tariff_url', '' ),
+			'track'  => get_option( 'lwc_jt_express_production_tracking_url', '' ),
+			'cancel' => get_option( 'lwc_jt_express_production_cancel_url', '' ),
+		);
 
-		return apply_filters( "lwc_jt_express_{$environment}_endpoints", $defaults );
+		$endpoints = (array) apply_filters( "lwc_jt_express_{$environment}_endpoints", $defaults );
+		foreach ( array( 'order', 'tariff', 'track', 'cancel' ) as $type ) {
+			$url = isset( $endpoints[ $type ] ) ? esc_url_raw( trim( (string) $endpoints[ $type ] ) ) : '';
+			$endpoints[ $type ] = in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
+		}
+		return $endpoints;
 	}
 
 	/** J&T signs JSON + key with MD5, then Base64-encodes the hex digest. */
