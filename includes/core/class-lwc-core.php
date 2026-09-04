@@ -48,6 +48,10 @@ class LWC_Core {
 					require_once LWC_PLUGIN_DIR . 'promo/class-lwc-promo-dashboard.php';
 		}
 
+		if ( file_exists( LWC_PLUGIN_DIR . 'promo/class-lwc-promo-discounts.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'promo/class-lwc-promo-discounts.php';
+		}
+
 		if ( file_exists( LWC_PLUGIN_DIR . 'promo/class-lwc-promo-admin.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'promo/class-lwc-promo-admin.php';
 		}
@@ -93,6 +97,10 @@ class LWC_Core {
 	 * Initialize hooks.
 	 */
 	private function init_hooks() {
+		if ( class_exists( 'LWC_Promo_Discounts' ) ) {
+			( new LWC_Promo_Discounts() )->init();
+		}
+
 		if ( is_admin() ) {
 			$admin_settings = new LWC_Admin_Settings();
 			$admin_settings->init();

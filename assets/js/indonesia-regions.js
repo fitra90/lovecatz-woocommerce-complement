@@ -9,6 +9,7 @@
 	const cache = new Map();
 	const cityRuns = { shipping: 0, billing: 0 };
 	const districtRuns = { shipping: 0, billing: 0 };
+	const layoutHosts = { shipping: null, billing: null };
 	let scheduled = false;
 
 	function field( group, key ) {
@@ -75,7 +76,94 @@
 	}
 
 	function fieldContainer( source ) {
-		return source && ( source.closest( 'p.form-row' ) || source.closest( '.wc-block-components-text-input' ) || source.parentElement );
+		return source && (
+			source.closest( 'p.form-row' ) ||
+			source.closest( '.wc-block-components-state-input, .wc-block-components-select-input, .wc-block-components-text-input' ) ||
+			source.parentElement
+		);
+	}
+
+	function clearIndonesiaLayout( group ) {
+		const host = layoutHosts[ group ];
+		if ( ! host ) {
+			return;
+		}
+		host.classList.remove( 'lwc-indonesia-address-layout' );
+		host.querySelectorAll( '.lwc-indonesia-address-field' ).forEach( ( container ) => {
+			container.classList.remove(
+				'lwc-indonesia-address-field',
+				'lwc-indonesia-address-field--state',
+				'lwc-indonesia-address-field--city',
+				'lwc-indonesia-address-field--district',
+				'lwc-indonesia-address-field--postcode',
+				'lwc-indonesia-address-field--phone'
+			);
+		} );
+		layoutHosts[ group ] = null;
+	}
+
+	function updateIndonesiaLayout( group, enabled ) {
+		clearIndonesiaLayout( group );
+		if ( ! enabled ) {
+			return;
+		}
+
+		const controls = {
+			state: field( group, 'state' ),
+			city: field( group, 'city' ),
+			district: districtField( group ),
+			postcode: field( group, 'postcode' ),
+			phone: field( group, 'phone' ),
+		};
+		const containers = {};
+		Object.keys( controls ).forEach( ( key ) => {
+			containers[ key ] = fieldContainer( controls[ key ] );
+		} );
+		const host = containers.state && containers.state.parentElement;
+		if ( ! host || Object.values( containers ).filter( Boolean ).some( ( container ) => container.parentElement !== host ) ) {
+			return;
+		}
+
+		host.classList.add( 'lwc-indonesia-address-layout' );
+		layoutHosts[ group ] = host;
+		Object.keys( containers ).forEach( ( key ) => {
+			if ( containers[ key ] ) {
+				containers[ key ].classList.add( 'lwc-indonesia-address-field', `lwc-indonesia-address-field--${ key }` );
+			}
+		} );
+	}
+
+	function decorateBlockSelect( container, select, label ) {
+		if ( ! container.closest( '.wc-block-components-address-form' ) ) {
+			return;
+		}
+		if ( container.classList.contains( 'wc-block-components-text-input' ) ) {
+			container.dataset.lwcOriginalBlockTextInput = '1';
+			container.classList.remove( 'wc-block-components-text-input' );
+		}
+		container.classList.add( 'wc-block-components-select-input', 'wc-blocks-components-select', 'wc-blocks-components-select__container' );
+		select.classList.add( 'wc-blocks-components-select__select' );
+		label.classList.add( 'wc-blocks-components-select__label' );
+
+		if ( ! container.querySelector( '.lwc-region-expand' ) ) {
+			const namespace = 'http://www.w3.org/2000/svg';
+			const expand = document.createElementNS( namespace, 'svg' );
+			const path = document.createElementNS( namespace, 'path' );
+			expand.classList.add( 'wc-blocks-components-select__expand', 'lwc-region-expand' );
+			expand.setAttribute( 'viewBox', '0 0 24 24' );
+			expand.setAttribute( 'width', '24' );
+			expand.setAttribute( 'height', '24' );
+			expand.setAttribute( 'aria-hidden', 'true' );
+			expand.setAttribute( 'focusable', 'false' );
+			path.setAttribute( 'd', 'M7 9.5l5 5 5-5' );
+			path.setAttribute( 'fill', 'none' );
+			path.setAttribute( 'stroke', 'currentColor' );
+			path.setAttribute( 'stroke-width', '1.5' );
+			path.setAttribute( 'stroke-linecap', 'round' );
+			path.setAttribute( 'stroke-linejoin', 'round' );
+			expand.appendChild( path );
+			container.appendChild( expand );
+		}
 	}
 
 	function setSourceValue( source, value ) {
@@ -104,7 +192,13 @@
 		}
 		if ( container ) {
 			container.querySelectorAll( '.lwc-region-review' ).forEach( ( notice ) => notice.remove() );
+			container.querySelectorAll( '.lwc-region-expand' ).forEach( ( expand ) => expand.remove() );
 			container.classList.remove( 'lwc-region-control' );
+			container.classList.remove( 'wc-block-components-select-input', 'wc-blocks-components-select', 'wc-blocks-components-select__container' );
+			if ( '1' === container.dataset.lwcOriginalBlockTextInput ) {
+				container.classList.add( 'wc-block-components-text-input' );
+				delete container.dataset.lwcOriginalBlockTextInput;
+			}
 			const label = container.querySelector( '.lwc-region-label' );
 			if ( label ) {
 				if ( label.dataset.lwcCreatedLabel === '1' ) {
@@ -113,6 +207,7 @@
 					label.innerHTML = label.dataset.lwcOriginalHtml || label.textContent;
 					label.setAttribute( 'for', label.dataset.lwcOriginalFor || source.id || '' );
 					label.classList.remove( 'lwc-region-label' );
+					label.classList.remove( 'wc-blocks-components-select__label' );
 				}
 			}
 		}
@@ -159,6 +254,7 @@
 			regionLabel.textContent = label;
 		}
 		regionLabel.setAttribute( 'for', select.id );
+		decorateBlockSelect( container, select, regionLabel );
 		return select;
 	}
 
@@ -313,9 +409,11 @@
 		if ( ! country || ! citySource ) {
 			return;
 		}
-		configurePostcode( group, country.value === 'ID' );
+		const isIndonesia = country.value === 'ID';
+		configurePostcode( group, isIndonesia );
+		updateIndonesiaLayout( group, isIndonesia );
 
-		if ( country.value !== 'ID' ) {
+		if ( ! isIndonesia ) {
 			setRegionCookie( group, '', '', '' );
 			removeEnhancement( citySource, false );
 			removeEnhancement( districtSource, true );
@@ -392,11 +490,11 @@
 
 	function isInternalMutation( mutation ) {
 		const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
-		if ( target && target.closest( '.lwc-region-select, .lwc-region-label, .lwc-region-review' ) ) {
+		if ( target && target.closest( '.lwc-region-select, .lwc-region-label, .lwc-region-review, .lwc-region-expand' ) ) {
 			return true;
 		}
 		const changedNodes = [ ...mutation.addedNodes, ...mutation.removedNodes ].filter( ( node ) => node.nodeType === 1 );
-		return changedNodes.length > 0 && changedNodes.every( ( node ) => node.matches( '.lwc-region-select, .lwc-region-label, .lwc-region-review, option' ) );
+		return changedNodes.length > 0 && changedNodes.every( ( node ) => node.matches( '.lwc-region-select, .lwc-region-label, .lwc-region-review, .lwc-region-expand, option' ) );
 	}
 
 	document.addEventListener( 'change', ( event ) => {

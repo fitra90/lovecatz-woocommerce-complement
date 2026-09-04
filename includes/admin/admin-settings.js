@@ -167,9 +167,13 @@
 
     function initPromoDiscountType() {
         function toggleMaximumDiscount() {
-            var isPercent = $('#lwc_promo_discount_type').val() === 'percent';
+			var discountType = $('#lwc_promo_discount_type').val();
+			var isPercent = discountType === 'percent';
+			var isFixed = discountType === 'fixed_cart';
+			var hasMaximum = isPercent || discountType === 'lwc_free_shipping';
             $('.lwc-percent-only').toggle(isPercent);
-            $('.lwc-fixed-only').toggle(!isPercent);
+			$('.lwc-fixed-only').toggle(isFixed);
+			$('.lwc-maximum-only').toggle(hasMaximum);
         }
 
         $('#lwc_promo_discount_type').on('change', toggleMaximumDiscount);
