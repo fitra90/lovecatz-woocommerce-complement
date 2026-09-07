@@ -14,6 +14,7 @@ class LWC_JT_Express_API {
 	const SANDBOX_ORDER_URL  = 'https://demo-ecommerce.inuat-jntexpress.id/jts-idn-ecommerce-api/api/order/create';
 	const SANDBOX_TARIFF_URL = 'https://demo-general.inuat-jntexpress.id/jandt_track/inquiry.action';
 	const SANDBOX_TRACK_URL  = 'https://demo-general.inuat-jntexpress.id/jandt_track/track/trackAction!tracking.action';
+	const SANDBOX_PRINT_URL  = 'https://demo-general.inuat-jntexpress.id/jandt_order_web/labels/labelsAction!getPrintUrl.action';
 	const SANDBOX_CANCEL_URL = 'https://demo-ecommerce.inuat-jntexpress.id/jts-idn-ecommerce-api/api/order/cancel';
 
 	/** Return endpoint URLs for an environment. Sandbox is fixed; Production is supplied by J&T. */
@@ -23,16 +24,18 @@ class LWC_JT_Express_API {
 			'order'  => self::SANDBOX_ORDER_URL,
 			'tariff' => self::SANDBOX_TARIFF_URL,
 			'track'  => self::SANDBOX_TRACK_URL,
+			'print'  => self::SANDBOX_PRINT_URL,
 			'cancel' => self::SANDBOX_CANCEL_URL,
 		) : array(
 			'order'  => get_option( 'lwc_jt_express_production_order_url', '' ),
 			'tariff' => get_option( 'lwc_jt_express_production_tariff_url', '' ),
 			'track'  => get_option( 'lwc_jt_express_production_tracking_url', '' ),
+			'print'  => get_option( 'lwc_jt_express_production_print_url', '' ),
 			'cancel' => get_option( 'lwc_jt_express_production_cancel_url', '' ),
 		);
 
 		$endpoints = (array) apply_filters( "lwc_jt_express_{$environment}_endpoints", $defaults );
-		foreach ( array( 'order', 'tariff', 'track', 'cancel' ) as $type ) {
+		foreach ( array( 'order', 'tariff', 'track', 'print', 'cancel' ) as $type ) {
 			$url = isset( $endpoints[ $type ] ) ? esc_url_raw( trim( (string) $endpoints[ $type ] ) ) : '';
 			$endpoints[ $type ] = in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
 		}
@@ -110,6 +113,64 @@ class LWC_JT_Express_API {
 			return new WP_Error( 'lwc_jt_tracking_failed', sanitize_text_field( isset( $result['error_message'] ) ? $result['error_message'] : __( 'Tracking failed.', 'lovecatz-wc' ) ) );
 		}
 		return $result;
+	}
+
+	/** Request a short-lived J&T label URL for one AWB. */
+	public function get_print_url( $awb, $credentials = array() ) {
+		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials( 'express' ) : $credentials;
+		$environment = $this->get_environment( $credentials );
+		$endpoints   = self::get_endpoints( $environment );
+		$awb         = trim( sanitize_text_field( (string) $awb ) );
+
+		if ( '' === $awb ) {
+			return new WP_Error( 'lwc_jt_missing_awb', __( 'Create the J&T order before printing its label.', 'lovecatz-wc' ) );
+		}
+		if ( ! $this->has_credentials( $credentials, array( 'tracking_company_id', 'print_key' ) ) || empty( $endpoints['print'] ) ) {
+			return new WP_Error( 'lwc_jt_incomplete_print_credentials', __( 'J&T Print Key, E-company ID, or Print endpoint is incomplete.', 'lovecatz-wc' ) );
+		}
+
+		$payload  = wp_json_encode( array( 'billcode' => $awb ), JSON_UNESCAPED_SLASHES );
+		$msg_type = (string) apply_filters( 'lwc_jt_express_print_message_type', 'GETPRINTURL', $environment, $awb );
+		$response = wp_remote_post(
+			$endpoints['print'],
+			array(
+				'timeout' => 25,
+				'headers' => array( 'Content-Type' => 'application/x-www-form-urlencoded' ),
+				'body'    => array(
+					'logistics_interface' => $payload,
+					'data_digest'          => self::sign( $payload, $credentials['print_key'] ),
+					'msg_type'             => sanitize_text_field( $msg_type ),
+					'eccompanyid'          => sanitize_text_field( $credentials['tracking_company_id'] ),
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		$raw    = trim( (string) wp_remote_retrieve_body( $response ) );
+		$result = json_decode( $raw, true );
+		if ( $status < 200 || $status >= 300 || ! is_array( $result ) ) {
+			return new WP_Error( 'lwc_jt_invalid_print_response', sprintf( __( 'J&T returned an invalid Print response (HTTP %d).', 'lovecatz-wc' ), $status ) );
+		}
+
+		$item    = isset( $result['responseitems'][0] ) && is_array( $result['responseitems'][0] ) ? $result['responseitems'][0] : array();
+		$success = isset( $item['success'] ) && 'true' === strtolower( (string) $item['success'] );
+		if ( ! $success ) {
+			$reason = isset( $item['reason'] ) ? sanitize_text_field( (string) $item['reason'] ) : '';
+			return new WP_Error( 'lwc_jt_print_failed', $this->get_print_error_message( $reason ) );
+		}
+
+		$url = $this->find_print_url( $item );
+		if ( '' === $url ) {
+			$url = $this->find_print_url( $result );
+		}
+		if ( '' === $url ) {
+			return new WP_Error( 'lwc_jt_missing_print_url', __( 'J&T accepted the Print request but did not return a label URL.', 'lovecatz-wc' ) );
+		}
+
+		return array( 'success' => true, 'label_url' => $url, 'awb' => $awb );
 	}
 
 	/** Cancel an order which J&T has not processed yet. */
@@ -224,5 +285,47 @@ class LWC_JT_Express_API {
 			}
 		}
 		return true;
+	}
+
+	/** Find the first HTTP(S) URL in a successful Print response. */
+	private function find_print_url( $value ) {
+		if ( is_string( $value ) ) {
+			$url = esc_url_raw( trim( html_entity_decode( $value, ENT_QUOTES, 'UTF-8' ) ) );
+			return in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
+		}
+		if ( ! is_array( $value ) ) {
+			return '';
+		}
+
+		foreach ( array( 'url', 'print_url', 'printUrl', 'printurl', 'label_url', 'labelUrl' ) as $key ) {
+			if ( isset( $value[ $key ] ) ) {
+				$url = $this->find_print_url( $value[ $key ] );
+				if ( '' !== $url ) {
+					return $url;
+				}
+			}
+		}
+		foreach ( $value as $child ) {
+			$url = $this->find_print_url( $child );
+			if ( '' !== $url ) {
+				return $url;
+			}
+		}
+		return '';
+	}
+
+	/** Translate J&T's legacy Print error codes into actionable admin messages. */
+	private function get_print_error_message( $reason ) {
+		$messages = array(
+			'S01' => __( 'J&T rejected the label payload. Verify that this AWB belongs to the selected environment.', 'lovecatz-wc' ),
+			'S02' => __( 'J&T rejected the Print Key or request signature.', 'lovecatz-wc' ),
+			'S03' => __( 'J&T rejected the E-company ID used for printing.', 'lovecatz-wc' ),
+			'S04' => __( 'The J&T Print API or message type is not enabled for this account.', 'lovecatz-wc' ),
+			'S09' => __( 'J&T does not have printable label data for this AWB yet.', 'lovecatz-wc' ),
+		);
+		if ( isset( $messages[ $reason ] ) ) {
+			return $messages[ $reason ];
+		}
+		return '' !== $reason ? sprintf( __( 'J&T label request failed: %s', 'lovecatz-wc' ), $reason ) : __( 'J&T rejected the label request.', 'lovecatz-wc' );
 	}
 }

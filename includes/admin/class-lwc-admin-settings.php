@@ -115,8 +115,10 @@ class LWC_Admin_Settings {
 
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_media();
-		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array(), $this->get_asset_version( 'includes/admin/admin-settings.css' ) );
-		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery' ), $this->get_asset_version( 'includes/admin/admin-settings.js' ), true );
+		wp_enqueue_style( 'woocommerce_admin_styles' );
+		wp_enqueue_script( 'wc-enhanced-select' );
+		wp_enqueue_style( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.css', array( 'woocommerce_admin_styles' ), $this->get_asset_version( 'includes/admin/admin-settings.css' ) );
+		wp_enqueue_script( 'lwc-admin-settings', LWC_PLUGIN_URL . 'includes/admin/admin-settings.js', array( 'jquery', 'wc-enhanced-select' ), $this->get_asset_version( 'includes/admin/admin-settings.js' ), true );
 
 		wp_localize_script(
 			'lwc-admin-settings',
@@ -171,6 +173,7 @@ class LWC_Admin_Settings {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
+			<?php if ( function_exists( 'settings_errors' ) ) { settings_errors(); } ?>
 
 			<h2 class="nav-tab-wrapper">
 				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
@@ -273,7 +276,7 @@ class LWC_Admin_Settings {
 			foreach ( array( 'sandbox', 'production' ) as $jt_environment ) {
 				$prefix = "lwc_jt_{$jt_provider}_{$jt_environment}";
 				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'cancel_username' ) : array( 'username' );
-				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
+				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
 				foreach ( $text_fields as $field ) {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
 				}
@@ -281,7 +284,7 @@ class LWC_Admin_Settings {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 				}
 				if ( 'express' === $jt_provider && 'production' === $jt_environment ) {
-					foreach ( array( 'order_url', 'tariff_url', 'tracking_url', 'cancel_url' ) as $field ) {
+					foreach ( array( 'order_url', 'tariff_url', 'tracking_url', 'print_url', 'cancel_url' ) as $field ) {
 						register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => array( $this, 'sanitize_jt_endpoint_url' ) ) );
 					}
 				}
@@ -327,6 +330,14 @@ class LWC_Admin_Settings {
 				'default'           => 10,
 				'sanitize_callback' => function ( $value ) {
 					$value = (float) str_replace( ',', '.', (string) $value );
+					if ( ( $value < 0 || $value > 68 ) && function_exists( 'add_settings_error' ) ) {
+						add_settings_error(
+							'lwc_shipping_fedex_options',
+							'lwc_fedex_weight_adjusted',
+							__( 'FedEx maximum package weight was adjusted to the supported range of 0–68 kg.', 'lovecatz-wc' ),
+							'warning'
+						);
+					}
 					// FedEx rejects packages above 68 kg on every parcel service.
 					return max( 0, min( 68, $value ) );
 				},
@@ -647,7 +658,8 @@ class LWC_Admin_Settings {
 			'tariff_customer_name' => array( __( 'Tariff Customer Name', 'lovecatz-wc' ), 'text' ),
 			'tariff_check_key'     => array( __( 'Tariff Check Key', 'lovecatz-wc' ), 'password' ),
 			'tracking_password'    => array( __( 'Tracking Authorization Password', 'lovecatz-wc' ), 'password' ),
-			'tracking_company_id'  => array( __( 'Tracking Authorization Username / E-company ID', 'lovecatz-wc' ), 'text' ),
+			'tracking_company_id'  => array( __( 'Tracking Username / E-company ID (also used for Print)', 'lovecatz-wc' ), 'text' ),
+			'print_key'            => array( __( 'Print Key', 'lovecatz-wc' ), 'password' ),
 			'cancel_username'      => array( __( 'Cancellation Username', 'lovecatz-wc' ), 'text' ),
 			'cancel_api_key'       => array( __( 'Cancellation API Key', 'lovecatz-wc' ), 'password' ),
 			'cancel_key'           => array( __( 'Cancellation Signing Key', 'lovecatz-wc' ), 'password' ),
@@ -668,6 +680,7 @@ class LWC_Admin_Settings {
 				'order_url'    => __( 'Order API URL', 'lovecatz-wc' ),
 				'tariff_url'   => __( 'Tariff API URL', 'lovecatz-wc' ),
 				'tracking_url' => __( 'Tracking API URL', 'lovecatz-wc' ),
+				'print_url'    => __( 'Print Label API URL', 'lovecatz-wc' ),
 				'cancel_url'   => __( 'Cancellation API URL', 'lovecatz-wc' ),
 			);
 			echo '<h4>' . esc_html__( 'Production API URLs', 'lovecatz-wc' ) . '</h4>';
@@ -694,8 +707,24 @@ class LWC_Admin_Settings {
 
 	/** Accept only HTTP(S) endpoint URLs supplied in the J&T dashboard. */
 	public function sanitize_jt_endpoint_url( $value ) {
-		$url = esc_url_raw( trim( (string) $value ) );
-		return in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
+		$raw = trim( (string) $value );
+		$url = esc_url_raw( $raw );
+		if ( '' === $raw || in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ) {
+			return $url;
+		}
+
+		static $notice_added = false;
+		if ( ! $notice_added && function_exists( 'add_settings_error' ) ) {
+			add_settings_error(
+				'lwc_shipping_jt_options',
+				'lwc_invalid_jt_endpoint_url',
+				__( 'One or more invalid J&T endpoint URLs were cleared. Use a complete URL beginning with http:// or https://.', 'lovecatz-wc' ),
+				'warning'
+			);
+			$notice_added = true;
+		}
+
+		return '';
 	}
 
 	/** Resolve the current environment, including the legacy test-mode fallback. */

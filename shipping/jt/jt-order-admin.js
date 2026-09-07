@@ -29,6 +29,35 @@
 	$(document).on('click', '#lwc-jt-create-order', function () {
 		request('lwc_jt_create_order', $(this));
 	});
+	$(document).on('click', '#lwc-jt-print-label', function () {
+		var button = $(this);
+		var fallbackLink = $('#lwc-jt-open-label');
+		var printWindow = window.open('', '_blank');
+
+		fallbackLink.prop('hidden', true).attr('href', '#');
+		if (printWindow) {
+			printWindow.document.title = 'J&T Label';
+			printWindow.document.body.textContent = (window.lwcJtOrder && lwcJtOrder.preparing_label) || 'Preparing J&T label...';
+		}
+
+		request('lwc_jt_print_label', button).done(function (response) {
+			var data = response && response.data ? response.data : {};
+			if (response.success && data.label_url) {
+				if (printWindow) {
+					printWindow.opener = null;
+					printWindow.location.replace(data.label_url);
+				} else {
+					fallbackLink.attr('href', data.label_url).prop('hidden', false);
+				}
+			} else if (printWindow) {
+				printWindow.close();
+			}
+		}).fail(function () {
+			if (printWindow) {
+				printWindow.close();
+			}
+		});
+	});
 	$(document).on('click', '#lwc-jt-refresh-tracking', function () {
 		request('lwc_jt_refresh_tracking', $(this));
 	});

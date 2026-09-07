@@ -159,6 +159,36 @@
 	color: #646970;
 }
 
+.lwc-promo-eligibility-field,
+.lwc-promo-selected-users {
+	display: grid;
+	gap: 6px;
+}
+
+.lwc-promo-field-label,
+.lwc-promo-all-users-option {
+	font-weight: 600;
+}
+
+.lwc-promo-form-grid .lwc-promo-all-users-option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.lwc-promo-form-grid .lwc-promo-all-users-option input[type="checkbox"] {
+	width: auto;
+	margin: 0;
+}
+
+.lwc-promo-selected-users[hidden] {
+	display: none !important;
+}
+
+.lwc-promo-selected-users .select2-container {
+	width: 100% !important;
+}
+
 .lwc-promo-form-grid .lwc-promo-image-preview {
 	display: block;
 	margin-top: 4px;

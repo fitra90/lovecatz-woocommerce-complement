@@ -180,6 +180,30 @@
         toggleMaximumDiscount();
     }
 
+    function initPromoEligibility() {
+        var allUsers = $('#lwc_promo_all_users');
+        var selectedUsers = $('#lwc_promo_selected_users');
+        var userSelect = $('#lwc_promo_eligible_user_ids');
+
+        if (!allUsers.length || !selectedUsers.length || !userSelect.length) {
+            return;
+        }
+
+        function toggleEligibleUsers() {
+            var isAllUsers = allUsers.is(':checked');
+            selectedUsers.prop('hidden', isAllUsers).attr('aria-hidden', isAllUsers ? 'true' : 'false');
+            userSelect.prop('disabled', isAllUsers);
+            allUsers.attr('aria-expanded', isAllUsers ? 'false' : 'true');
+
+            if (!isAllUsers) {
+                $(document.body).trigger('wc-enhanced-select-init');
+            }
+        }
+
+        allUsers.on('change', toggleEligibleUsers);
+        toggleEligibleUsers();
+    }
+
     function updateJtConnectionStatus() {
         var statusList = $('.lwc-jt-connection-status');
         if (!statusList.length) {
@@ -280,6 +304,10 @@
 
         if ($('#lwc_promo_discount_type').length) {
             initPromoDiscountType();
+        }
+
+        if ($('#lwc_promo_all_users').length) {
+            initPromoEligibility();
         }
 
         if ($('.lwc-rayspeed-credential-field').length) {

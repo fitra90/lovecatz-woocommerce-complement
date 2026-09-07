@@ -58,8 +58,13 @@ class LWC_Promo_Dashboard {
 			return;
 		}
 
-		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.js', array( 'jquery' ), LWC_VERSION, true );
+		$style_path    = LWC_PLUGIN_DIR . 'promo/promo-dashboard.css';
+		$script_path   = LWC_PLUGIN_DIR . 'promo/promo-dashboard.js';
+		$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : LWC_VERSION;
+		$script_version = file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION;
+
+		wp_enqueue_style( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.css', array(), $style_version );
+		wp_enqueue_script( 'lwc-promo-dashboard', LWC_PLUGIN_URL . 'promo/promo-dashboard.js', array( 'jquery' ), $script_version, true );
 		wp_localize_script(
 			'lwc-promo-dashboard',
 			'lwcPromoDashboard',
@@ -260,7 +265,7 @@ class LWC_Promo_Dashboard {
 	 * @return bool
 	 */
 	private function is_coupon_available_at_checkout( $coupon ) {
-		if ( ! $coupon instanceof WC_Coupon ) {
+		if ( ! $coupon instanceof WC_Coupon || 'publish' !== $coupon->get_status() ) {
 			return false;
 		}
 
@@ -353,7 +358,7 @@ class LWC_Promo_Dashboard {
 	 * @return bool
 	 */
 	private function is_coupon_available_for_user( $coupon, $user_id ) {
-		if ( ! $coupon instanceof WC_Coupon || ! $user_id ) {
+		if ( ! $coupon instanceof WC_Coupon || 'publish' !== $coupon->get_status() || ! $user_id ) {
 			return false;
 		}
 

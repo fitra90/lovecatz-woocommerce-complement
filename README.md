@@ -25,7 +25,7 @@
 - **Local Shipping (J&T Express & J&T Cargo)**  
   - Real-time rates for J&T Express and J&T Cargo.  
   - Support for domestic shipping zones and weight-based calculations.  
-  - Automated waybill generation and tracking integration.  
+  - Automated waybill generation, official J&T label printing, and tracking integration.  
   - Delivery estimation and status updates for customers.  
   *(Expected release: Q4 2025)*
 

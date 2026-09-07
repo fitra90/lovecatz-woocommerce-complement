@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.49
+ * Version:     1.0.54
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.49' );
+define( 'LWC_VERSION', '1.0.54' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -134,7 +134,7 @@ function lwc_init() {
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
 		foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
 			add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_api_key", 'lwc_decrypt_secret' );
-			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
+			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
 				add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
 			}
 		}
@@ -653,7 +653,7 @@ function lwc_check_jt_connection() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
 	$posted      = isset( $_POST['credentials'] ) && is_array( $_POST['credentials'] ) ? wp_unslash( $_POST['credentials'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'cancel_username', 'cancel_api_key', 'cancel_key' );
+	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key', 'cancel_key' );
 	$credentials = array( 'provider' => 'express', 'environment' => $environment );
 	$filled      = 0;
 	foreach ( $fields as $field ) {

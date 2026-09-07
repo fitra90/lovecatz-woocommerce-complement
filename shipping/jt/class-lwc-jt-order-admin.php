@@ -1,5 +1,5 @@
 <?php
-/** J&T Express order creation, tracking, cancellation, and order UI. */
+/** J&T Express order creation, label printing, tracking, cancellation, and order UI. */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -11,6 +11,7 @@ class LWC_JT_Order_Admin {
 		add_action( 'add_meta_boxes', array( $this, 'register_metabox' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_ajax_lwc_jt_create_order', array( $this, 'ajax_create_order' ) );
+		add_action( 'wp_ajax_lwc_jt_print_label', array( $this, 'ajax_print_label' ) );
 		add_action( 'wp_ajax_lwc_jt_refresh_tracking', array( $this, 'ajax_refresh_tracking' ) );
 		add_action( 'wp_ajax_lwc_jt_cancel_order', array( $this, 'ajax_cancel_order' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'render_customer_tracking' ) );
@@ -38,7 +39,15 @@ class LWC_JT_Order_Admin {
 		}
 		wp_enqueue_style( 'lwc-jt-order-admin', LWC_PLUGIN_URL . 'shipping/jt/jt-order-admin.css', array(), LWC_VERSION );
 		wp_enqueue_script( 'lwc-jt-order-admin', LWC_PLUGIN_URL . 'shipping/jt/jt-order-admin.js', array( 'jquery' ), LWC_VERSION, true );
-		wp_localize_script( 'lwc-jt-order-admin', 'lwcJtOrder', array( 'ajax_url' => admin_url( 'admin-ajax.php' ), 'nonce' => wp_create_nonce( 'lwc_jt_order' ) ) );
+		wp_localize_script(
+			'lwc-jt-order-admin',
+			'lwcJtOrder',
+			array(
+				'ajax_url'        => admin_url( 'admin-ajax.php' ),
+				'nonce'           => wp_create_nonce( 'lwc_jt_order' ),
+				'preparing_label' => __( 'Preparing J&T label…', 'lovecatz-wc' ),
+			)
+		);
 	}
 
 	public function render_metabox( $post_or_order ) {
@@ -59,6 +68,7 @@ class LWC_JT_Order_Admin {
 				<button type="button" class="button button-primary" id="lwc-jt-create-order"><?php esc_html_e( 'Create J&T Order / AWB', 'lovecatz-wc' ); ?></button>
 			<?php else : ?>
 				<p><strong><?php esc_html_e( 'AWB:', 'lovecatz-wc' ); ?></strong> <span id="lwc-jt-awb"><?php echo esc_html( $awb ); ?></span></p>
+				<p><button type="button" class="button button-primary" id="lwc-jt-print-label"><?php esc_html_e( 'Print J&T Label', 'lovecatz-wc' ); ?></button> <a class="button" id="lwc-jt-open-label" href="#" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Open Label', 'lovecatz-wc' ); ?></a></p>
 				<p><button type="button" class="button" id="lwc-jt-refresh-tracking"><?php esc_html_e( 'Refresh Tracking', 'lovecatz-wc' ); ?></button> <button type="button" class="button" id="lwc-jt-cancel-order"><?php esc_html_e( 'Cancel J&T Order', 'lovecatz-wc' ); ?></button></p>
 			<?php endif; ?>
 			<div id="lwc-jt-order-status" class="<?php echo ( $error || $tracking_error ) ? 'is-error' : ''; ?>" aria-live="polite"><?php echo esc_html( $error ? $error : $tracking_error ); ?></div>
@@ -85,6 +95,27 @@ class LWC_JT_Order_Admin {
 		ob_start();
 		$this->render_tracking( $result );
 		wp_send_json_success( array( 'message' => __( 'J&T tracking refreshed.', 'lovecatz-wc' ), 'html' => ob_get_clean() ) );
+	}
+
+	public function ajax_print_label() {
+		$order = $this->get_ajax_order();
+		$awb   = (string) $order->get_meta( '_lwc_jt_awb' );
+		if ( '' === $awb ) {
+			wp_send_json_error( array( 'message' => __( 'Create the J&T order before printing its label.', 'lovecatz-wc' ) ) );
+		}
+
+		$environment = $this->get_order_environment( $order );
+		$result      = ( new LWC_JT_Express_API() )->get_print_url( $awb, LWC_JT_Account::get_credentials( 'express', $environment ) );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'message'   => __( 'J&T label is ready.', 'lovecatz-wc' ),
+				'label_url' => $result['label_url'],
+			)
+		);
 	}
 
 	public function ajax_cancel_order() {
