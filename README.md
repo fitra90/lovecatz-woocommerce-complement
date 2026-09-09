@@ -8,6 +8,10 @@
 
 ### ✅ Currently Available
 
+- **Product Pre-order**
+  - Allow all products, or only products selected through a searchable selector, to be ordered while out of stock.
+  - Pre-order status is retained in the cart, Checkout Blocks, and order line items.
+
 - **User Import & Membership Management**  
   - Bulk import users via CSV/Excel with custom fields.  
   - Automatic membership assignment based on user roles or purchased products.  
@@ -26,6 +30,7 @@
   - Real-time rates for J&T Express and J&T Cargo.  
   - Support for domestic shipping zones and weight-based calculations.  
   - Automated waybill generation, official J&T label printing, and tracking integration.  
+  - Official Sandbox and Production API endpoints are selected automatically; administrators only enter account credentials.
   - Delivery estimation and status updates for customers.  
   *(Expected release: Q4 2025)*
 

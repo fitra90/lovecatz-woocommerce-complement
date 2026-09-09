@@ -15,6 +15,7 @@ class LWC_JT_Order_Admin {
 		add_action( 'wp_ajax_lwc_jt_refresh_tracking', array( $this, 'ajax_refresh_tracking' ) );
 		add_action( 'wp_ajax_lwc_jt_cancel_order', array( $this, 'ajax_cancel_order' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'render_customer_tracking' ) );
+		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_insurance' ), 10 );
 	}
 
 	public function create_on_processing( $order_id, $order = null ) {
@@ -58,12 +59,16 @@ class LWC_JT_Order_Admin {
 		$awb      = (string) $order->get_meta( '_lwc_jt_awb' );
 		$error    = (string) $order->get_meta( '_lwc_jt_create_error' );
 		$tracking_error = (string) $order->get_meta( '_lwc_jt_tracking_error' );
+		$cancel_error = (string) $order->get_meta( '_lwc_jt_cancel_error' );
 		$tracking = (array) $order->get_meta( '_lwc_jt_tracking' );
 		$env      = $this->get_order_environment( $order );
 		?>
 		<div class="lwc-jt-order-box" data-order-id="<?php echo esc_attr( $order->get_id() ); ?>">
 			<p><strong><?php esc_html_e( 'Environment:', 'lovecatz-wc' ); ?></strong> <?php echo esc_html( ucfirst( $env ) ); ?></p>
 			<?php if ( '' === $awb ) : ?>
+				<?php wp_nonce_field( 'lwc_jt_insurance', 'lwc_jt_insurance_nonce' ); ?>
+				<p><label for="lwc-jt-insurance"><?php esc_html_e( 'Insurance value (IDR)', 'lovecatz-wc' ); ?></label><br><input type="number" min="0" step="1" id="lwc-jt-insurance" name="lwc_jt_insurance" value="<?php echo esc_attr( $order->get_meta( '_lwc_jt_insurance_value' ) ?: 0 ); ?>"></p>
+				<p class="description"><?php esc_html_e( 'Use the amount agreed with J&T; enter 0 for no insurance. Save before changing the order to Processing.', 'lovecatz-wc' ); ?></p>
 				<p><?php esc_html_e( 'The J&T order and AWB are created automatically when this WooCommerce order enters Processing.', 'lovecatz-wc' ); ?></p>
 				<button type="button" class="button button-primary" id="lwc-jt-create-order"><?php esc_html_e( 'Create J&T Order / AWB', 'lovecatz-wc' ); ?></button>
 			<?php else : ?>
@@ -71,6 +76,7 @@ class LWC_JT_Order_Admin {
 				<p><button type="button" class="button button-primary" id="lwc-jt-print-label"><?php esc_html_e( 'Print J&T Label', 'lovecatz-wc' ); ?></button> <a class="button" id="lwc-jt-open-label" href="#" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Open Label', 'lovecatz-wc' ); ?></a></p>
 				<p><button type="button" class="button" id="lwc-jt-refresh-tracking"><?php esc_html_e( 'Refresh Tracking', 'lovecatz-wc' ); ?></button> <button type="button" class="button" id="lwc-jt-cancel-order"><?php esc_html_e( 'Cancel J&T Order', 'lovecatz-wc' ); ?></button></p>
 			<?php endif; ?>
+			<?php if ( $cancel_error ) : ?><p class="is-error"><?php echo esc_html( $cancel_error ); ?></p><?php endif; ?>
 			<div id="lwc-jt-order-status" class="<?php echo ( $error || $tracking_error ) ? 'is-error' : ''; ?>" aria-live="polite"><?php echo esc_html( $error ? $error : $tracking_error ); ?></div>
 			<div id="lwc-jt-tracking"><?php $this->render_tracking( $tracking ); ?></div>
 		</div>
@@ -79,6 +85,12 @@ class LWC_JT_Order_Admin {
 
 	public function ajax_create_order() {
 		$order  = $this->get_ajax_order();
+		if ( isset( $_POST['insurance'] ) && ! $order->get_meta( '_lwc_jt_awb' ) ) {
+			$insurance = $this->set_insurance( $order, wp_unslash( $_POST['insurance'] ) );
+			if ( is_wp_error( $insurance ) ) {
+				wp_send_json_error( array( 'message' => $insurance->get_error_message() ) );
+			}
+		}
 		$result = $this->create_shipment( $order );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
@@ -120,15 +132,61 @@ class LWC_JT_Order_Admin {
 
 	public function ajax_cancel_order() {
 		$order = $this->get_ajax_order();
+		$result = $this->cancel_shipment( $order );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'code' => $result->get_error_code() ) );
+		}
+		wp_send_json_success( array( 'message' => __( 'J&T shipment cancelled.', 'lovecatz-wc' ) ) );
+	}
+
+	/** Persist cancellation only after the carrier accepts this exact order. */
+	public function cancel_shipment( $order ) {
+		if ( ! $this->order_uses_jt( $order ) || ! $order->get_meta( '_lwc_jt_awb' ) ) {
+			return new WP_Error( 'lwc_jt_missing_awb', __( 'Create the J&T order before cancelling its shipment.', 'lovecatz-wc' ) );
+		}
+		if ( $order->get_meta( '_lwc_jt_cancelled' ) ) {
+			return array( 'success' => true, 'already_cancelled' => true );
+		}
 		$environment = $this->get_order_environment( $order );
 		$result = ( new LWC_JT_Express_API() )->cancel_order( $this->get_jt_order_id( $order ), __( 'Cancelled in WooCommerce', 'lovecatz-wc' ), LWC_JT_Account::get_credentials( 'express', $environment ) );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			$order->update_meta_data( '_lwc_jt_cancel_error', $result->get_error_message() );
+			$order->save();
+			return $result;
 		}
+		$order->delete_meta_data( '_lwc_jt_cancel_error' );
 		$order->update_meta_data( '_lwc_jt_cancelled', current_time( 'mysql' ) );
 		$order->add_order_note( __( 'J&T shipment cancelled through the API.', 'lovecatz-wc' ) );
 		$order->save();
-		wp_send_json_success( array( 'message' => __( 'J&T order cancelled.', 'lovecatz-wc' ) ) );
+		return $result;
+	}
+
+	public function save_insurance( $order_id ) {
+		if ( ! current_user_can( 'manage_woocommerce' ) || ! isset( $_POST['lwc_jt_insurance_nonce'], $_POST['lwc_jt_insurance'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['lwc_jt_insurance_nonce'] ) ), 'lwc_jt_insurance' ) ) {
+			return;
+		}
+		$order = wc_get_order( $order_id );
+		if ( ! $this->order_uses_jt( $order ) || $order->get_meta( '_lwc_jt_awb' ) ) {
+			return;
+		}
+		$result = $this->set_insurance( $order, wp_unslash( $_POST['lwc_jt_insurance'] ) );
+		if ( is_wp_error( $result ) && class_exists( 'WC_Admin_Meta_Boxes' ) ) {
+			WC_Admin_Meta_Boxes::add_error( $result->get_error_message() );
+		}
+	}
+
+	private function set_insurance( $order, $value ) {
+		$valid = LWC_JT_Request_Validator::validate_insurance( $value );
+		if ( is_wp_error( $valid ) ) {
+			// Prevent a Processing transition from silently using an old/zero value.
+			$order->update_meta_data( '_lwc_jt_insurance_error', $valid->get_error_message() );
+			$order->save();
+			return $valid;
+		}
+		$order->delete_meta_data( '_lwc_jt_insurance_error' );
+		$order->update_meta_data( '_lwc_jt_insurance_value', (int) $value );
+		$order->save();
+		return true;
 	}
 
 	private function create_shipment( $order ) {
@@ -142,6 +200,9 @@ class LWC_JT_Order_Admin {
 
 		$environment = $this->get_order_environment( $order );
 		$route       = $this->get_order_route( $order, $environment );
+		if ( $order->get_meta( '_lwc_jt_insurance_error' ) ) {
+			return $this->save_create_error( $order, new WP_Error( 'lwc_jt_invalid_insurance', $order->get_meta( '_lwc_jt_insurance_error' ) ) );
+		}
 		if ( is_wp_error( $route ) ) {
 			return $this->save_create_error( $order, $route );
 		}
@@ -224,7 +285,7 @@ class LWC_JT_Order_Admin {
 			'weight'           => max( 0.01, round( $weight, 2 ) ),
 			'goodsdesc'        => substr( $this->sanitize_goods_text( implode( ' ', $names ) ), 0, 40 ),
 			'servicetype'      => 1 === (int) $shipper['service_type'] ? 1 : 6,
-			'insurance'        => 0,
+			'insurance'        => $order->get_meta( '_lwc_jt_insurance_value' ) ?: 0,
 			'orderdate'        => $now,
 			'item_name'        => substr( $this->sanitize_goods_text( reset( $names ) ), 0, 50 ),
 			'cod'              => 'cod' === $order->get_payment_method() ? min( 99999999, (int) ceil( $order->get_total() ) ) : 0,
@@ -241,13 +302,14 @@ class LWC_JT_Order_Admin {
 		$order->update_meta_data( '_lwc_jt_awb', $result['awb'] );
 		$order->update_meta_data( '_lwc_jt_order_id', $result['order_id'] );
 		$order->update_meta_data( '_lwc_jt_etd', $result['etd'] );
+		$order->update_meta_data( '_lwc_jt_declared_weight_kg', $data['weight'] );
 		$order->add_order_note( sprintf( __( 'J&T %1$s order created. AWB: %2$s', 'lovecatz-wc' ), ucfirst( $environment ), $result['awb'] ) );
 		$order->save();
 		$this->refresh_tracking( $order );
 		return $result;
 	}
 
-	private function refresh_tracking( $order ) {
+	public function refresh_tracking( $order ) {
 		$awb = (string) $order->get_meta( '_lwc_jt_awb' );
 		if ( '' === $awb ) {
 			return new WP_Error( 'lwc_jt_missing_awb', __( 'Create the J&T order before requesting tracking.', 'lovecatz-wc' ) );
@@ -259,6 +321,14 @@ class LWC_JT_Order_Admin {
 			return $result;
 		}
 		$order->delete_meta_data( '_lwc_jt_tracking_error' );
+		$weight = isset( $result['detail']['weight'] ) ? $result['detail']['weight'] : null;
+		if ( is_numeric( $weight ) && is_finite( (float) $weight ) && (float) $weight > 0 ) {
+			$previous = $order->get_meta( '_lwc_jt_tracking_weight_raw' );
+			if ( is_numeric( $previous ) && (float) $previous > 0 && (float) $previous !== (float) $weight ) {
+				$order->add_order_note( sprintf( __( 'J&T reported a weight change from %1$s to %2$s (carrier units). Declared shipment weight is unchanged.', 'lovecatz-wc' ), $previous, $weight ) );
+			}
+			$order->update_meta_data( '_lwc_jt_tracking_weight_raw', $weight );
+		}
 		$order->update_meta_data( '_lwc_jt_tracking', $result );
 		$order->save();
 		return $result;
@@ -274,6 +344,10 @@ class LWC_JT_Order_Admin {
 	}
 
 	private function render_tracking( $tracking ) {
+		$weight = isset( $tracking['detail']['weight'] ) ? $tracking['detail']['weight'] : null;
+		if ( is_numeric( $weight ) && is_finite( (float) $weight ) && (float) $weight > 0 ) {
+			echo '<p>' . esc_html( sprintf( __( 'Weight reported by J&T: %s (carrier units)', 'lovecatz-wc' ), $weight ) ) . '</p>';
+		}
 		$history = isset( $tracking['history'] ) && is_array( $tracking['history'] ) ? $tracking['history'] : array();
 		if ( empty( $history ) ) {
 			echo '<p class="description">' . esc_html__( 'No tracking events are available yet.', 'lovecatz-wc' ) . '</p>';

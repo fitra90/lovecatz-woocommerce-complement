@@ -1,7 +1,7 @@
 # LoveCatz WooCommerce Complement — Product Requirements and Design
 
 Last code review: 2026-08-21
-Current plugin version: 1.0.22
+Current plugin version: 1.0.58
 
 ## Purpose
 
@@ -10,7 +10,7 @@ This document describes the behavior implemented by the current repository. Trea
 The plugin extends WooCommerce with:
 
 - an admin-managed promo catalog and customer coupon dashboard;
-- per-product purchase quantity limits;
+- per-product purchase quantity limits and out-of-stock pre-orders;
 - member import, management, printable cards, and customer card access;
 - native LoveCatz FedEx live rates, order-screen AWB labels, and tracking;
 - a built-in manual currency converter that coexists with external plugins;
@@ -31,7 +31,7 @@ The plugin exits early and shows an admin notice when WooCommerce is inactive.
 - `lovecatz-woocommerce-complement.php` — bootstrap, lifecycle, global hooks, credential helpers, and FedEx AJAX.
 - `includes/core/` — loader, logger, and built-in currency converter.
 - `includes/admin/` — active settings and membership implementation plus admin assets.
-- `products/` — quantity limits.
+- `products/` — quantity limits and pre-order behavior.
 - `promo/` — promo administration and customer/checkout integration.
 - `shipping/fedex/` — account storage, REST client, native method, and order-screen label controls.
 - `shipping/jt/` — per-provider account storage and the provisional J&T Express / J&T Cargo methods.
@@ -62,7 +62,7 @@ The top-level menu requires `manage_woocommerce`; its label and Dashicon are con
 - **Setting** — menu title and icon.
 
 The sidebar menu expands into one submenu entry per main tab (Setting, Products, Members, Shipping, Promo, Currency); each links straight to that tab via `?page=lovecatz-wc&tab=…`, and the open tab highlights its entry through a `submenu_file` filter.
-- **Products** — quantity-limit feature switch.
+- **Products** — quantity-limit and pre-order feature controls.
 - **Members** — import, list, delete, and print cards.
 - **Shipping** — J&T and FedEx settings.
 - **Promo** — coupon create/edit/list/trash workspace.
@@ -94,6 +94,12 @@ Known gaps:
 `lwc_enable_product_quantity_limits` enables the feature. Per-product metadata is `_lwc_minimum_quantity` and `_lwc_maximum_quantity`.
 
 The implementation adds Inventory and Quick Edit controls, adjusts single-product inputs, validates add-to-cart/cart updates, and checks existing cart items before cart/checkout. It handles product/variation resolution where applicable.
+
+## Product pre-orders
+
+`lwc_enable_product_preorder` enables pre-orders for products whose current stock status is out of stock or on backorder. `lwc_preorder_all_products=yes` covers the catalog through one flag without persisting every product ID. When that flag is off, `lwc_preorder_product_ids` stores only products chosen through WooCommerce's AJAX product search; variations inherit their parent's eligibility.
+
+Eligible out-of-stock products use WooCommerce's native backorder-safe purchase path, display `Available for pre-order` and a `Pre-order` button, and remain unchanged while in stock. Cart and Checkout Blocks expose the pre-order status, and an immutable `_lwc_preorder` order-item marker plus a visible order-item label and order note carry the fulfillment warning into admin.
 
 Limits are per-product only. Previously documented global default min/max options are not active.
 
@@ -175,12 +181,24 @@ Options: `lwc_currency_enabled`, `lwc_currency_rates`.
 
 ### J&T Express and J&T Cargo
 
+#### Certification regression requirements
+
+Tariff requests use J&T city/district **names** (for example `JAKARTA` / `KALIDERES`), whereas Order uses `JKT` / `JKT002`. The API client must reject empty or malformed tariff services, invalid prices, mismatched tracking identities, and unsuccessful cancellation details; HTTP 200 or a top-level success flag alone is insufficient. A tariff without a quote must never become a free shipping rate or a green connection indicator.
+
+Before AWB creation, authorized order administrators may save a nonnegative whole-IDR insurance value on that J&T Express order. Default is zero; no percentage is inferred from the account agreement. Automatic and manual AWB creation both use that saved value. Issued shipments cannot have their insurance rewritten locally.
+
+Tracking refresh retains the carrier's raw positive weight and records changes between successive carrier observations without changing WooCommerce product/order weight or assuming an undocumented tracking weight unit. Zero means no usable weight observation yet. Cancellation refusals (including `GOT` after pickup) remain errors in fulfillment, retain the carrier reason, and must not mark the order cancelled. A negative certification test passes when the expected refusal is observed, not when cancellation succeeds.
+
+Certification tooling and evidence are development artifacts, archived separately from the distributable plugin; the production plugin and release ZIP must not contain test runners or fixtures. Certification tooling covers all 16 scenarios in the supplied 12-case document, saves redacted HTTP evidence, distinguishes LIVE from MOCK regression tests, and supports resuming the weight-change and pickup scenarios with dedicated Sandbox AWBs prepared by J&T. No fabricated carrier events, rates, or unconditional success responses are permitted. Provider prerequisites remain BLOCKED until actually observed. Reference: https://developer.jet.co.id/documentation.
+
 J&T is split into two independent providers, each with its own credentials, zone method, and weight rules:
 
 - **`lwc_jt_express`** (`LWC_Shipping_JT_Express`) — regular parcels; auto-split threshold default 10 kg, hard ceiling 100 kg (`lwc_jt_express_package_weight_ceiling_kg` filter).
 - **`lwc_jt_cargo`** (`LWC_Shipping_JT_Cargo`) — large/heavy shipments (10 kg minimum billable, tiers H50–H500); auto-split off by default, ceiling 500 kg (`lwc_jt_cargo_package_weight_ceiling_kg` filter).
 
-Both extend `LWC_Shipping_JT_Base` and retain independent configuration. Rates are rejected unless the destination country is Indonesia (`ID`). The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. J&T Express and J&T Cargo appear as independent Shipping provider tabs. The J&T admin page is limited to activation, active Sandbox/Production environment, credentials, the Production endpoint URLs supplied in the J&T account dashboard, and a read-only REST connection indicator; mapping import/export and stateful test tools are not exposed. Express stores the distinct Order, Tariff, Tracking, and Cancellation credentials required by J&T Indonesia; Cargo retains a generic independent account form until its API contract is supplied. Sandbox endpoint URLs are fixed backend constants. Production endpoint options may still be overridden with the `lwc_jt_express_production_endpoints` filter. Legacy pre-split credentials migrate to Express once.
+Both extend `LWC_Shipping_JT_Base` and retain independent configuration. Rates are rejected unless the destination country is Indonesia (`ID`). The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. J&T Express and J&T Cargo appear as independent Shipping provider tabs. The J&T admin page is limited to activation, active Sandbox/Production environment, credentials, and a read-only REST connection indicator; mapping import/export, endpoint inputs, and stateful test tools are not exposed. Express stores the distinct Order, Tariff, Tracking, Print, and Cancellation credentials required by J&T Indonesia; Cargo retains a generic independent account form until its API contract is supplied. Sandbox and Production endpoint URLs are fixed backend constants. Developers may still override an environment's complete endpoint array with the corresponding `lwc_jt_express_{environment}_endpoints` filter. Legacy pre-split credentials migrate to Express once.
+
+Cancellation follows the documented two-field credential contract: Cancellation Username and Cancellation API Key. The API Key is included in the cancellation detail and is also used to calculate the request signature; there is no separate Cancellation Signing Key option.
 
 J&T Express routing in both Sandbox and Production uses the complete A–H province/city/district mapping returned by J&T. Green columns A–C are the customer-facing address hierarchy; red columns D–H contain J&T province/city/district names, `origin_code`/`destination_code`, and `receiver_area`. The exact green province + city + district combination is the mapping key. Postcodes are required and independently validated as exactly five digits but are never used as route keys. The bundled snapshot is installed atomically behind the scenes and records row count, version, timestamp, and SHA-256 provenance metadata.
 
@@ -192,9 +210,9 @@ J&T request validation remains in the runtime integration: Basic Order payloads 
 
 When checkout contains two or more shipping choices, the frontend progressively enhances each shipping-method list into a compact accordion. Its header displays the selected courier, expands accessibly to show all choices, and closes after selection. The enhancement is reapplied after classic checkout AJAX refreshes and WooCommerce Blocks DOM updates; a single shipping choice remains unchanged.
 
-J&T Express is an environment-aware live integration. At checkout it calls the Tariff endpoint belonging to the active Sandbox or Production account and publishes only services returned by the API; there is no configurable or synthetic checkout-rate fallback. Both environments resolve origin and destination through the bundled official mapping and fail closed when the address cannot be mapped. Production URLs come from the J&T account dashboard. The selected environment, service, route, weight, and live-rate source are copied to private shipping-item metadata.
+J&T Express is an environment-aware live integration. At checkout it calls the fixed official Tariff endpoint belonging to the active Sandbox or Production account and publishes only services returned by the API; there is no configurable or synthetic checkout-rate fallback. Both environments resolve origin and destination through the bundled official mapping and fail closed when the address cannot be mapped. The selected environment, service, route, weight, and live-rate source are copied to private shipping-item metadata.
 
-FedEx and RaySpeed retain their provider-specific connection indicators. J&T Express also checks the read-only Tariff REST endpoint for Sandbox and Production when its settings page opens or credentials change. This verifies authentication without creating an order or AWB; incomplete non-Tariff credentials are reported separately.
+FedEx and RaySpeed retain their provider-specific connection indicators. J&T Express displays one connection indicator and checks only the read-only Tariff REST endpoint for the currently selected Active API Environment when its settings page opens, the environment changes, or an active credential changes. It never checks the inactive J&T environment in the background. This verifies authentication without creating an order or AWB; incomplete non-Tariff credentials are reported separately.
 
 When a J&T Express order enters **Processing**, `LWC_JT_Order_Admin` validates store and recipient fields, creates the J&T order exactly once, saves the AWB/order ID/ETD, and immediately requests tracking. Sender name/address come from WooCommerce store data, sender phone uses the shared store contact, and the backend `lwc_jt_express_shipper` filter can override them without adding J&T form fields. Failures are retained in order metadata and order notes without issuing duplicate orders on later status changes. The provider-specific order metabox offers retry, tracking refresh, and cancellation controls; AWB and stored tracking events are also displayed to the customer. Classic checkout and Checkout Block both require the recipient phone and postcode when J&T is selected. J&T Cargo remains provisional and has no Express API coupling.
 
@@ -204,9 +222,9 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 
 ## Data model
 
-- Options: `lwc_menu_*`, `lwc_enable_product_quantity_limits`, `lwc_jt_{express|cargo}_*` (plus legacy `lwc_jt_*`), `lwc_fedex_*` (including `lwc_fedex_shipper_name` and `lwc_fedex_shipper_phone`), `lwc_currency_enabled`, `lwc_currency_rates`, rewrite-version, and legacy promo options.
+- Options: `lwc_menu_*`, `lwc_enable_product_quantity_limits`, `lwc_enable_product_preorder`, `lwc_preorder_all_products`, `lwc_preorder_product_ids`, `lwc_jt_{express|cargo}_*` (plus legacy `lwc_jt_*`), `lwc_fedex_*` (including `lwc_fedex_shipper_name` and `lwc_fedex_shipper_phone`), `lwc_currency_enabled`, `lwc_currency_rates`, rewrite-version, and legacy promo options.
 - Tables: `{prefix}lwc_fedex_accounts`, `{prefix}lwc_jt_express_accounts`, `{prefix}lwc_jt_cargo_accounts` (legacy `{prefix}lwc_jt_accounts` dropped on uninstall).
-- Product meta: `_lwc_minimum_quantity`, `_lwc_maximum_quantity`.
+- Product meta: `_lwc_minimum_quantity`, `_lwc_maximum_quantity`; pre-order eligibility is option-based rather than duplicated per product.
 - User meta: `lwc_customer_id` plus WooCommerce billing/shipping fields.
 - Coupon meta: LoveCatz promo fields listed above.
 - Order meta: `_lwc_fedex_label_path`, `_lwc_fedex_tracking_number`, `_lwc_jt_awb`, `_lwc_jt_order_id`, `_lwc_jt_etd`, `_lwc_jt_tracking`, `_lwc_jt_create_error`, `_lwc_jt_tracking_error`, `_lwc_jt_cancelled`.
@@ -244,5 +262,5 @@ The order-screen metabox lists every line item with a checkbox. Creating a label
 4. Consolidate membership classes.
 5. Consolidate shipping registration without changing persisted IDs.
 6. Implement or remove the Currency placeholder.
-7. Keep the J&T Production endpoint settings and complete province/city/district-to-J&T area mapping current before enabling Production; postcodes remain separately validated as exactly five digits.
+7. Keep the hardcoded official J&T Production endpoints and complete province/city/district-to-J&T area mapping current before enabling Production; postcodes remain separately validated as exactly five digits.
 8. Define uninstall retention for options, metadata, coupons, tables, and labels.

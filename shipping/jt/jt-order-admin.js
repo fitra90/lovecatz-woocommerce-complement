@@ -9,7 +9,8 @@
 		return $.post(lwcJtOrder.ajax_url, {
 			action: action,
 			nonce: lwcJtOrder.nonce,
-			order_id: box.data('order-id')
+			order_id: box.data('order-id'),
+			insurance: action === 'lwc_jt_create_order' ? $('#lwc-jt-insurance').val() : undefined
 		}).done(function (response) {
 			var data = response && response.data ? response.data : {};
 			status.addClass(response.success ? 'is-success' : 'is-error').text(data.message || 'J&T request failed.');

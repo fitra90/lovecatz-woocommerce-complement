@@ -34,6 +34,9 @@ class LWC_JT_Request_Validator {
 
 	/** Validate the API's strict 0 < weight <= 100 kg boundary. */
 	public static function validate_weight( $weight ) {
+		if ( ! is_numeric( $weight ) || ! is_finite( (float) $weight ) ) {
+			return new WP_Error( 'lwc_jt_invalid_weight', __( 'J&T package weight must be a finite number.', 'lovecatz-wc' ) );
+		}
 		$weight = (float) $weight;
 		if ( $weight <= 0 || $weight > self::MAX_WEIGHT_KG ) {
 			return new WP_Error(
@@ -44,8 +47,24 @@ class LWC_JT_Request_Validator {
 		return true;
 	}
 
+	/** Insurance is an agreed whole-IDR amount, not a percentage or a boolean. */
+	public static function validate_insurance( $value ) {
+		$digits = is_scalar( $value ) ? ltrim( (string) $value, '0' ) : '';
+		$limit = (string) PHP_INT_MAX;
+		if ( ! is_scalar( $value ) || is_bool( $value ) || ! preg_match( '/^\d+$/D', (string) $value ) || strlen( $digits ) > strlen( $limit ) || ( strlen( $digits ) === strlen( $limit ) && strcmp( $digits, $limit ) > 0 ) ) {
+			return new WP_Error( 'lwc_jt_invalid_insurance', __( 'Insurance must be a nonnegative whole amount in IDR agreed with J&T.', 'lovecatz-wc' ) );
+		}
+		return true;
+	}
+
 	/** Validate a complete Basic Order detail object against J&T's contract. */
 	public static function validate_order( $data ) {
+		if ( isset( $data['insurance'] ) && '' !== $data['insurance'] ) {
+			$insurance = self::validate_insurance( $data['insurance'] );
+			if ( is_wp_error( $insurance ) ) {
+				return $insurance;
+			}
+		}
 		$required = array(
 			'orderid', 'shipper_name', 'shipper_contact', 'shipper_phone', 'shipper_addr',
 			'origin_code', 'receiver_name', 'receiver_phone', 'receiver_addr', 'receiver_zip',

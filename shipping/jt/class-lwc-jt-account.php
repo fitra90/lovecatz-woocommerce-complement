@@ -155,7 +155,7 @@ class LWC_JT_Account {
 			'environment' => $environment,
 		);
 		$fields = 'express' === $provider
-			? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key', 'cancel_key' )
+			? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key' )
 			: array( 'username', 'api_key', 'api_secret' );
 		foreach ( $fields as $field ) {
 			$credentials[ $field ] = get_option( "{$prefix}_{$field}", '' );

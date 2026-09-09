@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.54
+ * Version:     1.0.58
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.54' );
+define( 'LWC_VERSION', '1.0.58' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -134,7 +134,7 @@ function lwc_init() {
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
 		foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
 			add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_api_key", 'lwc_decrypt_secret' );
-			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
+			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
 				add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
 			}
 		}
@@ -653,7 +653,7 @@ function lwc_check_jt_connection() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
 	$posted      = isset( $_POST['credentials'] ) && is_array( $_POST['credentials'] ) ? wp_unslash( $_POST['credentials'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key', 'cancel_key' );
+	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key' );
 	$credentials = array( 'provider' => 'express', 'environment' => $environment );
 	$filled      = 0;
 	foreach ( $fields as $field ) {
@@ -685,6 +685,10 @@ function lwc_check_jt_connection() {
 
 	$result = ( new LWC_JT_Express_API() )->get_tariff( 1, $origin, $route['tariff_area'], $credentials );
 	if ( is_wp_error( $result ) ) {
+		if ( in_array( $result->get_error_code(), array( 'lwc_jt_no_tariff', 'lwc_jt_invalid_tariff_response' ), true ) ) {
+			update_option( "lwc_jt_express_validation_status_{$environment}", 'no_tariff' );
+			wp_send_json_success( array( 'status' => 'partial', 'label' => $result->get_error_message() ) );
+		}
 		$transport_error = in_array( $result->get_error_code(), array( 'http_request_failed', 'lwc_jt_invalid_response' ), true );
 		update_option( "lwc_jt_express_validation_status_{$environment}", $transport_error ? 'unavailable' : 'failed' );
 		wp_send_json_success(
@@ -916,7 +920,7 @@ function lwc_install() {
 
 	// Octolize integration was removed in 1.0.22. Its settings no longer
 	// control the native FedEx engine and should not linger in the database.
-	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate', 'lwc_jt_area_mapping_meta', 'lwc_jt_sandbox_certification_last_result' ) as $obsolete_option ) {
+	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate', 'lwc_jt_area_mapping_meta', 'lwc_jt_sandbox_certification_last_result', 'lwc_jt_express_production_order_url', 'lwc_jt_express_production_tariff_url', 'lwc_jt_express_production_tracking_url', 'lwc_jt_express_production_print_url', 'lwc_jt_express_production_cancel_url', 'lwc_jt_express_sandbox_cancel_key', 'lwc_jt_express_production_cancel_key' ) as $obsolete_option ) {
 		delete_option( $obsolete_option );
 	}
 

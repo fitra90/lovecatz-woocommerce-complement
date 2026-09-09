@@ -132,6 +132,12 @@ class LWC_Core {
 			$quantity_limits->init();
 		}
 
+		// Product pre-orders are enabled globally or for a small, selected ID list.
+		if ( file_exists( LWC_PLUGIN_DIR . 'products/class-lwc-product-preorder.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'products/class-lwc-product-preorder.php';
+			( new LWC_Product_Preorder() )->init();
+		}
+
 		// Publish built-in FedEx rates for international packages even when the
 		// merchant has not added FedEx to a WooCommerce shipping zone.
 		if ( class_exists( 'LWC_Shipping_FedEx' ) ) {

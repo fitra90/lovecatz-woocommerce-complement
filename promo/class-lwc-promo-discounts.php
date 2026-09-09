@@ -25,6 +25,8 @@ class LWC_Promo_Discounts {
 		add_filter( 'woocommerce_coupon_get_discount_amount', array( $this, 'limit_percentage_discount' ), 10, 5 );
 		add_action( 'woocommerce_before_calculate_totals', array( $this, 'reset_calculation_cache' ), PHP_INT_MAX );
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'apply_selected_shipping_discount' ), 20 );
+		add_action( 'woocommerce_checkout_create_order_fee_item', array( $this, 'mark_shipping_discount_order_item' ), 10, 4 );
+		add_filter( 'gettext', array( $this, 'rename_admin_shipping_discount_total' ), 20, 3 );
 	}
 
 	/** Rebuild cap factors whenever WooCommerce starts a new totals calculation. */
@@ -78,7 +80,7 @@ class LWC_Promo_Discounts {
 			}
 
 			$cart->add_fee(
-				sprintf( __( 'Shipping discount (%s)', 'lovecatz-wc' ), strtoupper( $coupon->get_code() ) ),
+				sprintf( __( 'Shipping Discount (%s)', 'lovecatz-wc' ), strtoupper( $coupon->get_code() ) ),
 				-$discount,
 				false
 			);
@@ -87,6 +89,80 @@ class LWC_Promo_Discounts {
 				break;
 			}
 		}
+	}
+
+	/**
+	 * Mark shipping-discount fee items so their purpose survives on the order.
+	 *
+	 * WooCommerce has no native coupon type that reduces a selected paid shipping
+	 * rate. The discount therefore has to be stored as a negative fee, but this
+	 * private marker lets reporting and presentation distinguish it from a fee.
+	 *
+	 * @param WC_Order_Item_Fee $item    Order fee item.
+	 * @param string            $fee_key Cart fee key.
+	 * @param object            $fee     Cart fee data.
+	 * @param WC_Order          $order   Order being created.
+	 */
+	public function mark_shipping_discount_order_item( $item, $fee_key, $fee, $order ) {
+		unset( $fee_key, $order );
+		$name = isset( $fee->name ) ? (string) $fee->name : '';
+		if ( $item instanceof WC_Order_Item_Fee && 0 === stripos( $name, 'Shipping Discount (' ) ) {
+			$item->add_meta_data( '_lwc_shipping_discount', 'yes', true );
+		}
+	}
+
+	/**
+	 * Rename WooCommerce's aggregate admin total when it contains only shipping discounts.
+	 *
+	 * The order editor groups every WC_Order_Item_Fee below a hard-coded "Fees:"
+	 * heading. Limit the replacement to LoveCatz shipping-discount rows so genuine
+	 * order fees keep WooCommerce's original label.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        Original text.
+	 * @param string $domain      Text domain.
+	 * @return string
+	 */
+	public function rename_admin_shipping_discount_total( $translation, $text, $domain ) {
+		if ( ! is_admin() || 'woocommerce' !== $domain || 'Fees:' !== $text ) {
+			return $translation;
+		}
+
+		$order_id = $this->get_current_admin_order_id();
+		$order    = $order_id && function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
+		if ( ! $order instanceof WC_Order ) {
+			return $translation;
+		}
+
+		$fees = $order->get_items( 'fee' );
+		if ( empty( $fees ) ) {
+			return $translation;
+		}
+
+		foreach ( $fees as $fee ) {
+			$is_shipping_discount = 'yes' === $fee->get_meta( '_lwc_shipping_discount', true )
+				|| 0 === stripos( (string) $fee->get_name(), 'Shipping discount (' );
+			if ( ! $is_shipping_discount ) {
+				return $translation;
+			}
+		}
+
+		return __( 'Shipping Discount:', 'lovecatz-wc' );
+	}
+
+	/** Resolve the edited order ID for both classic and HPOS order screens. */
+	private function get_current_admin_order_id() {
+		foreach ( array( 'id', 'post', 'order_id' ) as $key ) {
+			if ( isset( $_REQUEST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only screen detection.
+				$order_id = absint( wp_unslash( $_REQUEST[ $key ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				if ( $order_id ) {
+					return $order_id;
+				}
+			}
+		}
+
+		global $post;
+		return $post instanceof WP_Post && 'shop_order' === $post->post_type ? (int) $post->ID : 0;
 	}
 
 	/**

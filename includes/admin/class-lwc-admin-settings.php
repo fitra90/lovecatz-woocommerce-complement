@@ -276,17 +276,12 @@ class LWC_Admin_Settings {
 			foreach ( array( 'sandbox', 'production' ) as $jt_environment ) {
 				$prefix = "lwc_jt_{$jt_provider}_{$jt_environment}";
 				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'cancel_username' ) : array( 'username' );
-				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
+				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
 				foreach ( $text_fields as $field ) {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
 				}
 				foreach ( $secret_fields as $field ) {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-				}
-				if ( 'express' === $jt_provider && 'production' === $jt_environment ) {
-					foreach ( array( 'order_url', 'tariff_url', 'tracking_url', 'print_url', 'cancel_url' ) as $field ) {
-						register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => array( $this, 'sanitize_jt_endpoint_url' ) ) );
-					}
 				}
 			}
 			if ( 'express' === $jt_provider ) {
@@ -500,6 +495,47 @@ class LWC_Admin_Settings {
 			'lwc_products_options',
 			'lwc_products_section_quantity_limits'
 		);
+
+		register_setting(
+			'lwc_products_options',
+			'lwc_enable_product_preorder',
+			array( 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) )
+		);
+		register_setting(
+			'lwc_products_options',
+			'lwc_preorder_all_products',
+			array( 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) )
+		);
+		register_setting(
+			'lwc_products_options',
+			'lwc_preorder_product_ids',
+			array(
+				'type'              => 'array',
+				'default'           => array(),
+				'sanitize_callback' => array( $this, 'sanitize_product_ids' ),
+			)
+		);
+
+		add_settings_section(
+			'lwc_products_section_preorder',
+			__( 'Product Pre-order', 'lovecatz-wc' ),
+			array( $this, 'render_preorder_section_intro' ),
+			'lwc_products_options'
+		);
+		add_settings_field(
+			'lwc_enable_product_preorder',
+			__( 'Enable pre-order', 'lovecatz-wc' ),
+			array( $this, 'render_product_preorder_enabled_field' ),
+			'lwc_products_options',
+			'lwc_products_section_preorder'
+		);
+		add_settings_field(
+			'lwc_preorder_products',
+			__( 'Eligible products', 'lovecatz-wc' ),
+			array( $this, 'render_product_preorder_scope_field' ),
+			'lwc_products_options',
+			'lwc_products_section_preorder'
+		);
 	}
 
 	/** Render a short J&T settings introduction. */
@@ -507,11 +543,11 @@ class LWC_Admin_Settings {
 		$section_id = isset( $section['id'] ) ? (string) $section['id'] : '';
 		$provider   = false !== strpos( $section_id, 'cargo' ) ? 'cargo' : 'express';
 		if ( 'express' === $provider ) {
+			$environment       = $this->get_jt_environment( 'express' );
+			$environment_label = 'production' === $environment ? __( 'Production', 'lovecatz-wc' ) : __( 'Sandbox', 'lovecatz-wc' );
 			echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
 			echo '<div class="lwc-provider-status-list lwc-jt-connection-status" aria-live="polite">';
-			foreach ( array( 'sandbox' => __( 'Sandbox', 'lovecatz-wc' ), 'production' => __( 'Production', 'lovecatz-wc' ) ) as $environment => $label ) {
-				echo '<div class="lwc-provider-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
-			}
+			echo '<div class="lwc-provider-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jt-active-environment-label">' . esc_html( $environment_label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
 			echo '</div>';
 		} else {
 			echo '<p>' . esc_html__( 'Select the J&T Cargo API environment and enter its independent credentials.', 'lovecatz-wc' ) . '</p>';
@@ -640,7 +676,7 @@ class LWC_Admin_Settings {
 		$provider = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
 		$value    = $this->get_jt_environment( $provider );
 		$name     = "lwc_jt_{$provider}_environment";
-		echo '<select name="' . esc_attr( $name ) . '">';
+		echo '<select id="' . esc_attr( $name ) . '" name="' . esc_attr( $name ) . '" class="lwc-jt-environment-field">';
 		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
 		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option>';
 		echo '</select>';
@@ -662,7 +698,6 @@ class LWC_Admin_Settings {
 			'print_key'            => array( __( 'Print Key', 'lovecatz-wc' ), 'password' ),
 			'cancel_username'      => array( __( 'Cancellation Username', 'lovecatz-wc' ), 'text' ),
 			'cancel_api_key'       => array( __( 'Cancellation API Key', 'lovecatz-wc' ), 'password' ),
-			'cancel_key'           => array( __( 'Cancellation Signing Key', 'lovecatz-wc' ), 'password' ),
 		) : array(
 			'username'   => array( __( 'Username / Account ID', 'lovecatz-wc' ), 'text' ),
 			'api_key'    => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
@@ -675,22 +710,8 @@ class LWC_Admin_Settings {
 			$value = get_option( $name, '' );
 			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
 		}
-		if ( 'express' === $provider && 'production' === $environment ) {
-			$endpoint_fields = array(
-				'order_url'    => __( 'Order API URL', 'lovecatz-wc' ),
-				'tariff_url'   => __( 'Tariff API URL', 'lovecatz-wc' ),
-				'tracking_url' => __( 'Tracking API URL', 'lovecatz-wc' ),
-				'print_url'    => __( 'Print Label API URL', 'lovecatz-wc' ),
-				'cancel_url'   => __( 'Cancellation API URL', 'lovecatz-wc' ),
-			);
-			echo '<h4>' . esc_html__( 'Production API URLs', 'lovecatz-wc' ) . '</h4>';
-			foreach ( $endpoint_fields as $field => $label ) {
-				$name = "{$prefix}_{$field}";
-				echo '<p><label>' . esc_html( $label ) . '<br><input type="url" name="' . esc_attr( $name ) . '" value="' . esc_attr( get_option( $name, '' ) ) . '" class="regular-text code" placeholder="https://" autocomplete="off"></label></p>';
-			}
-			echo '<p class="description">' . esc_html__( 'Enter the exact Production endpoints shown in the J&T API dashboard. Save the settings before checking the Production connection status.', 'lovecatz-wc' ) . '</p>';
-		} else {
-			echo '<p class="description">' . esc_html__( 'Sandbox API URLs are selected automatically according to the active environment.', 'lovecatz-wc' ) . '</p>';
+		if ( 'express' === $provider ) {
+			echo '<p class="description">' . esc_html__( 'Official J&T Indonesia API URLs are selected automatically for this environment. Only enter the credentials supplied for the matching account.', 'lovecatz-wc' ) . '</p>';
 		}
 		echo '</div>';
 	}
@@ -703,28 +724,6 @@ class LWC_Admin_Settings {
 	/** Normalize a J&T environment value. */
 	public function sanitize_jt_environment( $value ) {
 		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
-	}
-
-	/** Accept only HTTP(S) endpoint URLs supplied in the J&T dashboard. */
-	public function sanitize_jt_endpoint_url( $value ) {
-		$raw = trim( (string) $value );
-		$url = esc_url_raw( $raw );
-		if ( '' === $raw || in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ) {
-			return $url;
-		}
-
-		static $notice_added = false;
-		if ( ! $notice_added && function_exists( 'add_settings_error' ) ) {
-			add_settings_error(
-				'lwc_shipping_jt_options',
-				'lwc_invalid_jt_endpoint_url',
-				__( 'One or more invalid J&T endpoint URLs were cleared. Use a complete URL beginning with http:// or https://.', 'lovecatz-wc' ),
-				'warning'
-			);
-			$notice_added = true;
-		}
-
-		return '';
 	}
 
 	/** Resolve the current environment, including the legacy test-mode fallback. */
@@ -881,6 +880,47 @@ class LWC_Admin_Settings {
 		echo '<label><input type="checkbox" name="lwc_enable_product_quantity_limits" value="yes" ' . checked( $enabled, true, false ) . ' /> ' . esc_html__( 'Show and enforce minimum/maximum quantity limits for individual products.', 'lovecatz-wc' ) . '</label>';
 	}
 
+	/** Explain how out-of-stock pre-orders behave. */
+	public function render_preorder_section_intro() {
+		echo '<p>' . esc_html__( 'Allow selected out-of-stock products to be purchased as pre-orders. In-stock products keep their normal purchase flow.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the master pre-order feature switch. */
+	public function render_product_preorder_enabled_field() {
+		$enabled = 'yes' === get_option( 'lwc_enable_product_preorder', 'no' );
+		echo '<input type="hidden" name="lwc_enable_product_preorder" value="no" />';
+		echo '<label><input type="checkbox" name="lwc_enable_product_preorder" value="yes" ' . checked( $enabled, true, false ) . ' /> ' . esc_html__( 'Permit eligible products to be ordered before stock is available.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render all-products scope and a lazy searchable selective product list. */
+	public function render_product_preorder_scope_field() {
+		$all_products = 'yes' === get_option( 'lwc_preorder_all_products', 'yes' );
+		$selected_ids = array_filter( array_map( 'absint', (array) get_option( 'lwc_preorder_product_ids', array() ) ) );
+		?>
+		<div class="lwc-preorder-scope">
+			<input type="hidden" name="lwc_preorder_all_products" value="no" />
+			<label class="lwc-preorder-all-products-option">
+				<input type="checkbox" id="lwc_preorder_all_products" name="lwc_preorder_all_products" value="yes" <?php checked( $all_products ); ?> aria-controls="lwc-preorder-selected-products" />
+				<?php esc_html_e( 'Select all products', 'lovecatz-wc' ); ?>
+			</label>
+			<p class="description"><?php esc_html_e( 'This stores one global setting and does not save every product ID.', 'lovecatz-wc' ); ?></p>
+			<div id="lwc-preorder-selected-products" class="lwc-preorder-selected-products" <?php echo $all_products ? 'hidden' : ''; ?>>
+				<input type="hidden" name="lwc_preorder_product_ids[]" value="" />
+				<label for="lwc_preorder_product_ids"><strong><?php esc_html_e( 'Select specific products', 'lovecatz-wc' ); ?></strong></label>
+				<select id="lwc_preorder_product_ids" name="lwc_preorder_product_ids[]" class="wc-product-search" multiple="multiple" data-placeholder="<?php esc_attr_e( 'Search for a product…', 'lovecatz-wc' ); ?>" data-action="woocommerce_json_search_products">
+					<?php foreach ( $selected_ids as $product_id ) : ?>
+						<?php $product = wc_get_product( $product_id ); ?>
+						<?php if ( $product ) : ?>
+							<option value="<?php echo esc_attr( $product_id ); ?>" selected="selected"><?php echo esc_html( wp_strip_all_tags( $product->get_formatted_name() ) ); ?></option>
+						<?php endif; ?>
+					<?php endforeach; ?>
+				</select>
+				<p class="description"><?php esc_html_e( 'Only these products—and their variations—can be pre-ordered while out of stock.', 'lovecatz-wc' ); ?></p>
+			</div>
+		</div>
+		<?php
+	}
+
 	/**
 	 * Sanitize a checkbox setting stored as a yes/no value.
 	 *
@@ -889,6 +929,13 @@ class LWC_Admin_Settings {
 	 */
 	public function sanitize_yes_no_option( $value ) {
 		return 'yes' === $value ? 'yes' : 'no';
+	}
+
+	/** Sanitize a compact list of product IDs from the AJAX product selector. */
+	public function sanitize_product_ids( $value ) {
+		$ids = array_filter( array_map( 'absint', (array) $value ) );
+
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**

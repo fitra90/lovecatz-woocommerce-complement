@@ -204,57 +204,81 @@
         toggleEligibleUsers();
     }
 
+    function initPreorderScope() {
+        var allProducts = $('#lwc_preorder_all_products');
+        var selectedProducts = $('#lwc-preorder-selected-products');
+        var productSelect = $('#lwc_preorder_product_ids');
+
+        if (!allProducts.length || !selectedProducts.length || !productSelect.length) {
+            return;
+        }
+
+        function togglePreorderProducts() {
+            var useAllProducts = allProducts.is(':checked');
+
+            selectedProducts.prop('hidden', useAllProducts).attr('aria-hidden', useAllProducts ? 'true' : 'false');
+            productSelect.prop('disabled', useAllProducts);
+            allProducts.attr('aria-expanded', useAllProducts ? 'false' : 'true');
+
+            if (!useAllProducts) {
+                $(document.body).trigger('wc-enhanced-select-init');
+            }
+        }
+
+        allProducts.on('change', togglePreorderProducts);
+        togglePreorderProducts();
+    }
+
     function updateJtConnectionStatus() {
         var statusList = $('.lwc-jt-connection-status');
+        var environmentSelect = $('#lwc_jt_express_environment');
         if (!statusList.length) {
             return;
         }
 
         jtCheckSequence += 1;
         var sequence = jtCheckSequence;
-        statusList.find('.lwc-provider-status').each(function () {
-            setProviderStatus($(this), 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
-        });
+        var environment = environmentSelect.val() === 'production' ? 'production' : 'sandbox';
+        var environmentLabel = environment === 'production' ? 'Production:' : 'Sandbox:';
+        var statusEl = statusList.find('.lwc-provider-status').first();
+        var group = $('.lwc-jt-credential-group[data-provider="express"][data-environment="' + environment + '"]');
+
+        statusEl.attr('data-environment', environment);
+        statusEl.find('.lwc-jt-active-environment-label').text(environmentLabel);
+        setProviderStatus(statusEl, 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
 
         clearTimeout(jtCheckTimer);
         jtCheckTimer = setTimeout(function () {
             if (!window.lwcShippingSettings || !window.lwcShippingSettings.ajax_url) {
-                statusList.find('.lwc-provider-status').each(function () {
-                    setProviderStatus($(this), 'request_failed', 'Connection request failed.');
-                });
+                setProviderStatus(statusEl, 'request_failed', 'Connection request failed.');
                 return;
             }
 
-            $('.lwc-jt-credential-group[data-provider="express"]').each(function () {
-                var group = $(this);
-                var environment = group.data('environment');
-                var statusEl = statusList.find('.lwc-provider-status[data-environment="' + environment + '"]');
-                var credentials = {};
-                group.find('[data-credential]').each(function () {
-                    credentials[$(this).data('credential')] = ($(this).val() || '').trim();
-                });
+            var credentials = {};
+            group.find('[data-credential]').each(function () {
+                credentials[$(this).data('credential')] = ($(this).val() || '').trim();
+            });
 
-                $.ajax({
-                    url: window.lwcShippingSettings.ajax_url,
-                    type: 'POST',
-                    dataType: 'json',
-                    data: {
-                        action: 'lwc_check_jt_connection',
-                        nonce: window.lwcShippingSettings.nonce,
-                        environment: environment,
-                        credentials: credentials
-                    }
-                }).done(function (response) {
-                    if (sequence !== jtCheckSequence) {
-                        return;
-                    }
-                    var data = response && response.data ? response.data : {};
-                    setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
-                }).fail(function () {
-                    if (sequence === jtCheckSequence) {
-                        setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
-                    }
-                });
+            $.ajax({
+                url: window.lwcShippingSettings.ajax_url,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'lwc_check_jt_connection',
+                    nonce: window.lwcShippingSettings.nonce,
+                    environment: environment,
+                    credentials: credentials
+                }
+            }).done(function (response) {
+                if (sequence !== jtCheckSequence) {
+                    return;
+                }
+                var data = response && response.data ? response.data : {};
+                setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
+            }).fail(function () {
+                if (sequence === jtCheckSequence) {
+                    setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
+                }
             });
         }, 500);
     }
@@ -294,7 +318,13 @@
         }
 
 		if ($('.lwc-jt-connection-status').length) {
-			$('.lwc-jt-credential-field').on('input change', updateJtConnectionStatus);
+			$('.lwc-jt-credential-field').on('input change', function () {
+				var activeEnvironment = $('#lwc_jt_express_environment').val() === 'production' ? 'production' : 'sandbox';
+				if ($(this).closest('.lwc-jt-credential-group').data('environment') === activeEnvironment) {
+					updateJtConnectionStatus();
+				}
+			});
+			$('#lwc_jt_express_environment').on('change', updateJtConnectionStatus);
 			updateJtConnectionStatus();
 		}
 
@@ -308,6 +338,10 @@
 
         if ($('#lwc_promo_all_users').length) {
             initPromoEligibility();
+        }
+
+        if ($('#lwc_preorder_all_products').length) {
+            initPreorderScope();
         }
 
         if ($('.lwc-rayspeed-credential-field').length) {

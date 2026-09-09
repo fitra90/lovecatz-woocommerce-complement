@@ -189,6 +189,36 @@
 	width: 100% !important;
 }
 
+.lwc-preorder-scope,
+.lwc-preorder-selected-products {
+	display: grid;
+	gap: 8px;
+	max-width: 620px;
+}
+
+.lwc-preorder-all-products-option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+}
+
+.lwc-preorder-all-products-option input[type="checkbox"] {
+	margin: 0;
+}
+
+.lwc-preorder-selected-products {
+	margin-top: 8px;
+}
+
+.lwc-preorder-selected-products[hidden] {
+	display: none !important;
+}
+
+.lwc-preorder-selected-products .select2-container {
+	width: 100% !important;
+}
+
 .lwc-promo-form-grid .lwc-promo-image-preview {
 	display: block;
 	margin-top: 4px;
