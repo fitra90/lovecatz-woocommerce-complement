@@ -1,7 +1,7 @@
 # LoveCatz WooCommerce Complement — Product Requirements and Design
 
 Last code review: 2026-09-11
-Current plugin version: 1.0.64
+Current plugin version: 1.0.65
 
 ## Purpose
 
@@ -196,7 +196,7 @@ J&T is split into two independent providers, each with its own credentials, zone
 - **`lwc_jt_express`** (`LWC_Shipping_JT_Express`) — regular parcels; auto-split threshold default 10 kg, hard ceiling 100 kg (`lwc_jt_express_package_weight_ceiling_kg` filter).
 - **`lwc_jt_cargo`** (`LWC_Shipping_JT_Cargo`) — large/heavy shipments (10 kg minimum billable, tiers H50–H500); auto-split off by default, ceiling 500 kg (`lwc_jt_cargo_package_weight_ceiling_kg` filter).
 
-Both extend `LWC_Shipping_JT_Base` and retain independent configuration. Rates are rejected unless the destination country is Indonesia (`ID`). The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. J&T Express and J&T Cargo appear as independent Shipping provider tabs. The J&T admin page is limited to activation, active Sandbox/Production environment, credentials, and a read-only REST connection indicator; mapping import/export, endpoint inputs, and stateful test tools are not exposed. Express stores the distinct Order, Tariff, Tracking, Print, and Cancellation credentials required by J&T Indonesia; Cargo retains a generic independent account form until its API contract is supplied. Sandbox and Production endpoint URLs are fixed backend constants. Developers may still override an environment's complete endpoint array with the corresponding `lwc_jt_express_{environment}_endpoints` filter. Legacy pre-split credentials migrate to Express once.
+Both extend `LWC_Shipping_JT_Base` and retain independent configuration. Rates are rejected unless the destination country is Indonesia (`ID`). J&T Express has global service coverage with a backward-compatible default of all Indonesia/cross-island, or a Java-only mode covering Banten, DKI Jakarta, West Java, Central Java, Yogyakarta, and East Java. Java-only filtering applies in method availability and again to the final WooCommerce package rates so cached, global, and zone-provided Express rates cannot leak into an out-of-area checkout. The legacy `lwc_jt` method id aliases to Express so existing zone instances keep working. J&T Express and J&T Cargo appear as independent Shipping provider tabs. The J&T admin page is limited to activation, coverage, active Sandbox/Production environment, credentials, and a read-only REST connection indicator; mapping import/export, endpoint inputs, and stateful test tools are not exposed. Express stores the distinct Order, Tariff, Tracking, Print, and Cancellation credentials required by J&T Indonesia; Cargo retains a generic independent account form until its API contract is supplied. Sandbox and Production endpoint URLs are fixed backend constants. Developers may still override an environment's complete endpoint array with the corresponding `lwc_jt_express_{environment}_endpoints` filter. Legacy pre-split credentials migrate to Express once.
 
 Cancellation follows the documented two-field credential contract: Cancellation Username and Cancellation API Key. The API Key is included in the cancellation detail and is also used to calculate the request signature; there is no separate Cancellation Signing Key option.
 

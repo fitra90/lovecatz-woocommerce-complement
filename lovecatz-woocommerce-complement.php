@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.64
+ * Version:     1.0.65
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.64' );
+define( 'LWC_VERSION', '1.0.65' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -186,6 +186,7 @@ add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_respon
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_shipping_accordion' );
+add_filter( 'woocommerce_package_rates', 'lwc_filter_jt_express_service_area', 998, 2 );
 add_filter( 'woocommerce_package_rates', 'lwc_sort_checkout_shipping_rates', 999, 2 );
 add_action( 'woocommerce_after_checkout_validation', 'lwc_validate_jt_checkout_contact', 10, 2 );
 add_action( 'woocommerce_store_api_checkout_update_order_meta', 'lwc_validate_jt_store_api_order' );
@@ -825,6 +826,22 @@ function lwc_enqueue_shipping_accordion() {
 
 	wp_enqueue_style( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.css', array(), LWC_VERSION );
 	wp_enqueue_script( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.js', array( 'jquery' ), LWC_VERSION, true );
+}
+
+/** Remove cached or zone-provided J&T Express rates outside the configured coverage. */
+function lwc_filter_jt_express_service_area( $rates, $package ) {
+	if ( 'java' !== get_option( 'lwc_jt_express_service_area', 'indonesia' ) || ! class_exists( 'LWC_Shipping_JT_Base' ) || LWC_Shipping_JT_Base::is_java_destination( $package ) ) {
+		return $rates;
+	}
+
+	foreach ( (array) $rates as $rate_id => $rate ) {
+		$method_id = is_object( $rate ) && method_exists( $rate, 'get_method_id' ) ? (string) $rate->get_method_id() : '';
+		if ( in_array( $method_id, array( 'lwc_jt_express', 'lwc_jt' ), true ) || 0 === strpos( (string) $rate_id, 'lwc_jt_express' ) ) {
+			unset( $rates[ $rate_id ] );
+		}
+	}
+
+	return $rates;
 }
 
 /** Require the recipient fields needed by J&T before checkout can finish. */

@@ -85,11 +85,34 @@ abstract class LWC_Shipping_JT_Base extends WC_Shipping_Method {
 			if ( 'yes' !== get_option( 'lwc_jt_express_enabled', 'no' ) ) {
 				return false;
 			}
+			if ( 'java' === get_option( 'lwc_jt_express_service_area', 'indonesia' ) && ! self::is_java_destination( $package ) ) {
+				return false;
+			}
 			// The globally injected instance has no zone settings. Real zone
 			// instances must still respect their own Enable/Disable control.
 			return 0 === $this->instance_id ? true : parent::is_available( $package );
 		}
 		return parent::is_available( $package );
+	}
+
+	/** Determine whether a package destination belongs to one of Java's six provinces. */
+	public static function is_java_destination( $package ) {
+		$destination = isset( $package['destination'] ) && is_array( $package['destination'] ) ? $package['destination'] : array();
+		$country = isset( $destination['country'] ) ? strtoupper( trim( (string) $destination['country'] ) ) : '';
+		if ( 'ID' !== $country ) {
+			return false;
+		}
+
+		$state = isset( $destination['state'] ) ? strtoupper( trim( (string) $destination['state'] ) ) : '';
+		$state = preg_replace( '/^ID[-_]/', '', $state );
+		$state = trim( preg_replace( '/[^A-Z0-9]+/', ' ', $state ) );
+		$java_states = array(
+			'BT', 'JK', 'JB', 'JT', 'YO', 'JI',
+			'BANTEN', 'DKI JAKARTA', 'JAKARTA', 'JAWA BARAT', 'JAWA TENGAH', 'JAWA TIMUR',
+			'DI YOGYAKARTA', 'DAERAH ISTIMEWA YOGYAKARTA', 'DIY', 'YOGYAKARTA',
+		);
+
+		return in_array( $state, $java_states, true );
 	}
 
 	/**

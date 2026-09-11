@@ -286,6 +286,7 @@ class LWC_Admin_Settings {
 			}
 			if ( 'express' === $jt_provider ) {
 				register_setting( $group, 'lwc_jt_express_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+				register_setting( $group, 'lwc_jt_express_service_area', array( 'default' => 'indonesia', 'sanitize_callback' => array( $this, 'sanitize_jt_service_area' ) ) );
 			}
 
 			add_settings_section(
@@ -302,6 +303,7 @@ class LWC_Admin_Settings {
 			add_settings_field( "lwc_jt_{$jt_provider}_environment", __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jt_environment_field' ), $group, $section, array( 'provider' => $jt_provider ) );
 			if ( 'express' === $jt_provider ) {
 				add_settings_field( 'lwc_jt_express_enabled', __( 'Enable J&T Express', 'lovecatz-wc' ), array( $this, 'render_jt_express_enabled_field' ), $group, $section );
+				add_settings_field( 'lwc_jt_express_service_area', __( 'Service coverage', 'lovecatz-wc' ), array( $this, 'render_jt_express_service_area_field' ), $group, $section );
 			}
 			foreach ( array( 'sandbox' => __( 'Sandbox Credentials', 'lovecatz-wc' ), 'production' => __( 'Production Credentials', 'lovecatz-wc' ) ) as $jt_environment => $label ) {
 				add_settings_field( "lwc_jt_{$jt_provider}_{$jt_environment}_credentials", $label, array( $this, 'render_jt_credentials_field' ), $group, $section, array( 'provider' => $jt_provider, 'environment' => $jt_environment ) );
@@ -743,6 +745,21 @@ class LWC_Admin_Settings {
 	public function render_jt_express_enabled_field() {
 		echo '<input type="hidden" name="lwc_jt_express_enabled" value="no">';
 		echo '<label><input type="checkbox" name="lwc_jt_express_enabled" value="yes" ' . checked( get_option( 'lwc_jt_express_enabled', 'no' ), 'yes', false ) . '> ' . esc_html__( 'Offer J&T Express at checkout for Indonesian destinations without requiring a WooCommerce Shipping Zone.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render the geographic checkout coverage for J&T Express. */
+	public function render_jt_express_service_area_field() {
+		$value = get_option( 'lwc_jt_express_service_area', 'indonesia' );
+		echo '<select name="lwc_jt_express_service_area">';
+		echo '<option value="indonesia"' . selected( $value, 'indonesia', false ) . '>' . esc_html__( 'All Indonesia (cross-island)', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="java"' . selected( $value, 'java', false ) . '>' . esc_html__( 'Java island only', 'lovecatz-wc' ) . '</option>';
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'When Java island only is selected, J&T Express is removed from checkout unless the Indonesian destination province is Banten, DKI Jakarta, West Java, Central Java, Yogyakarta, or East Java.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Normalize the J&T Express service-area setting. */
+	public function sanitize_jt_service_area( $value ) {
+		return 'java' === sanitize_key( $value ) ? 'java' : 'indonesia';
 	}
 
 	/** Normalize a J&T environment value. */
