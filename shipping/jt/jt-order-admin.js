@@ -14,6 +14,11 @@
 		}).done(function (response) {
 			var data = response && response.data ? response.data : {};
 			status.addClass(response.success ? 'is-success' : 'is-error').text(data.message || 'J&T request failed.');
+			if (data.exchange) {
+				$('<details class="lwc-jt-api-exchange"><summary>Original J&T request / response</summary><pre></pre></details>')
+					.find('pre').text(JSON.stringify(data.exchange, null, 2)).end()
+					.appendTo(status);
+			}
 			if (response.success && data.html) {
 				$('#lwc-jt-tracking').html(data.html);
 			}

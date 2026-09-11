@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.58
+ * Version:     1.0.64
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.58' );
+define( 'LWC_VERSION', '1.0.64' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -134,7 +134,7 @@ function lwc_init() {
 		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
 		foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
 			add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_api_key", 'lwc_decrypt_secret' );
-			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
+			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
 				add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
 			}
 		}
@@ -152,6 +152,7 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-route-mapper.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-list-shipping.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-base.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
@@ -170,6 +171,7 @@ function lwc_init() {
 	// Run the core class.
 	$core = new LWC_Core();
 	$core->init();
+	( new LWC_Order_List_Shipping() )->init();
 	LWC_Indonesia_Regions::init();
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
@@ -184,6 +186,7 @@ add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_respon
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_shipping_accordion' );
+add_filter( 'woocommerce_package_rates', 'lwc_sort_checkout_shipping_rates', 999, 2 );
 add_action( 'woocommerce_after_checkout_validation', 'lwc_validate_jt_checkout_contact', 10, 2 );
 add_action( 'woocommerce_store_api_checkout_update_order_meta', 'lwc_validate_jt_store_api_order' );
 add_filter( 'woocommerce_hidden_order_itemmeta', 'lwc_hide_shipping_technical_meta' );
@@ -643,7 +646,7 @@ function lwc_register_shipping_methods( $methods ) {
 }
 
 /**
- * Check J&T Express Tariff REST credentials without creating an order or AWB.
+ * Check each J&T Express service for the active environment.
  */
 function lwc_check_jt_connection() {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
@@ -653,63 +656,168 @@ function lwc_check_jt_connection() {
 	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
 	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
 	$posted      = isset( $_POST['credentials'] ) && is_array( $_POST['credentials'] ) ? wp_unslash( $_POST['credentials'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key' );
+	$fields      = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'print_company_id', 'cancel_key', 'cancel_username', 'cancel_api_key' );
 	$credentials = array( 'provider' => 'express', 'environment' => $environment );
-	$filled      = 0;
 	foreach ( $fields as $field ) {
 		$value                 = isset( $posted[ $field ] ) ? sanitize_text_field( $posted[ $field ] ) : '';
 		$credentials[ $field ] = $value;
-		$filled               += '' !== trim( $value ) ? 1 : 0;
 	}
 
-	if ( 0 === $filled ) {
-		wp_send_json_success( array( 'status' => 'idle', 'label' => __( 'Waiting for credentials', 'lovecatz-wc' ) ) );
-	}
-	if ( '' === trim( $credentials['tariff_customer_name'] ) || '' === trim( $credentials['tariff_check_key'] ) ) {
-		wp_send_json_success( array( 'status' => 'partial', 'label' => __( 'Tariff REST credentials are incomplete', 'lovecatz-wc' ) ) );
+	$requirements = array(
+		'order'        => array( 'order_username', 'order_api_key', 'order_key' ),
+		'tariff'       => array( 'tariff_customer_name', 'tariff_check_key' ),
+		'track'        => array( 'tracking_company_id', 'tracking_password' ),
+		'cancellation' => array( 'cancel_key', 'cancel_username', 'cancel_api_key' ),
+		'print'        => array( 'print_company_id', 'print_key' ),
+	);
+	$field_labels = array(
+		'order_username' => __( 'Order Username', 'lovecatz-wc' ), 'order_api_key' => __( 'Order API Key', 'lovecatz-wc' ), 'order_key' => __( 'Order Key', 'lovecatz-wc' ),
+		'tariff_customer_name' => __( 'Tariff Customer Name', 'lovecatz-wc' ), 'tariff_check_key' => __( 'Tariff Key', 'lovecatz-wc' ),
+		'tracking_company_id' => __( 'Track E-company ID', 'lovecatz-wc' ), 'tracking_password' => __( 'Password Track', 'lovecatz-wc' ),
+		'cancel_key' => __( 'Cancellation Key', 'lovecatz-wc' ), 'cancel_username' => __( 'Cancellation Username', 'lovecatz-wc' ), 'cancel_api_key' => __( 'Cancellation API Key', 'lovecatz-wc' ),
+		'print_company_id' => __( 'Print E-company ID', 'lovecatz-wc' ), 'print_key' => __( 'Print Key', 'lovecatz-wc' ),
+	);
+	$services = array();
+	foreach ( $requirements as $service => $required ) {
+		$missing = array_filter( $required, function ( $field ) use ( $credentials ) { return '' === trim( (string) $credentials[ $field ] ); } );
+		$missing_labels = array_map( function ( $field ) use ( $field_labels ) { return isset( $field_labels[ $field ] ) ? $field_labels[ $field ] : $field; }, $missing );
+		$services[ $service ] = $missing
+			? array( 'status' => 'partial', 'label' => sprintf( __( 'Credentials incomplete: %s', 'lovecatz-wc' ), implode( ', ', $missing_labels ) ) )
+			: array( 'status' => 'partial', 'label' => __( 'Credentials complete; waiting for verification.', 'lovecatz-wc' ) );
 	}
 
 	$endpoints = LWC_JT_Express_API::get_endpoints( $environment );
-	if ( empty( $endpoints['tariff'] ) ) {
-		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials are present, but this REST endpoint is not configured', 'lovecatz-wc' ) ) );
-	}
-
-	$country_state = (string) get_option( 'woocommerce_default_country', 'ID' );
-	$parts         = array_pad( explode( ':', $country_state, 2 ), 2, '' );
-	$rows          = LWC_Indonesia_Regions::find_city_regions( strtoupper( $parts[1] ), (string) get_option( 'woocommerce_store_city', '' ) );
-	$route         = empty( $rows ) ? new WP_Error( 'lwc_jt_route_not_mapped' ) : array( 'tariff_area' => $rows[0]['jt_district_name'] );
-	$origin = LWC_JT_Route_Mapper::get_origin_tariff_code( $environment );
-	if ( is_wp_error( $route ) || '' === $origin ) {
-		wp_send_json_success( array( 'status' => 'unavailable', 'label' => __( 'Credentials are present, but the store origin mapping is incomplete', 'lovecatz-wc' ) ) );
-	}
-
-	$result = ( new LWC_JT_Express_API() )->get_tariff( 1, $origin, $route['tariff_area'], $credentials );
-	if ( is_wp_error( $result ) ) {
-		if ( in_array( $result->get_error_code(), array( 'lwc_jt_no_tariff', 'lwc_jt_invalid_tariff_response' ), true ) ) {
-			update_option( "lwc_jt_express_validation_status_{$environment}", 'no_tariff' );
-			wp_send_json_success( array( 'status' => 'partial', 'label' => $result->get_error_message() ) );
+	$api = new LWC_JT_Express_API();
+	if ( empty( array_filter( $requirements['tariff'], function ( $field ) use ( $credentials ) { return '' === trim( (string) $credentials[ $field ] ); } ) ) ) {
+		$country_state = (string) get_option( 'woocommerce_default_country', 'ID' );
+		$parts = array_pad( explode( ':', $country_state, 2 ), 2, '' );
+		$rows = LWC_Indonesia_Regions::find_city_regions( strtoupper( $parts[1] ), (string) get_option( 'woocommerce_store_city', '' ) );
+		$origin = LWC_JT_Route_Mapper::get_origin_tariff_code( $environment );
+		if ( empty( $rows ) || '' === $origin || empty( $endpoints['tariff'] ) ) {
+			$services['tariff'] = array( 'status' => 'partial', 'label' => __( 'Store origin mapping is incomplete; Tariff API was not called.', 'lovecatz-wc' ) );
+		} else {
+			$result = $api->get_tariff( 1, $origin, $rows[0]['jt_district_name'], $credentials );
+			$services['tariff'] = is_wp_error( $result )
+				? array( 'status' => 'partial', 'label' => $result->get_error_message(), 'exchange' => $result->get_error_data() )
+				: array( 'status' => 'connected', 'label' => __( 'Tariff API connected.', 'lovecatz-wc' ), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null );
 		}
-		$transport_error = in_array( $result->get_error_code(), array( 'http_request_failed', 'lwc_jt_invalid_response' ), true );
-		update_option( "lwc_jt_express_validation_status_{$environment}", $transport_error ? 'unavailable' : 'failed' );
-		wp_send_json_success(
-			array(
-				'status' => $transport_error ? 'unavailable' : 'auth_failed',
-				'label'  => $transport_error
-					? sprintf( __( 'REST API unavailable: %s', 'lovecatz-wc' ), $result->get_error_message() )
-					: $result->get_error_message(),
-			)
-		);
 	}
 
-	$status = $filled === count( $fields ) ? 'connected' : 'partial';
-	$label  = 'connected' === $status
-		? __( 'Tariff REST API connected; all J&T credential fields are complete', 'lovecatz-wc' )
-		: sprintf( __( 'Tariff REST API connected; other J&T credentials are incomplete (%1$d of %2$d fields filled)', 'lovecatz-wc' ), $filled, count( $fields ) );
-	update_option( "lwc_jt_express_validation_status_{$environment}", 'validated' );
-	wp_send_json_success( array( 'status' => $status, 'label' => $label ) );
+	$recent_awb = lwc_find_recent_jt_awb( $environment );
+	foreach ( array( 'track', 'print' ) as $service ) {
+		$required = $requirements[ $service ];
+		$complete = empty( array_filter( $required, function ( $field ) use ( $credentials ) { return '' === trim( (string) $credentials[ $field ] ); } ) );
+		if ( ! $complete ) {
+			continue;
+		}
+		if ( '' === $recent_awb ) {
+			$services[ $service ] = array( 'status' => 'partial', 'label' => __( 'Credentials complete; create an AWB in this environment to verify this service.', 'lovecatz-wc' ) );
+			continue;
+		}
+		$result = 'track' === $service ? $api->track( $recent_awb, $credentials ) : $api->get_print_url( $recent_awb, $credentials );
+		$services[ $service ] = is_wp_error( $result )
+			? array( 'status' => 'partial', 'label' => $result->get_error_message(), 'exchange' => $result->get_error_data() )
+			: array( 'status' => 'connected', 'label' => 'track' === $service ? __( 'Tracking API connected.', 'lovecatz-wc' ) : __( 'Print API connected.', 'lovecatz-wc' ), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null );
+	}
+
+	foreach ( array( 'order', 'cancellation' ) as $service ) {
+		$required = $requirements[ $service ];
+		$complete = empty( array_filter( $required, function ( $field ) use ( $credentials ) { return '' === trim( (string) $credentials[ $field ] ); } ) );
+		if ( ! $complete ) {
+			continue;
+		}
+		$record = LWC_JT_Account::get_service_status( $environment, $service, $credentials, $required );
+		if ( $record ) {
+			$services[ $service ] = array( 'status' => $record['status'], 'label' => $record['message'] );
+		} elseif ( 'order' === $service && '' !== $recent_awb ) {
+			$saved_credentials = LWC_JT_Account::get_credentials( 'express', $environment );
+			$matches_saved = ! array_filter( $required, function ( $field ) use ( $credentials, $saved_credentials ) {
+				return ! isset( $saved_credentials[ $field ] ) || (string) $saved_credentials[ $field ] !== (string) $credentials[ $field ];
+			} );
+			if ( $matches_saved ) {
+				$services[ $service ] = array( 'status' => 'connected', 'label' => __( 'Order API verified by an existing AWB created with the saved credentials.', 'lovecatz-wc' ) );
+				LWC_JT_Account::set_service_status( $environment, 'order', 'connected', $services[ $service ]['label'], $credentials, $required );
+			} else {
+				$services[ $service ] = array( 'status' => 'partial', 'label' => __( 'Order credentials have changed; verification requires a successful real AWB creation.', 'lovecatz-wc' ) );
+			}
+		} else {
+			$services[ $service ] = array(
+				'status' => 'partial',
+				'label'  => 'order' === $service
+					? __( 'Credentials complete; verification requires a successful real AWB creation.', 'lovecatz-wc' )
+					: __( 'Credentials complete; verification requires a real cancellation and will not be simulated.', 'lovecatz-wc' ),
+			);
+		}
+	}
+
+	$all_connected = ! array_filter( $services, function ( $service ) { return 'connected' !== $service['status']; } );
+	$status = $all_connected ? 'connected' : 'partial';
+	$label = $all_connected
+		? __( 'All services are connected & ready to use', 'lovecatz-wc' )
+		: __( 'Some J&T services need attention. See the service details below.', 'lovecatz-wc' );
+	update_option( "lwc_jt_express_validation_status_{$environment}", $all_connected ? 'validated' : 'partial' );
+	wp_send_json_success( array( 'status' => $status, 'label' => $label, 'services' => $services ) );
 }
 
-/** Load the compact shipping-method accordion on checkout. */
+/** Find a recent J&T AWB that belongs to the selected API environment. */
+function lwc_find_recent_jt_awb( $environment ) {
+	$orders = wc_get_orders( array( 'limit' => 50, 'orderby' => 'date', 'order' => 'DESC', 'return' => 'objects' ) );
+	foreach ( $orders as $order ) {
+		if ( ! $order->get_meta( '_lwc_jt_awb' ) ) {
+			continue;
+		}
+		foreach ( $order->get_items( 'shipping' ) as $item ) {
+			if ( ! in_array( $item->get_method_id(), array( 'lwc_jt_express', 'lwc_jt' ), true ) ) {
+				continue;
+			}
+			$item_environment = $item->get_meta( '_lwc_jt_environment', true );
+			if ( ! $item_environment ) {
+				$item_environment = $item->get_meta( 'lwc_jt_environment', true );
+			}
+			if ( $environment === ( 'production' === $item_environment ? 'production' : 'sandbox' ) ) {
+				return sanitize_text_field( (string) $order->get_meta( '_lwc_jt_awb' ) );
+			}
+		}
+	}
+	return '';
+}
+
+/**
+ * Order shipping options by the customer-visible charge, lowest first.
+ * Associative rate IDs are preserved because WooCommerce uses them as values.
+ *
+ * @param array $rates   Available shipping rates.
+ * @param array $package Shipping package.
+ * @return array
+ */
+function lwc_sort_checkout_shipping_rates( $rates, $package = array() ) {
+	if ( count( $rates ) < 2 ) {
+		return $rates;
+	}
+
+	$position = 0;
+	$indexed  = array();
+	foreach ( $rates as $key => $rate ) {
+		$taxes = is_object( $rate ) && method_exists( $rate, 'get_taxes' ) ? array_sum( array_map( 'floatval', (array) $rate->get_taxes() ) ) : 0;
+		$cost  = is_object( $rate ) && method_exists( $rate, 'get_cost' ) ? (float) $rate->get_cost() : 0;
+		$indexed[] = array( 'key' => $key, 'rate' => $rate, 'total' => $cost + $taxes, 'position' => $position++ );
+	}
+
+	usort( $indexed, function ( $left, $right ) {
+		if ( $left['total'] === $right['total'] ) {
+			return $left['position'] <=> $right['position'];
+		}
+		return $left['total'] <=> $right['total'];
+	} );
+
+	$sorted = array();
+	foreach ( $indexed as $entry ) {
+		$sorted[ $entry['key'] ] = $entry['rate'];
+	}
+	return $sorted;
+}
+
+/** Load the always-visible shipping-method list on checkout. */
 function lwc_enqueue_shipping_accordion() {
 	if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() ) {
 		return;
@@ -717,14 +825,6 @@ function lwc_enqueue_shipping_accordion() {
 
 	wp_enqueue_style( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.css', array(), LWC_VERSION );
 	wp_enqueue_script( 'lwc-shipping-accordion', LWC_PLUGIN_URL . 'shipping/checkout/shipping-accordion.js', array( 'jquery' ), LWC_VERSION, true );
-	wp_localize_script(
-		'lwc-shipping-accordion',
-		'lwcShippingAccordion',
-		array(
-			'caption'      => __( 'Shipping method', 'lovecatz-wc' ),
-			'noneSelected' => __( 'Select a shipping method', 'lovecatz-wc' ),
-		)
-	);
 }
 
 /** Require the recipient fields needed by J&T before checkout can finish. */
@@ -920,7 +1020,7 @@ function lwc_install() {
 
 	// Octolize integration was removed in 1.0.22. Its settings no longer
 	// control the native FedEx engine and should not linger in the database.
-	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate', 'lwc_jt_area_mapping_meta', 'lwc_jt_sandbox_certification_last_result', 'lwc_jt_express_production_order_url', 'lwc_jt_express_production_tariff_url', 'lwc_jt_express_production_tracking_url', 'lwc_jt_express_production_print_url', 'lwc_jt_express_production_cancel_url', 'lwc_jt_express_sandbox_cancel_key', 'lwc_jt_express_production_cancel_key' ) as $obsolete_option ) {
+	foreach ( array( 'lwc_fedex_engine', 'lwc_fedex_currency_adapter_enabled', 'lwc_fedex_base_currency', 'lwc_fedex_conversion_mode', 'lwc_fedex_manual_rate', 'lwc_jt_area_mapping_meta', 'lwc_jt_sandbox_certification_last_result', 'lwc_jt_express_production_order_url', 'lwc_jt_express_production_tariff_url', 'lwc_jt_express_production_tracking_url', 'lwc_jt_express_production_print_url', 'lwc_jt_express_production_cancel_url' ) as $obsolete_option ) {
 		delete_option( $obsolete_option );
 	}
 

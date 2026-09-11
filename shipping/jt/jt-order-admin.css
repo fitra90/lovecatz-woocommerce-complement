@@ -14,6 +14,27 @@
 	color: #008a20;
 }
 
+#lwc-jt-order-status .lwc-jt-api-exchange {
+	margin-top: 8px;
+	color: #1d2327;
+}
+
+#lwc-jt-order-status .lwc-jt-api-exchange summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+#lwc-jt-order-status .lwc-jt-api-exchange pre {
+	max-height: 280px;
+	overflow: auto;
+	padding: 8px;
+	border: 1px solid #dcdcde;
+	background: #f6f7f7;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-size: 10px;
+}
+
 .lwc-jt-tracking-events {
 	margin: 10px 0 0 18px;
 }

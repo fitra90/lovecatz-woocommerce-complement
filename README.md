@@ -34,6 +34,10 @@
   - Delivery estimation and status updates for customers.  
   *(Expected release: Q4 2025)*
 
+- **Unified order shipment columns**
+  - Shows tracking numbers and available fulfillment actions for J&T Express, FedEx, J&T Cargo, and RaySpeed in both legacy and HPOS order lists.
+  - Reuses existing JNE `No. Resi` and `JNE Actions` columns when available without changing the JNE plugin, and creates neutral columns when JNE is absent.
+
 ---
 
 ## 📦 Installation

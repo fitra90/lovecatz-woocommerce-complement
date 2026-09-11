@@ -31,6 +31,7 @@ class LWC_Product_Quantity_Limits {
 		add_action( 'wp_footer', array( $this, 'render_frontend_quantity_control' ) );
 
 		add_filter( 'woocommerce_quantity_input_args', array( $this, 'set_product_quantity_input_args' ), 10, 2 );
+		add_filter( 'woocommerce_get_item_data', array( $this, 'render_cart_item_quantity_limits' ), 20, 2 );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate_add_to_cart_quantities' ), 10, 5 );
 		add_filter( 'woocommerce_update_cart_validation', array( $this, 'validate_cart_item_quantities' ), 10, 4 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_item_quantities' ) );
@@ -153,8 +154,10 @@ class LWC_Product_Quantity_Limits {
 		if ( $final_max > 0 ) {
 			$args['max_value'] = $final_max;
 		} else {
-			// Remove max_value to prevent negative values from reaching the HTML output.
-			unset( $args['max_value'] );
+			// Keep WooCommerce's required key and let its normalizer turn -1 into
+			// an empty HTML max attribute. Unsetting this key triggers a warning in
+			// wc_get_quantity_input_args() and can corrupt Store API responses.
+			$args['max_value'] = -1;
 		}
 
 		// Calculate default input_value based on normalized min/max constraints.
@@ -171,6 +174,42 @@ class LWC_Product_Quantity_Limits {
 		$args['input_value'] = $default_input;
 
 		return $args;
+	}
+
+	/**
+	 * Show configured limits below an item in classic cart/checkout and Blocks.
+	 *
+	 * WooCommerce exposes this item data through both its templates and Store
+	 * API, so one filter keeps the two checkout implementations consistent.
+	 *
+	 * @param array $item_data Existing visible cart-item data.
+	 * @param array $cart_item Cart item values.
+	 * @return array
+	 */
+	public function render_cart_item_quantity_limits( $item_data, $cart_item ) {
+		$product = isset( $cart_item['data'] ) ? $cart_item['data'] : null;
+		if ( ! is_object( $product ) ) {
+			return $item_data;
+		}
+
+		$min_qty = $this->get_product_minimum_quantity( $product );
+		$max_qty = $this->get_product_maximum_quantity( $product );
+
+		if ( $min_qty > 1 ) {
+			$item_data[] = array(
+				'key'   => __( 'Minimum quantity', 'lovecatz-wc' ),
+				'value' => (string) $min_qty,
+			);
+		}
+
+		if ( $max_qty > 0 ) {
+			$item_data[] = array(
+				'key'   => __( 'Maximum quantity', 'lovecatz-wc' ),
+				'value' => (string) $max_qty,
+			);
+		}
+
+		return $item_data;
 	}
 
 	/**

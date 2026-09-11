@@ -15,6 +15,16 @@
         statusEl.find('.lwc-provider-status-label').text(label);
     }
 
+    function setJtServiceStatus(statusEl, result) {
+        setProviderStatus(statusEl, result.status || 'partial', result.label || 'Not verified.');
+        statusEl.find('.lwc-jt-api-exchange').remove();
+        if (result.exchange && typeof result.exchange === 'object') {
+            var details = $('<details class="lwc-jt-api-exchange"><summary>Original J&T request / response</summary><pre></pre></details>');
+            details.find('pre').text(JSON.stringify(result.exchange, null, 2));
+            statusEl.append(details);
+        }
+    }
+
     function initDashiconSelectors() {
         $('.lwc-dashicon-choice').on('click', function () {
             $('.lwc-dashicon-choice').removeClass('selected');
@@ -229,7 +239,7 @@
         togglePreorderProducts();
     }
 
-    function updateJtConnectionStatus() {
+    function updateJtConnectionStatus(runCheck) {
         var statusList = $('.lwc-jt-connection-status');
         var environmentSelect = $('#lwc_jt_express_environment');
         if (!statusList.length) {
@@ -240,12 +250,23 @@
         var sequence = jtCheckSequence;
         var environment = environmentSelect.val() === 'production' ? 'production' : 'sandbox';
         var environmentLabel = environment === 'production' ? 'Production:' : 'Sandbox:';
-        var statusEl = statusList.find('.lwc-provider-status').first();
+        var statusEl = statusList.find('.lwc-jt-summary-status').first();
         var group = $('.lwc-jt-credential-group[data-provider="express"][data-environment="' + environment + '"]');
 
         statusEl.attr('data-environment', environment);
         statusEl.find('.lwc-jt-active-environment-label').text(environmentLabel);
+        if (!runCheck) {
+            setProviderStatus(statusEl, 'partial', 'Credentials changed. Save settings, then check the active API services.');
+            statusList.find('.lwc-jt-service-status').each(function () {
+                setProviderStatus($(this), 'partial', 'Waiting for a new check.');
+            });
+            return;
+        }
+
         setProviderStatus(statusEl, 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking credentials...');
+        statusList.find('.lwc-jt-service-status').each(function () {
+            setProviderStatus($(this), 'checking', 'Checking...');
+        });
 
         clearTimeout(jtCheckTimer);
         jtCheckTimer = setTimeout(function () {
@@ -275,6 +296,11 @@
                 }
                 var data = response && response.data ? response.data : {};
                 setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
+                if (data.services) {
+                    $.each(data.services, function (service, result) {
+                        setJtServiceStatus(statusList.find('.lwc-jt-service-status[data-service="' + service + '"]'), result);
+                    });
+                }
             }).fail(function () {
                 if (sequence === jtCheckSequence) {
                     setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
@@ -321,11 +347,12 @@
 			$('.lwc-jt-credential-field').on('input change', function () {
 				var activeEnvironment = $('#lwc_jt_express_environment').val() === 'production' ? 'production' : 'sandbox';
 				if ($(this).closest('.lwc-jt-credential-group').data('environment') === activeEnvironment) {
-					updateJtConnectionStatus();
+					updateJtConnectionStatus(false);
 				}
 			});
-			$('#lwc_jt_express_environment').on('change', updateJtConnectionStatus);
-			updateJtConnectionStatus();
+			$('#lwc_jt_express_environment').on('change', function () { updateJtConnectionStatus(true); });
+			$('#lwc-jt-check-services').on('click', function () { updateJtConnectionStatus(true); });
+			updateJtConnectionStatus(true);
 		}
 
         if ($('.lwc-promo-image-select').length) {

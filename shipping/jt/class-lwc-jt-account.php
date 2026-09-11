@@ -155,13 +155,47 @@ class LWC_JT_Account {
 			'environment' => $environment,
 		);
 		$fields = 'express' === $provider
-			? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'cancel_username', 'cancel_api_key' )
+			? array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'print_company_id', 'cancel_key', 'cancel_username', 'cancel_api_key' )
 			: array( 'username', 'api_key', 'api_secret' );
 		foreach ( $fields as $field ) {
 			$credentials[ $field ] = get_option( "{$prefix}_{$field}", '' );
 		}
 
 		return $credentials;
+	}
+
+	/** Store a credential-bound service result without storing any plaintext key. */
+	public static function set_service_status( $environment, $service, $status, $message, $credentials, $fields ) {
+		$environment = 'production' === $environment ? 'production' : 'sandbox';
+		$service = sanitize_key( $service );
+		update_option(
+			"lwc_jt_express_{$environment}_service_{$service}",
+			array(
+				'status'      => 'connected' === $status ? 'connected' : 'partial',
+				'message'     => sanitize_text_field( $message ),
+				'fingerprint' => self::credential_fingerprint( $credentials, $fields ),
+				'checked_at'  => time(),
+			),
+			false
+		);
+	}
+
+	/** Return a prior result only when it belongs to the credential values now entered. */
+	public static function get_service_status( $environment, $service, $credentials, $fields ) {
+		$environment = 'production' === $environment ? 'production' : 'sandbox';
+		$record = get_option( "lwc_jt_express_{$environment}_service_" . sanitize_key( $service ), array() );
+		if ( ! is_array( $record ) || empty( $record['fingerprint'] ) || ! hash_equals( $record['fingerprint'], self::credential_fingerprint( $credentials, $fields ) ) ) {
+			return array();
+		}
+		return $record;
+	}
+
+	private static function credential_fingerprint( $credentials, $fields ) {
+		$values = array();
+		foreach ( $fields as $field ) {
+			$values[] = isset( $credentials[ $field ] ) ? (string) $credentials[ $field ] : '';
+		}
+		return hash_hmac( 'sha256', implode( "\0", $values ), wp_salt( 'auth' ) );
 	}
 
 	public static function sync_from_options( $provider = 'express' ) {

@@ -93,20 +93,20 @@ class LWC_JT_Order_Admin {
 		}
 		$result = $this->create_shipment( $order );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'exchange' => $result->get_error_data() ) );
 		}
-		wp_send_json_success( array( 'message' => __( 'J&T order created successfully.', 'lovecatz-wc' ), 'awb' => $result['awb'] ) );
+		wp_send_json_success( array( 'message' => __( 'J&T order created successfully.', 'lovecatz-wc' ), 'awb' => $result['awb'], 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null ) );
 	}
 
 	public function ajax_refresh_tracking() {
 		$order = $this->get_ajax_order();
 		$result = $this->refresh_tracking( $order );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'exchange' => $result->get_error_data() ) );
 		}
 		ob_start();
 		$this->render_tracking( $result );
-		wp_send_json_success( array( 'message' => __( 'J&T tracking refreshed.', 'lovecatz-wc' ), 'html' => ob_get_clean() ) );
+		wp_send_json_success( array( 'message' => __( 'J&T tracking refreshed.', 'lovecatz-wc' ), 'html' => ob_get_clean(), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null ) );
 	}
 
 	public function ajax_print_label() {
@@ -119,13 +119,20 @@ class LWC_JT_Order_Admin {
 		$environment = $this->get_order_environment( $order );
 		$result      = ( new LWC_JT_Express_API() )->get_print_url( $awb, LWC_JT_Account::get_credentials( 'express', $environment ) );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			if ( class_exists( 'LWC_Logger' ) ) {
+				LWC_Logger::log(
+					sprintf( 'J&T %1$s Print rejected for WooCommerce order %2$d: %3$s', $environment, $order->get_id(), $result->get_error_message() ),
+					'error'
+				);
+			}
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'exchange' => $result->get_error_data() ) );
 		}
 
 		wp_send_json_success(
 			array(
 				'message'   => __( 'J&T label is ready.', 'lovecatz-wc' ),
 				'label_url' => $result['label_url'],
+				'exchange'  => isset( $result['exchange'] ) ? $result['exchange'] : null,
 			)
 		);
 	}
@@ -134,9 +141,9 @@ class LWC_JT_Order_Admin {
 		$order = $this->get_ajax_order();
 		$result = $this->cancel_shipment( $order );
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message(), 'code' => $result->get_error_code() ) );
+			wp_send_json_error( array( 'message' => $result->get_error_message(), 'code' => $result->get_error_code(), 'exchange' => $result->get_error_data() ) );
 		}
-		wp_send_json_success( array( 'message' => __( 'J&T shipment cancelled.', 'lovecatz-wc' ) ) );
+		wp_send_json_success( array( 'message' => __( 'J&T shipment cancelled.', 'lovecatz-wc' ), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null ) );
 	}
 
 	/** Persist cancellation only after the carrier accepts this exact order. */
@@ -329,7 +336,9 @@ class LWC_JT_Order_Admin {
 			}
 			$order->update_meta_data( '_lwc_jt_tracking_weight_raw', $weight );
 		}
-		$order->update_meta_data( '_lwc_jt_tracking', $result );
+		$stored_result = $result;
+		unset( $stored_result['exchange'] );
+		$order->update_meta_data( '_lwc_jt_tracking', $stored_result );
 		$order->save();
 		return $result;
 	}

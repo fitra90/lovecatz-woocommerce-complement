@@ -275,8 +275,8 @@ class LWC_Admin_Settings {
 			register_setting( $group, "lwc_jt_{$jt_provider}_environment", array( 'sanitize_callback' => array( $this, 'sanitize_jt_environment' ) ) );
 			foreach ( array( 'sandbox', 'production' ) as $jt_environment ) {
 				$prefix = "lwc_jt_{$jt_provider}_{$jt_environment}";
-				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'cancel_username' ) : array( 'username' );
-				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
+				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'print_company_id', 'cancel_username' ) : array( 'username' );
+				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
 				foreach ( $text_fields as $field ) {
 					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
 				}
@@ -547,7 +547,11 @@ class LWC_Admin_Settings {
 			$environment_label = 'production' === $environment ? __( 'Production', 'lovecatz-wc' ) : __( 'Sandbox', 'lovecatz-wc' );
 			echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
 			echo '<div class="lwc-provider-status-list lwc-jt-connection-status" aria-live="polite">';
-			echo '<div class="lwc-provider-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jt-active-environment-label">' . esc_html( $environment_label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
+			echo '<div class="lwc-provider-status lwc-jt-summary-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jt-active-environment-label">' . esc_html( $environment_label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
+			foreach ( array( 'order' => __( 'Order', 'lovecatz-wc' ), 'tariff' => __( 'Tariff', 'lovecatz-wc' ), 'track' => __( 'Track', 'lovecatz-wc' ), 'cancellation' => __( 'Cancellation', 'lovecatz-wc' ), 'print' => __( 'Print', 'lovecatz-wc' ) ) as $service => $label ) {
+				echo '<div class="lwc-provider-status lwc-jt-service-status" data-service="' . esc_attr( $service ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Waiting for check…', 'lovecatz-wc' ) . '</span></div>';
+			}
+			echo '<p><button type="button" class="button" id="lwc-jt-check-services">' . esc_html__( 'Check active API services', 'lovecatz-wc' ) . '</button></p>';
 			echo '</div>';
 		} else {
 			echo '<p>' . esc_html__( 'Select the J&T Cargo API environment and enter its independent credentials.', 'lovecatz-wc' ) . '</p>';
@@ -687,28 +691,48 @@ class LWC_Admin_Settings {
 		$provider    = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
 		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
 		$prefix      = "lwc_jt_{$provider}_{$environment}";
-		$fields = 'express' === $provider ? array(
-			'order_username'       => array( __( 'Order Username', 'lovecatz-wc' ), 'text' ),
-			'order_api_key'        => array( __( 'Order API Key', 'lovecatz-wc' ), 'password' ),
-			'order_key'            => array( __( 'Order Signing Key', 'lovecatz-wc' ), 'password' ),
-			'tariff_customer_name' => array( __( 'Tariff Customer Name', 'lovecatz-wc' ), 'text' ),
-			'tariff_check_key'     => array( __( 'Tariff Check Key', 'lovecatz-wc' ), 'password' ),
-			'tracking_password'    => array( __( 'Tracking Authorization Password', 'lovecatz-wc' ), 'password' ),
-			'tracking_company_id'  => array( __( 'Tracking Username / E-company ID (also used for Print)', 'lovecatz-wc' ), 'text' ),
-			'print_key'            => array( __( 'Print Key', 'lovecatz-wc' ), 'password' ),
-			'cancel_username'      => array( __( 'Cancellation Username', 'lovecatz-wc' ), 'text' ),
-			'cancel_api_key'       => array( __( 'Cancellation API Key', 'lovecatz-wc' ), 'password' ),
-		) : array(
+		$groups = 'express' === $provider ? array(
+			__( 'Order', 'lovecatz-wc' ) => array(
+				'order_username' => array( __( 'Username', 'lovecatz-wc' ), 'text' ),
+				'order_api_key'  => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
+				'order_key'      => array( __( 'Key', 'lovecatz-wc' ), 'password' ),
+			),
+			__( 'Tariff Check', 'lovecatz-wc' ) => array(
+				'tariff_customer_name' => array( __( 'Customer Name', 'lovecatz-wc' ), 'text' ),
+				'tariff_check_key'     => array( __( 'Key', 'lovecatz-wc' ), 'password' ),
+			),
+			__( 'Track', 'lovecatz-wc' ) => array(
+				'tracking_company_id' => array( __( 'Username / E-company ID', 'lovecatz-wc' ), 'text' ),
+				'tracking_password'   => array( __( 'Password Track', 'lovecatz-wc' ), 'password' ),
+			),
+			__( 'Cancellation', 'lovecatz-wc' ) => array(
+				'cancel_key'      => array( __( 'Key', 'lovecatz-wc' ), 'password' ),
+				'cancel_username' => array( __( 'Username', 'lovecatz-wc' ), 'text' ),
+				'cancel_api_key'  => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
+			),
+			__( 'Print', 'lovecatz-wc' ) => array(
+				'print_key'        => array( __( 'Key', 'lovecatz-wc' ), 'password' ),
+				'print_company_id' => array( __( 'E-company ID', 'lovecatz-wc' ), 'text' ),
+			),
+		) : array( '' => array(
 			'username'   => array( __( 'Username / Account ID', 'lovecatz-wc' ), 'text' ),
 			'api_key'    => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
 			'api_secret' => array( __( 'API Secret', 'lovecatz-wc' ), 'password' ),
-		);
+		) );
 
 		echo '<div class="lwc-jt-credential-group" data-provider="' . esc_attr( $provider ) . '" data-environment="' . esc_attr( $environment ) . '">';
-		foreach ( $fields as $field => $definition ) {
-			$name  = "{$prefix}_{$field}";
-			$value = get_option( $name, '' );
-			echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
+		foreach ( $groups as $group_label => $fields ) {
+			if ( '' !== $group_label ) {
+				echo '<fieldset class="lwc-jt-credential-service"><legend>' . esc_html( $group_label ) . '</legend>';
+			}
+			foreach ( $fields as $field => $definition ) {
+				$name  = "{$prefix}_{$field}";
+				$value = get_option( $name, '' );
+				echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jt-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
+			}
+			if ( '' !== $group_label ) {
+				echo '</fieldset>';
+			}
 		}
 		if ( 'express' === $provider ) {
 			echo '<p class="description">' . esc_html__( 'Official J&T Indonesia API URLs are selected automatically for this environment. Only enter the credentials supplied for the matching account.', 'lovecatz-wc' ) . '</p>';

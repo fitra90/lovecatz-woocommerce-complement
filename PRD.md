@@ -1,7 +1,7 @@
 # LoveCatz WooCommerce Complement — Product Requirements and Design
 
-Last code review: 2026-08-21
-Current plugin version: 1.0.58
+Last code review: 2026-09-11
+Current plugin version: 1.0.64
 
 ## Purpose
 
@@ -93,7 +93,7 @@ Known gaps:
 
 `lwc_enable_product_quantity_limits` enables the feature. Per-product metadata is `_lwc_minimum_quantity` and `_lwc_maximum_quantity`.
 
-The implementation adds Inventory and Quick Edit controls, adjusts single-product inputs, validates add-to-cart/cart updates, and checks existing cart items before cart/checkout. It handles product/variation resolution where applicable.
+The implementation adds Inventory and Quick Edit controls, adjusts single-product inputs, validates add-to-cart/cart updates, and checks existing cart items before cart/checkout. It handles product/variation resolution where applicable. Configured minimum and maximum values are also exposed as visible cart-item data in both classic templates and WooCommerce Cart/Checkout Blocks. Quantity-input filters must preserve WooCommerce's `max_value` key and use its unlimited sentinel so Store API responses remain warning-free.
 
 ## Product pre-orders
 

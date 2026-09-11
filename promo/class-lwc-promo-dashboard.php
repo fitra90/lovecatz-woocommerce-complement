@@ -210,7 +210,7 @@ class LWC_Promo_Dashboard {
 	}
 
 	/**
-	 * Provide only coupons the current customer may select at checkout.
+	 * Provide selectable coupons plus expired coupons for the current customer.
 	 *
 	 * This data is used by the Checkout Block modal; WooCommerce still validates
 	 * the coupon when its native Apply button is triggered.
@@ -220,7 +220,8 @@ class LWC_Promo_Dashboard {
 	private function get_checkout_coupon_data() {
 		$coupons = array();
 		foreach ( $this->get_promo_coupons() as $coupon ) {
-			if ( ! $this->is_coupon_available_at_checkout( $coupon ) ) {
+			$expired = $this->is_coupon_expired( $coupon );
+			if ( ! $this->is_coupon_available_at_checkout( $coupon, $expired ) ) {
 				continue;
 			}
 
@@ -243,13 +244,17 @@ class LWC_Promo_Dashboard {
 			if ( $minimum ) {
 				$description .= ' · ' . sprintf( __( 'Min. order %s', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $minimum ) ) );
 			}
-			$image_id = absint( get_post_meta( $coupon->get_id(), '_lwc_promo_active_image_id', true ) );
+			$image_meta_key = $expired ? '_lwc_promo_disabled_image_id' : '_lwc_promo_active_image_id';
+			$image_id = absint( get_post_meta( $coupon->get_id(), $image_meta_key, true ) );
 			$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
 
 			$coupons[] = array(
-				'code'        => $coupon->get_code(),
-				'description' => $description,
-				'image'       => $image_url,
+				'code'          => $coupon->get_code(),
+				'description'   => $description,
+				'image'         => $image_url,
+				'applied'       => ! $expired && WC()->cart && WC()->cart->has_discount( $coupon->get_code() ),
+				'expired'       => $expired,
+				'individualUse' => $coupon->get_individual_use(),
 			);
 		}
 
@@ -261,19 +266,20 @@ class LWC_Promo_Dashboard {
 	 * Guests may see only coupons without account/email restrictions; final
 	 * validation remains WooCommerce's responsibility when applying the code.
 	 *
-	 * @param WC_Coupon $coupon Coupon instance.
+	 * @param WC_Coupon $coupon        Coupon instance.
+	 * @param bool      $ignore_expiry Whether an expired coupon may remain visible as disabled.
 	 * @return bool
 	 */
-	private function is_coupon_available_at_checkout( $coupon ) {
+	private function is_coupon_available_at_checkout( $coupon, $ignore_expiry = false ) {
 		if ( ! $coupon instanceof WC_Coupon || 'publish' !== $coupon->get_status() ) {
 			return false;
 		}
 
 		if ( is_user_logged_in() ) {
-			return $this->is_coupon_available_for_user( $coupon, get_current_user_id() );
+			return $this->is_coupon_available_for_user( $coupon, get_current_user_id(), $ignore_expiry );
 		}
 
-		if ( $coupon->get_date_expires() && $coupon->get_date_expires()->getTimestamp() < current_time( 'timestamp' ) ) {
+		if ( ! $ignore_expiry && $this->is_coupon_expired( $coupon ) ) {
 			return false;
 		}
 
@@ -282,6 +288,13 @@ class LWC_Promo_Dashboard {
 		}
 
 		return empty( $coupon->get_email_restrictions() );
+	}
+
+	/** Determine whether a coupon has passed its configured expiry date. */
+	private function is_coupon_expired( $coupon ) {
+		return $coupon instanceof WC_Coupon
+			&& $coupon->get_date_expires()
+			&& $coupon->get_date_expires()->getTimestamp() < current_time( 'timestamp' );
 	}
 
 	/**
@@ -353,16 +366,17 @@ class LWC_Promo_Dashboard {
 	/**
 	 * Determine whether the coupon may be selected by the current user.
 	 *
-	 * @param WC_Coupon $coupon  Coupon instance.
-	 * @param int       $user_id User ID.
+	 * @param WC_Coupon $coupon        Coupon instance.
+	 * @param int       $user_id       User ID.
+	 * @param bool      $ignore_expiry Whether expiry may be ignored for disabled presentation.
 	 * @return bool
 	 */
-	private function is_coupon_available_for_user( $coupon, $user_id ) {
+	private function is_coupon_available_for_user( $coupon, $user_id, $ignore_expiry = false ) {
 		if ( ! $coupon instanceof WC_Coupon || 'publish' !== $coupon->get_status() || ! $user_id ) {
 			return false;
 		}
 
-		if ( $coupon->get_date_expires() && $coupon->get_date_expires()->getTimestamp() < current_time( 'timestamp' ) ) {
+		if ( ! $ignore_expiry && $this->is_coupon_expired( $coupon ) ) {
 			return false;
 		}
 
