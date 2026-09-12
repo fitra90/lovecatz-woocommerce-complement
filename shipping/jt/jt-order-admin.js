@@ -22,7 +22,7 @@
 			if (response.success && data.html) {
 				$('#lwc-jt-tracking').html(data.html);
 			}
-			if (response.success && action === 'lwc_jt_create_order') {
+			if (response.success && (action === 'lwc_jt_create_order' || action === 'lwc_jt_cancel_order' || (action === 'lwc_jt_refresh_tracking' && data.cancelled))) {
 				window.location.reload();
 			}
 		}).fail(function () {

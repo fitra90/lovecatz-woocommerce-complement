@@ -56,11 +56,13 @@ class LWC_JT_Order_Admin {
 		if ( ! $order ) {
 			return;
 		}
+		$tracking = (array) $order->get_meta( '_lwc_jt_tracking' );
+		$this->reconcile_cancellation_from_tracking( $order, $tracking );
 		$awb      = (string) $order->get_meta( '_lwc_jt_awb' );
 		$error    = (string) $order->get_meta( '_lwc_jt_create_error' );
 		$tracking_error = (string) $order->get_meta( '_lwc_jt_tracking_error' );
 		$cancel_error = (string) $order->get_meta( '_lwc_jt_cancel_error' );
-		$tracking = (array) $order->get_meta( '_lwc_jt_tracking' );
+		$cancelled = (bool) $order->get_meta( '_lwc_jt_cancelled' );
 		$env      = $this->get_order_environment( $order );
 		?>
 		<div class="lwc-jt-order-box" data-order-id="<?php echo esc_attr( $order->get_id() ); ?>">
@@ -74,7 +76,8 @@ class LWC_JT_Order_Admin {
 			<?php else : ?>
 				<p><strong><?php esc_html_e( 'AWB:', 'lovecatz-wc' ); ?></strong> <span id="lwc-jt-awb"><?php echo esc_html( $awb ); ?></span></p>
 				<p><button type="button" class="button button-primary" id="lwc-jt-print-label"><?php esc_html_e( 'Print J&T Label', 'lovecatz-wc' ); ?></button> <a class="button" id="lwc-jt-open-label" href="#" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Open Label', 'lovecatz-wc' ); ?></a></p>
-				<p><button type="button" class="button" id="lwc-jt-refresh-tracking"><?php esc_html_e( 'Refresh Tracking', 'lovecatz-wc' ); ?></button> <button type="button" class="button" id="lwc-jt-cancel-order"><?php esc_html_e( 'Cancel J&T Order', 'lovecatz-wc' ); ?></button></p>
+				<p><button type="button" class="button" id="lwc-jt-refresh-tracking"><?php esc_html_e( 'Refresh Tracking', 'lovecatz-wc' ); ?></button><?php if ( ! $cancelled ) : ?> <button type="button" class="button" id="lwc-jt-cancel-order"><?php esc_html_e( 'Cancel J&T Order', 'lovecatz-wc' ); ?></button><?php endif; ?></p>
+				<?php if ( $cancelled ) : ?><p class="is-success"><strong><?php esc_html_e( 'Shipment cancelled by J&T.', 'lovecatz-wc' ); ?></strong></p><?php endif; ?>
 			<?php endif; ?>
 			<?php if ( $cancel_error ) : ?><p class="is-error"><?php echo esc_html( $cancel_error ); ?></p><?php endif; ?>
 			<div id="lwc-jt-order-status" class="<?php echo ( $error || $tracking_error ) ? 'is-error' : ''; ?>" aria-live="polite"><?php echo esc_html( $error ? $error : $tracking_error ); ?></div>
@@ -106,7 +109,7 @@ class LWC_JT_Order_Admin {
 		}
 		ob_start();
 		$this->render_tracking( $result );
-		wp_send_json_success( array( 'message' => __( 'J&T tracking refreshed.', 'lovecatz-wc' ), 'html' => ob_get_clean(), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null ) );
+		wp_send_json_success( array( 'message' => __( 'J&T tracking refreshed.', 'lovecatz-wc' ), 'html' => ob_get_clean(), 'cancelled' => (bool) $order->get_meta( '_lwc_jt_cancelled' ), 'exchange' => isset( $result['exchange'] ) ? $result['exchange'] : null ) );
 	}
 
 	public function ajax_print_label() {
@@ -339,8 +342,31 @@ class LWC_JT_Order_Admin {
 		$stored_result = $result;
 		unset( $stored_result['exchange'] );
 		$order->update_meta_data( '_lwc_jt_tracking', $stored_result );
+		$this->reconcile_cancellation_from_tracking( $order, $stored_result, false );
 		$order->save();
 		return $result;
+	}
+
+	/** Reconcile local state and service verification from J&T's status 162/163. */
+	private function reconcile_cancellation_from_tracking( $order, $tracking, $save = true ) {
+		if ( ! LWC_JT_Express_API::tracking_confirms_cancellation( isset( $tracking['history'] ) ? $tracking['history'] : array() ) ) {
+			return false;
+		}
+		$is_new = ! $order->get_meta( '_lwc_jt_cancelled' );
+		if ( $is_new ) {
+			$order->update_meta_data( '_lwc_jt_cancelled', current_time( 'mysql' ) );
+			$order->add_order_note( __( 'J&T shipment cancellation reconciled from carrier tracking status 162/163.', 'lovecatz-wc' ) );
+		}
+		$order->delete_meta_data( '_lwc_jt_cancel_error' );
+		$environment = $this->get_order_environment( $order );
+		$credentials = LWC_JT_Account::get_credentials( 'express', $environment );
+		if ( ! empty( $credentials['cancel_key'] ) && ! empty( $credentials['cancel_username'] ) && ! empty( $credentials['cancel_api_key'] ) ) {
+			LWC_JT_Account::set_service_status( $environment, 'cancellation', 'connected', __( 'Cancellation verified by J&T tracking status 162/163.', 'lovecatz-wc' ), $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) );
+		}
+		if ( $save ) {
+			$order->save();
+		}
+		return true;
 	}
 
 	public function render_customer_tracking( $order ) {
@@ -419,7 +445,13 @@ class LWC_JT_Order_Admin {
 
 	private function get_jt_order_id( $order ) {
 		$stored = (string) $order->get_meta( '_lwc_jt_order_id' );
-		return $stored ? $stored : substr( 'LWC-' . $order->get_id(), 0, 20 );
+		if ( $stored ) {
+			return $stored;
+		}
+		$generation = absint( $order->get_meta( '_lwc_shipping_change_count' ) );
+		$suffix = $generation > 0 ? '-' . $generation : '';
+		$base = 'LWC-' . $order->get_id();
+		return substr( $base, 0, max( 1, 20 - strlen( $suffix ) ) ) . $suffix;
 	}
 
 	private function save_create_error( $order, $error ) {

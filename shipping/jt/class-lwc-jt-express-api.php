@@ -147,8 +147,26 @@ class LWC_JT_Express_API {
 			}
 		}
 		LWC_JT_Account::set_service_status( $environment, 'track', 'connected', __( 'Tracking API connected.', 'lovecatz-wc' ), $credentials, array( 'tracking_company_id', 'tracking_password' ) );
+		if ( self::tracking_confirms_cancellation( $result['history'] ) && $this->has_credentials( $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) ) ) {
+			LWC_JT_Account::set_service_status( $environment, 'cancellation', 'connected', __( 'Cancellation verified by J&T tracking status 162/163.', 'lovecatz-wc' ), $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) );
+		}
 		$result['exchange'] = $exchange;
 		return $result;
+	}
+
+	/** J&T documents tracking status 162/163 as an AWB cancellation. */
+	public static function tracking_confirms_cancellation( $history ) {
+		foreach ( is_array( $history ) ? $history : array() as $event ) {
+			if ( ! is_array( $event ) ) {
+				continue;
+			}
+			$code   = isset( $event['status_code'] ) ? (string) $event['status_code'] : '';
+			$status = isset( $event['status'] ) ? (string) $event['status'] : '';
+			if ( in_array( $code, array( '162', '163' ), true ) || false !== stripos( $status, 'cancelled awb' ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Request a short-lived J&T label URL for one AWB. */
@@ -261,6 +279,16 @@ class LWC_JT_Express_API {
 				$reason = isset( $exchange['response'] ) ? (string) $exchange['response'] : '';
 			}
 			$matches_order = isset( $detail['orderid'] ) && (string) $data['orderid'] === (string) $detail['orderid'];
+			if ( $matches_order && false !== stripos( $reason, 'CANCEL_ORDER' ) ) {
+				LWC_JT_Account::set_service_status( $environment, 'cancellation', 'connected', $reason, $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) );
+				return array(
+					'success'           => true,
+					'order_id'          => sanitize_text_field( $order_id ),
+					'status'            => 'CANCEL_ORDER',
+					'already_cancelled' => true,
+					'exchange'          => $exchange,
+				);
+			}
 			$code = 'lwc_jt_cancel_failed';
 			if ( preg_match( '/Status\s+pesanan\s+adalah\s*:\s*GOT\s*$/i', $reason ) ) {
 				$code = 'lwc_jt_already_picked_up';

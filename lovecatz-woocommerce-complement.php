@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.65
+ * Version:     1.0.66
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.65' );
+define( 'LWC_VERSION', '1.0.66' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -153,6 +153,7 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-list-shipping.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-shipping-switcher.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-base.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
@@ -172,6 +173,7 @@ function lwc_init() {
 	$core = new LWC_Core();
 	$core->init();
 	( new LWC_Order_List_Shipping() )->init();
+	( new LWC_Order_Shipping_Switcher() )->init();
 	LWC_Indonesia_Regions::init();
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
@@ -763,6 +765,7 @@ function lwc_check_jt_connection() {
 /** Find a recent J&T AWB that belongs to the selected API environment. */
 function lwc_find_recent_jt_awb( $environment ) {
 	$orders = wc_get_orders( array( 'limit' => 50, 'orderby' => 'date', 'order' => 'DESC', 'return' => 'objects' ) );
+	$fallback_awb = '';
 	foreach ( $orders as $order ) {
 		if ( ! $order->get_meta( '_lwc_jt_awb' ) ) {
 			continue;
@@ -776,11 +779,22 @@ function lwc_find_recent_jt_awb( $environment ) {
 				$item_environment = $item->get_meta( 'lwc_jt_environment', true );
 			}
 			if ( $environment === ( 'production' === $item_environment ? 'production' : 'sandbox' ) ) {
-				return sanitize_text_field( (string) $order->get_meta( '_lwc_jt_awb' ) );
+				$awb = sanitize_text_field( (string) $order->get_meta( '_lwc_jt_awb' ) );
+				$tracking = $order->get_meta( '_lwc_jt_tracking' );
+				$has_cancel_evidence = (bool) $order->get_meta( '_lwc_jt_cancelled' );
+				if ( ! $has_cancel_evidence && class_exists( 'LWC_JT_Express_API' ) && is_array( $tracking ) ) {
+					$has_cancel_evidence = LWC_JT_Express_API::tracking_confirms_cancellation( isset( $tracking['history'] ) ? $tracking['history'] : array() );
+				}
+				if ( $has_cancel_evidence ) {
+					return $awb;
+				}
+				if ( '' === $fallback_awb ) {
+					$fallback_awb = $awb;
+				}
 			}
 		}
 	}
-	return '';
+	return $fallback_awb;
 }
 
 /**

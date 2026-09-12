@@ -1,0 +1,30 @@
+.lwc-order-shipping-switcher .notice.inline {
+	margin: 8px 0;
+	padding: 8px 10px;
+}
+
+.lwc-order-shipping-switcher .notice.inline span {
+	display: block;
+}
+
+.lwc-shipping-cancel-confirm {
+	display: block;
+	margin: 8px 0;
+}
+
+.lwc-order-shipping-switcher .lwc-shipping-options {
+	margin-top: 10px;
+}
+
+.lwc-shipping-switch-status {
+	margin-top: 8px;
+	word-break: break-word;
+}
+
+.lwc-shipping-switch-status.is-error {
+	color: #b32d2e;
+}
+
+.lwc-shipping-switch-status.is-success {
+	color: #008a20;
+}
