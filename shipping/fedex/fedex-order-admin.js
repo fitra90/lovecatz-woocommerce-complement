@@ -60,9 +60,26 @@
             $('.lwc-fedex-item-checkbox:checked').each(function () {
                 itemIds.push($(this).val());
             });
+            var packageValues = {
+                weight: $('#lwc_fedex_package_weight').val(),
+                length: $('#lwc_fedex_package_length').val(),
+                width: $('#lwc_fedex_package_width').val(),
+                height: $('#lwc_fedex_package_height').val()
+            };
+            var suppliedPackageValues = Object.keys(packageValues).filter(function (key) {
+                return packageValues[key] !== '';
+            });
 
             if (!itemIds.length) {
                 setStatus(cfg.i18n.no_items, 'error');
+                return;
+            }
+            if (suppliedPackageValues.length && suppliedPackageValues.length !== 4) {
+                setStatus(cfg.i18n.package_incomplete, 'error');
+                return;
+            }
+            if (suppliedPackageValues.length && suppliedPackageValues.some(function (key) { return Number(packageValues[key]) <= 0; })) {
+                setStatus(cfg.i18n.package_invalid, 'error');
                 return;
             }
 
@@ -73,7 +90,11 @@
                 action: 'lwc_fedex_create_shipment',
                 nonce: cfg.nonce,
                 order_id: cfg.order_id,
-                item_ids: itemIds
+                item_ids: itemIds,
+                package_weight: packageValues.weight,
+                package_length: packageValues.length,
+                package_width: packageValues.width,
+                package_height: packageValues.height
             }).done(function (res) {
                 btn.prop('disabled', false);
                 if (res && res.success) {
@@ -86,6 +107,34 @@
                     window.setTimeout(function () { window.location.reload(); }, 1200);
                 } else {
                     setStatus((res && res.message) || cfg.i18n.create_failed, 'error');
+                }
+            }).fail(function () {
+                btn.prop('disabled', false);
+                setStatus(cfg.i18n.request_failed, 'error');
+            });
+        });
+
+        $('.lwc-fedex-cancel-shipment').on('click', function () {
+            var btn = $(this);
+            var tracking = String(btn.data('tracking') || '');
+            if (!window.confirm(cfg.i18n.confirm_awb.replace('%s', tracking))) {
+                return;
+            }
+
+            btn.prop('disabled', true);
+            setStatus(cfg.i18n.cancel_awb, 'checking');
+            $.post(cfg.ajax_url, {
+                action: 'lwc_fedex_cancel_shipment',
+                nonce: cfg.nonce,
+                order_id: cfg.order_id,
+                shipment: btn.data('shipment')
+            }).done(function (res) {
+                if (res && res.success) {
+                    setStatus(res.message, 'ok');
+                    window.setTimeout(function () { window.location.reload(); }, 1000);
+                } else {
+                    btn.prop('disabled', false);
+                    setStatus((res && res.message) || cfg.i18n.request_failed, 'error');
                 }
             }).fail(function () {
                 btn.prop('disabled', false);

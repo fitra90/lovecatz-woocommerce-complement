@@ -146,6 +146,9 @@ class LWC_Order_List_Shipping {
 			$shipments = $order->get_meta( '_lwc_fedex_shipments' );
 			if ( is_array( $shipments ) ) {
 				foreach ( $shipments as $shipment ) {
+					if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+						continue;
+					}
 					$numbers[] = isset( $shipment['tracking_number'] ) ? $shipment['tracking_number'] : '';
 				}
 			}

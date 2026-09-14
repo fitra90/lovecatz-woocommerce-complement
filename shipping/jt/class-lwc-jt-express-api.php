@@ -11,6 +11,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LWC_JT_Express_API {
 
+	/** Official J&T Indonesia Print API message type. */
+	const PRINT_MESSAGE_TYPE = 'ROTAPRINT';
+
 	const SANDBOX_ORDER_URL  = 'https://demo-ecommerce.inuat-jntexpress.id/jts-idn-ecommerce-api/api/order/create';
 	const SANDBOX_TARIFF_URL = 'https://demo-general.inuat-jntexpress.id/jandt_track/inquiry.action';
 	const SANDBOX_TRACK_URL  = 'https://demo-general.inuat-jntexpress.id/jandt_track/track/trackAction!tracking.action';
@@ -184,7 +187,7 @@ class LWC_JT_Express_API {
 		}
 
 		$payload  = wp_json_encode( array( 'billcode' => $awb ), JSON_UNESCAPED_SLASHES );
-		$msg_type = (string) apply_filters( 'lwc_jt_express_print_message_type', 'GETPRINTURL', $environment, $awb );
+		$msg_type = (string) apply_filters( 'lwc_jt_express_print_message_type', self::PRINT_MESSAGE_TYPE, $environment, $awb );
 		$request_headers = array( 'Content-Type' => 'application/x-www-form-urlencoded' );
 		$request_body = array(
 			'logistics_interface' => $payload,

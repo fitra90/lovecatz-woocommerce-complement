@@ -88,6 +88,10 @@ class LWC_Core {
 					require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-currency-converter.php';
 		}
 
+		if ( file_exists( LWC_PLUGIN_DIR . 'payment/class-lwc-paypal-admin-fee.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-paypal-admin-fee.php';
+		}
+
 		if ( file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-order-admin.php' ) ) {
 					require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-order-admin.php';
 		}
@@ -153,6 +157,10 @@ class LWC_Core {
 		// Built-in currency converter (idle when an external one is active).
 		if ( class_exists( 'LWC_Currency_Converter' ) ) {
 			LWC_Currency_Converter::instance()->init();
+		}
+
+		if ( class_exists( 'LWC_PayPal_Admin_Fee' ) ) {
+			( new LWC_PayPal_Admin_Fee() )->init();
 		}
 
 		// Include the plugin version in WooCommerce's package hash. This clears

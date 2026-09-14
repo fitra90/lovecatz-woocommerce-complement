@@ -8,6 +8,38 @@
 	margin: 8px 0;
 }
 
+.lwc-fedex-package-fields {
+	display: grid;
+	gap: 7px;
+	margin: 10px 0;
+	padding: 9px;
+	border: 1px solid #dcdcde;
+}
+
+.lwc-fedex-package-fields legend,
+.lwc-fedex-package-fields label {
+	font-weight: 600;
+}
+
+.lwc-fedex-package-fields label {
+	display: grid;
+	gap: 3px;
+}
+
+.lwc-fedex-package-fields .description {
+	margin: 0;
+}
+
+.lwc-fedex-dimension-fields {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 5px;
+}
+
+.lwc-fedex-dimension-fields input {
+	width: 100%;
+}
+
 .lwc-fedex-item {
 	display: block;
 	margin: 2px 0;
@@ -22,6 +54,23 @@
 .lwc-fedex-shipments ul {
 	margin: 4px 0 0 16px;
 	list-style: disc;
+}
+
+.lwc-fedex-shipments li {
+	margin-bottom: 5px;
+}
+
+.lwc-fedex-shipments li.is-cancelled {
+	color: #646970;
+}
+
+.lwc-fedex-cancel-shipment {
+	margin-left: 4px;
+}
+
+.lwc-fedex-shipment-package {
+	display: block;
+	margin-top: 2px;
 }
 
 .lwc-fedex-order-status {

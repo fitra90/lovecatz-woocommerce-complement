@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.66
+ * Version:     1.0.69
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.66' );
+define( 'LWC_VERSION', '1.0.69' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -546,8 +546,36 @@ function lwc_fedex_create_shipment() {
 		$item_ids = array_values( array_filter( $item_ids ) );
 	}
 
+	// Optional actual measurements for one fully packed carton. Accept either a
+	// complete set or no override so FedEx never receives a partially estimated
+	// package from this admin action.
+	$measurement_keys = array( 'weight', 'length', 'width', 'height' );
+	$measurements = array();
+	foreach ( $measurement_keys as $key ) {
+		$post_key = 'package_' . $key;
+		$measurements[ $key ] = isset( $_POST[ $post_key ] ) ? trim( sanitize_text_field( wp_unslash( $_POST[ $post_key ] ) ) ) : '';
+	}
+	$supplied_measurements = array_filter( $measurements, static function ( $value ) { return '' !== $value; } );
+	$package_override = array();
+	if ( ! empty( $supplied_measurements ) ) {
+		if ( count( $supplied_measurements ) !== count( $measurement_keys ) ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'Enter weight, length, width, and height together, or leave all carton measurements blank.', 'lovecatz-wc' ) ) );
+		}
+		foreach ( $measurements as $key => $value ) {
+			$value = wc_format_decimal( $value );
+			if ( ! is_numeric( $value ) || (float) $value <= 0 ) {
+				wp_send_json( array( 'success' => false, 'message' => __( 'Carton weight and dimensions must be positive numbers.', 'lovecatz-wc' ) ) );
+			}
+			$package_override[ $key ] = 'weight' === $key ? round( (float) $value, 2 ) : (int) ceil( (float) $value );
+		}
+		$weight_ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
+		if ( $weight_ceiling > 0 && $package_override['weight'] > $weight_ceiling ) {
+			wp_send_json( array( 'success' => false, 'message' => sprintf( __( 'The packed carton exceeds the FedEx parcel weight limit of %s kg.', 'lovecatz-wc' ), wc_format_localized_decimal( $weight_ceiling ) ) ) );
+		}
+	}
+
 	$api = new LWC_FedEx_API();
-	$result = $api->create_shipment( $order, 0, $item_ids );
+	$result = $api->create_shipment( $order, 0, $item_ids, $package_override );
 
 	if ( ! empty( $result['success'] ) ) {
 		// The raw response embeds the base64 label; keep it out of the AJAX payload.

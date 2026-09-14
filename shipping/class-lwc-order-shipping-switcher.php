@@ -283,7 +283,15 @@ class LWC_Order_Shipping_Switcher {
 		if ( 'rayspeed' === $provider ) { return '' !== (string) $order->get_meta( '_lwc_rayspeed_awb' ); }
 		if ( 'jt_cargo' === $provider ) { return '' !== (string) $order->get_meta( '_lwc_jt_cargo_awb' ) || '' !== (string) $order->get_meta( '_lwc_jt_cargo_tracking_number' ); }
 		if ( 'fedex' === $provider ) {
-			return '' !== (string) $order->get_meta( '_lwc_fedex_tracking_number' ) || ! empty( $order->get_meta( '_lwc_fedex_shipments' ) );
+			$shipments = $order->get_meta( '_lwc_fedex_shipments' );
+			if ( is_array( $shipments ) ) {
+				foreach ( $shipments as $shipment ) {
+					if ( is_array( $shipment ) && 'cancelled' !== ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) && ! empty( $shipment['tracking_number'] ) ) {
+						return true;
+					}
+				}
+			}
+			return '' !== (string) $order->get_meta( '_lwc_fedex_tracking_number' );
 		}
 		return false;
 	}

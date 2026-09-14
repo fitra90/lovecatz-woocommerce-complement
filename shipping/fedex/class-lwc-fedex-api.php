@@ -205,9 +205,14 @@ class LWC_FedEx_API {
 	 * @param WC_Order $order WooCommerce order object.
 	 * @param float    $fallback_max_package_weight_kg Used when the order has no stored package weight.
 	 * @param int[]    $item_ids Restrict the shipment to these order item IDs (manual partial shipping).
+	 * @param array    $package_override Actual weight and dimensions for one packed carton.
 	 * @return array
 	 */
-	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array() ) {
+	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
+		$package_override = $this->normalize_package_override( $package_override );
+		if ( is_wp_error( $package_override ) ) {
+			return array( 'success' => false, 'message' => $package_override->get_error_message() );
+		}
 		$shipper_contact   = $this->build_shipper_contact();
 		$recipient_contact = $this->build_recipient_contact( $order );
 		if ( empty( $shipper_contact['phoneNumber'] ) ) {
@@ -231,7 +236,7 @@ class LWC_FedEx_API {
 			);
 		}
 
-		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids );
+		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids, $package_override );
 		$response = $this->request( '/ship/v1/shipments', $payload, $token );
 		$body = $this->parse_response_body( $response );
 
@@ -258,7 +263,7 @@ class LWC_FedEx_API {
 			);
 		}
 
-		$label_path = $this->save_label_from_response( $order, $body, $item_ids );
+		$label_path = $this->save_label_from_response( $order, $body, $item_ids, $package_override );
 		if ( false === $label_path ) {
 			return array(
 				'success'  => false,
@@ -269,6 +274,75 @@ class LWC_FedEx_API {
 		return array(
 			'success' => true,
 			'label_path' => $label_path,
+			'response' => $body,
+		);
+	}
+
+	/**
+	 * Cancel an existing FedEx shipment before it is tendered to the carrier.
+	 *
+	 * FedEx recommends deleting every package for international multi-piece
+	 * shipments so label sequence numbers and customs clearance remain valid.
+	 *
+	 * @param string $tracking_number Stored FedEx tracking number.
+	 * @return array
+	 */
+	public function cancel_shipment( $tracking_number ) {
+		$tracking_number = preg_replace( '/[^A-Za-z0-9]/', '', (string) $tracking_number );
+		if ( '' === $tracking_number ) {
+			return array( 'success' => false, 'message' => __( 'No valid FedEx tracking number is available to cancel.', 'lovecatz-wc' ) );
+		}
+		$origin = $this->build_origin_address();
+		$sender_country = isset( $origin['countryCode'] ) ? strtoupper( trim( (string) $origin['countryCode'] ) ) : '';
+		if ( ! preg_match( '/^[A-Z]{2}$/', $sender_country ) ) {
+			return array( 'success' => false, 'message' => __( 'The WooCommerce store country is required to cancel a FedEx AWB.', 'lovecatz-wc' ) );
+		}
+
+		$token = $this->get_access_token();
+		if ( '' === $token ) {
+			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
+		}
+
+		$payload = array(
+			'accountNumber'   => array( 'value' => $this->settings['account_number'] ),
+			'trackingNumber'  => $tracking_number,
+			'senderCountryCode' => $sender_country,
+			'deletionControl' => 'DELETE_ALL_PACKAGES',
+		);
+		$response = $this->request( '/ship/v1/shipments/cancel', $payload, $token, 'PUT' );
+		$body = $this->parse_response_body( $response );
+
+		if ( ! $body ) {
+			$message = $this->describe_invalid_response( $response );
+			$this->log( 'Shipment cancellation failed: ' . $message, 'error' );
+			return array(
+				'success' => false,
+				'message' => sprintf(
+					/* translators: %s: safe HTTP/transport error detail. */
+					__( 'FedEx shipment cancellation failed: %s', 'lovecatz-wc' ),
+					$message
+				),
+			);
+		}
+		if ( isset( $body['errors'] ) ) {
+			$message = $this->extract_error_message( $body );
+			$this->log( 'Shipment cancellation failed: ' . $message, 'error' );
+			return array( 'success' => false, 'message' => $message, 'response' => $body );
+		}
+
+		$cancelled = isset( $body['output']['cancelledShipment'] ) && true === $body['output']['cancelledShipment'];
+		if ( ! $cancelled ) {
+			$this->log( 'Shipment cancellation response did not confirm cancelledShipment=true.', 'warning' );
+			return array(
+				'success'  => false,
+				'message'  => __( 'FedEx did not confirm that the shipment was cancelled. The AWB remains active locally.', 'lovecatz-wc' ),
+				'response' => $body,
+			);
+		}
+
+		return array(
+			'success'  => true,
+			'message'  => __( 'FedEx AWB cancelled. Its items are available for a replacement label.', 'lovecatz-wc' ),
 			'response' => $body,
 		);
 	}
@@ -851,9 +925,10 @@ class LWC_FedEx_API {
 	 * @param WC_Order $order Order object.
 	 * @param float    $fallback_max_package_weight_kg Used when the order has no stored package weight.
 	 * @param int[]    $item_ids Restrict the shipment to these order item IDs.
+	 * @param array    $package_override Actual weight and dimensions for one packed carton.
 	 * @return array
 	 */
-	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array() ) {
+	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address_from_order( $order );
 		$context = $this->get_order_shipping_context( $order );
@@ -866,7 +941,7 @@ class LWC_FedEx_API {
 			? $context['max_package_weight_kg']
 			: (float) $fallback_max_package_weight_kg;
 
-		$packages = $this->build_packages_from_order( $order, $max_package_weight_kg, $item_ids );
+		$packages = $this->build_packages_from_order( $order, $max_package_weight_kg, $item_ids, $package_override );
 
 		$payload = array(
 			'accountNumber' => array(
@@ -1150,9 +1225,10 @@ class LWC_FedEx_API {
 	 * @param WC_Order $order Order object.
 	 * @param float    $max_package_weight_kg Split packages above this weight (0 disables splitting).
 	 * @param int[]    $item_ids Restrict packages to these order item IDs.
+	 * @param array    $package_override Actual weight and dimensions for one packed carton.
 	 * @return array
 	 */
-	private function build_packages_from_order( $order, $max_package_weight_kg = 0, $item_ids = array() ) {
+	private function build_packages_from_order( $order, $max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
 		$entries = array();
 
 		foreach ( $order->get_items() as $item ) {
@@ -1173,7 +1249,54 @@ class LWC_FedEx_API {
 			);
 		}
 
+		if ( ! empty( $package_override ) ) {
+			return array(
+				array(
+					'weight' => round( (float) $package_override['weight'], 2 ),
+					'dimensions' => array(
+						'units'  => 'CM',
+						'length' => (int) ceil( (float) $package_override['length'] ),
+						'width'  => (int) ceil( (float) $package_override['width'] ),
+						'height' => (int) ceil( (float) $package_override['height'] ),
+					),
+				),
+			);
+		}
+
 		return $this->split_into_packages( $entries, $max_package_weight_kg );
+	}
+
+	/**
+	 * Validate and normalize a one-carton measurement override.
+	 *
+	 * @param array $package_override Raw override values.
+	 * @return array|WP_Error
+	 */
+	private function normalize_package_override( $package_override ) {
+		$package_override = is_array( $package_override ) ? $package_override : array();
+		if ( empty( $package_override ) ) {
+			return array();
+		}
+
+		$keys = array( 'weight', 'length', 'width', 'height' );
+		foreach ( $keys as $key ) {
+			if ( ! isset( $package_override[ $key ] ) || ! is_numeric( $package_override[ $key ] ) || (float) $package_override[ $key ] <= 0 ) {
+				return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter positive values for carton weight, length, width, and height.', 'lovecatz-wc' ) );
+			}
+		}
+
+		$normalized = array(
+			'weight' => round( (float) $package_override['weight'], 2 ),
+			'length' => (int) ceil( (float) $package_override['length'] ),
+			'width'  => (int) ceil( (float) $package_override['width'] ),
+			'height' => (int) ceil( (float) $package_override['height'] ),
+		);
+		$ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
+		if ( $ceiling > 0 && $normalized['weight'] > $ceiling ) {
+			return new WP_Error( 'lwc_fedex_package_too_heavy', sprintf( __( 'The packed carton exceeds the FedEx parcel weight limit of %s kg.', 'lovecatz-wc' ), wc_format_localized_decimal( $ceiling ) ) );
+		}
+
+		return $normalized;
 	}
 
 	/**
@@ -1599,9 +1722,10 @@ class LWC_FedEx_API {
 	 * @param WC_Order $order Order object.
 	 * @param array $body Response body.
 	 * @param int[] $item_ids Order item IDs included in this shipment.
+	 * @param array $package_override Actual weight and dimensions used for the shipment.
 	 * @return string|false
 	 */
-	private function save_label_from_response( $order, $body, $item_ids = array() ) {
+	private function save_label_from_response( $order, $body, $item_ids = array(), $package_override = array() ) {
 		$label_data = '';
 		$tracking_number = '';
 
@@ -1678,7 +1802,9 @@ class LWC_FedEx_API {
 			'tracking_number' => $tracking_number,
 			'label_file' => $filename,
 			'item_ids' => array_values( array_map( 'intval', (array) $item_ids ) ),
+			'package' => ! empty( $package_override ) ? $package_override : array(),
 			'created_at' => current_time( 'mysql' ),
+			'status' => 'active',
 		);
 		$order->update_meta_data( '_lwc_fedex_shipments', $shipments );
 

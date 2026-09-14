@@ -81,6 +81,7 @@ class LWC_Admin_Settings {
 			'store-members' => __( 'Members', 'lovecatz-wc' ),
 			'shipping'      => __( 'Shipping', 'lovecatz-wc' ),
 			'promo'         => __( 'Promo', 'lovecatz-wc' ),
+			'payment'       => __( 'Payment', 'lovecatz-wc' ),
 			'currency'      => __( 'Currency', 'lovecatz-wc' ),
 		);
 	}
@@ -157,7 +158,7 @@ class LWC_Admin_Settings {
 		if ( 'couriers' === $active_tab ) {
 			$active_tab = 'shipping';
 		}
-		if ( ! in_array( $active_tab, array( 'settings', 'products', 'shipping', 'promo', 'currency', 'store-members' ), true ) ) {
+		if ( ! in_array( $active_tab, array( 'settings', 'products', 'shipping', 'promo', 'payment', 'currency', 'store-members' ), true ) ) {
 			$active_tab = 'settings';
 		}
 
@@ -181,6 +182,7 @@ class LWC_Admin_Settings {
 				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo 'store-members' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo 'shipping' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=promo" class="nav-tab <?php echo 'promo' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Promo', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=payment" class="nav-tab <?php echo 'payment' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Payment', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=currency" class="nav-tab <?php echo 'currency' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Currency', 'lovecatz-wc' ); ?></a>
 			</h2>
 
@@ -244,6 +246,14 @@ class LWC_Admin_Settings {
 			<?php elseif ( 'products' === $active_tab ) : ?>
 				<form method="post" action="options.php">
 					<?php settings_fields( 'lwc_products_options' ); do_settings_sections( 'lwc_products_options' ); submit_button(); ?>
+				</form>
+			<?php elseif ( 'payment' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php
+					settings_fields( 'lwc_payment_options' );
+					do_settings_sections( 'lwc_payment_options' );
+					submit_button( null, 'primary', 'submit', true, $this->is_official_paypal_plugin_active() ? array() : array( 'disabled' => 'disabled' ) );
+					?>
 				</form>
 			<?php elseif ( 'currency' === $active_tab ) : ?>
 				<form method="post" action="options.php">
@@ -476,6 +486,24 @@ class LWC_Admin_Settings {
 			'lwc_general_options',
 			'lwc_general_section_menu'
 		);
+
+		// PayPal surcharge settings.
+		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_type', array( 'default' => 'percentage', 'sanitize_callback' => array( $this, 'sanitize_paypal_fee_type' ) ) );
+		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_amount', array( 'default' => 0, 'sanitize_callback' => array( $this, 'sanitize_paypal_fee_amount' ) ) );
+		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_label', array( 'default' => __( 'PayPal admin fee', 'lovecatz-wc' ), 'sanitize_callback' => 'sanitize_text_field' ) );
+
+		add_settings_section(
+			'lwc_payment_section_paypal_fee',
+			__( 'PayPal Admin Fee', 'lovecatz-wc' ),
+			array( $this, 'render_paypal_fee_section_intro' ),
+			'lwc_payment_options'
+		);
+
+		add_settings_field( 'lwc_paypal_fee_enabled', __( 'Charge the buyer', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_enabled_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
+		add_settings_field( 'lwc_paypal_fee_type', __( 'Fee type', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_type_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
+		add_settings_field( 'lwc_paypal_fee_amount', __( 'Fee amount', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_amount_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
+		add_settings_field( 'lwc_paypal_fee_label', __( 'Checkout label', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_label_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
 
 		register_setting(
 			'lwc_products_options',
@@ -903,6 +931,93 @@ class LWC_Admin_Settings {
 			echo '<button type="button" class="lwc-dashicon-choice' . $selected . '" data-icon="' . esc_attr( $icon ) . '"><span class="dashicons ' . esc_attr( $icon ) . '"></span><span class="dashicon-label">' . esc_html( str_replace( 'dashicons-', '', $icon ) ) . '</span></button>';
 		}
 		echo '</div>';
+	}
+
+	/** Explain when the PayPal surcharge is added. */
+	public function render_paypal_fee_section_intro() {
+		if ( ! $this->is_official_paypal_plugin_active() ) {
+			$installed = class_exists( 'LWC_PayPal_Admin_Fee' ) && LWC_PayPal_Admin_Fee::is_official_plugin_installed();
+			$message   = $installed
+				? __( 'WooCommerce PayPal Payments is installed but inactive. Activate the official payment plugin to use the PayPal admin fee settings.', 'lovecatz-wc' )
+				: __( 'This feature requires the official WooCommerce PayPal Payments plugin. Install and activate it to use the PayPal admin fee settings.', 'lovecatz-wc' );
+			$url       = $installed ? self_admin_url( 'plugins.php' ) : self_admin_url( 'plugin-install.php?s=woocommerce%20paypal%20payments&tab=search&type=term' );
+			$button    = $installed ? __( 'Open Plugins', 'lovecatz-wc' ) : __( 'Install WooCommerce PayPal Payments', 'lovecatz-wc' );
+
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'PayPal fee settings are unavailable.', 'lovecatz-wc' ) . '</strong> ' . esc_html( $message );
+			if ( current_user_can( $installed ? 'activate_plugins' : 'install_plugins' ) ) {
+				echo ' <a class="button button-secondary" href="' . esc_url( $url ) . '">' . esc_html( $button ) . '</a>';
+			}
+			echo '</p></div>';
+			return;
+		}
+
+		echo '<p>' . esc_html__( 'Add an admin fee only when the buyer selects a payment method provided by WooCommerce PayPal Payments. The fee is shown separately in the checkout totals and saved with the order.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the PayPal surcharge master switch. */
+	public function render_paypal_fee_enabled_field() {
+		$current  = get_option( 'lwc_paypal_fee_enabled', 'no' );
+		$disabled = $this->paypal_field_disabled_attribute();
+		echo '<input type="hidden" name="lwc_paypal_fee_enabled" value="' . esc_attr( $this->is_official_paypal_plugin_active() ? 'no' : $current ) . '" />';
+		echo '<label><input type="checkbox" name="lwc_paypal_fee_enabled" value="yes" ' . checked( $current, 'yes', false ) . $disabled . ' /> ' . esc_html__( 'Pass the configured PayPal admin fee on to the buyer.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render percentage/fixed fee selection. */
+	public function render_paypal_fee_type_field() {
+		$current = get_option( 'lwc_paypal_fee_type', 'percentage' );
+		if ( ! $this->is_official_paypal_plugin_active() ) {
+			echo '<input type="hidden" name="lwc_paypal_fee_type" value="' . esc_attr( $current ) . '" />';
+		}
+		echo '<select name="lwc_paypal_fee_type"' . $this->paypal_field_disabled_attribute() . '>';
+		echo '<option value="percentage"' . selected( $current, 'percentage', false ) . '>' . esc_html__( 'Percentage', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="fixed"' . selected( $current, 'fixed', false ) . '>' . esc_html__( 'Fixed amount', 'lovecatz-wc' ) . '</option>';
+		echo '</select>';
+	}
+
+	/** Render the numeric PayPal fee value. */
+	public function render_paypal_fee_amount_field() {
+		$value = get_option( 'lwc_paypal_fee_amount', 0 );
+		if ( ! $this->is_official_paypal_plugin_active() ) {
+			echo '<input type="hidden" name="lwc_paypal_fee_amount" value="' . esc_attr( $value ) . '" />';
+		}
+		echo '<input type="number" name="lwc_paypal_fee_amount" value="' . esc_attr( $value ) . '" min="0" step="0.01" class="small-text"' . $this->paypal_field_disabled_attribute() . ' />';
+		echo '<p class="description">' . esc_html__( 'For Percentage, enter a value such as 4.4. For Fixed amount, enter a value in the WooCommerce store currency.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the fee label visible to the buyer. */
+	public function render_paypal_fee_label_field() {
+		$value = get_option( 'lwc_paypal_fee_label', __( 'PayPal admin fee', 'lovecatz-wc' ) );
+		if ( ! $this->is_official_paypal_plugin_active() ) {
+			echo '<input type="hidden" name="lwc_paypal_fee_label" value="' . esc_attr( $value ) . '" />';
+		}
+		echo '<input type="text" name="lwc_paypal_fee_label" value="' . esc_attr( $value ) . '" class="regular-text"' . $this->paypal_field_disabled_attribute() . ' />';
+	}
+
+	/** Whether the required official PayPal plugin is active. */
+	private function is_official_paypal_plugin_active() {
+		return class_exists( 'LWC_PayPal_Admin_Fee' ) && LWC_PayPal_Admin_Fee::is_official_plugin_active();
+	}
+
+	/** Disabled HTML attribute used while the official PayPal plugin is unavailable. */
+	private function paypal_field_disabled_attribute() {
+		return $this->is_official_paypal_plugin_active() ? '' : ' disabled="disabled" aria-disabled="true"';
+	}
+
+	/** Normalize the PayPal fee calculation type. */
+	public function sanitize_paypal_fee_type( $value ) {
+		return 'fixed' === sanitize_key( $value ) ? 'fixed' : 'percentage';
+	}
+
+	/** Normalize the PayPal fee amount and constrain percentage values. */
+	public function sanitize_paypal_fee_amount( $value ) {
+		$amount = (float) str_replace( ',', '.', (string) $value );
+		$amount = max( 0, $amount );
+
+		if ( isset( $_POST['lwc_paypal_fee_type'] ) && 'percentage' === sanitize_key( wp_unslash( $_POST['lwc_paypal_fee_type'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Settings API verifies the request nonce.
+			$amount = min( 100, $amount );
+		}
+
+		return $amount;
 	}
 
 	/**

@@ -18,6 +18,7 @@ class LWC_FedEx_Order_Admin {
 		add_action( 'add_meta_boxes', array( $this, 'register_metabox' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_customer_assets' ) );
+		add_action( 'wp_ajax_lwc_fedex_cancel_shipment', array( $this, 'ajax_cancel_shipment' ) );
 		add_action( 'wp_ajax_lwc_fedex_refresh_tracking', array( $this, 'ajax_refresh_tracking' ) );
 		add_action( 'wp_ajax_lwc_fedex_pickup_availability', array( $this, 'ajax_pickup_availability' ) );
 		add_action( 'wp_ajax_lwc_fedex_schedule_pickup', array( $this, 'ajax_schedule_pickup' ) );
@@ -140,6 +141,9 @@ class LWC_FedEx_Order_Admin {
 		// Items already covered by a previous (partial) shipment.
 		$shipped_item_ids = array();
 		foreach ( $shipments as $shipment ) {
+			if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+				continue;
+			}
 			if ( ! empty( $shipment['item_ids'] ) && is_array( $shipment['item_ids'] ) ) {
 				$shipped_item_ids = array_merge( $shipped_item_ids, array_map( 'intval', $shipment['item_ids'] ) );
 			}
@@ -193,6 +197,20 @@ class LWC_FedEx_Order_Admin {
 					<div class="notice notice-warning inline lwc-fedex-sandbox-notice"><p><?php esc_html_e( 'Sandbox mode: rates and labels are for testing only. Live tracking and courier pickup are disabled.', 'lovecatz-wc' ); ?></p></div>
 				<?php endif; ?>
 
+				<fieldset class="lwc-fedex-package-fields">
+					<legend><?php esc_html_e( 'Actual packed carton (optional)', 'lovecatz-wc' ); ?></legend>
+					<p class="description"><?php esc_html_e( 'For one packed carton, enter its outside measurements. Leave every field blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
+					<label>
+						<?php esc_html_e( 'Weight (kg)', 'lovecatz-wc' ); ?>
+						<input type="number" id="lwc_fedex_package_weight" min="0.01" max="68" step="0.01" inputmode="decimal" />
+					</label>
+					<div class="lwc-fedex-dimension-fields">
+						<label><?php esc_html_e( 'Length (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_length" min="1" step="1" inputmode="numeric" /></label>
+						<label><?php esc_html_e( 'Width (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_width" min="1" step="1" inputmode="numeric" /></label>
+						<label><?php esc_html_e( 'Height (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_height" min="1" step="1" inputmode="numeric" /></label>
+					</div>
+				</fieldset>
+
 				<?php if ( ! empty( $order_items ) ) : ?>
 					<div class="lwc-fedex-items">
 						<p class="description">
@@ -230,14 +248,37 @@ class LWC_FedEx_Order_Admin {
 						<strong><?php esc_html_e( 'Shipments', 'lovecatz-wc' ); ?></strong>
 						<ul>
 							<?php foreach ( $shipments as $index => $shipment ) : ?>
-								<li>
+								<?php $shipment_cancelled = 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ); ?>
+								<li class="<?php echo $shipment_cancelled ? 'is-cancelled' : ''; ?>">
 									<?php
 									$shipment_tracking = isset( $shipment['tracking_number'] ) ? (string) $shipment['tracking_number'] : '';
 									echo esc_html( '#' . ( $index + 1 ) . ' ' . ( '' !== $shipment_tracking ? $shipment_tracking : __( '(no tracking)', 'lovecatz-wc' ) ) );
+									if ( $shipment_cancelled ) {
+										echo ' — <strong>' . esc_html__( 'Cancelled', 'lovecatz-wc' ) . '</strong>';
+									}
 									?>
 									<a href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'shipment', (string) $index, $download_base ), 'lwc_fedex_connection_check', 'nonce' ) ); ?>" target="_blank" rel="noopener">
 										<?php esc_html_e( 'Label', 'lovecatz-wc' ); ?>
 									</a>
+									<?php if ( ! $shipment_cancelled && '' !== $shipment_tracking ) : ?>
+										<button type="button" class="button-link-delete lwc-fedex-cancel-shipment" data-shipment="<?php echo esc_attr( (string) $index ); ?>" data-tracking="<?php echo esc_attr( $shipment_tracking ); ?>">
+											<?php esc_html_e( 'Cancel AWB', 'lovecatz-wc' ); ?>
+										</button>
+									<?php endif; ?>
+									<?php if ( ! empty( $shipment['package'] ) && is_array( $shipment['package'] ) && isset( $shipment['package']['weight'], $shipment['package']['length'], $shipment['package']['width'], $shipment['package']['height'] ) ) : ?>
+										<small class="lwc-fedex-shipment-package">
+											<?php
+											printf(
+												/* translators: 1: weight kg, 2: length cm, 3: width cm, 4: height cm. */
+												esc_html__( '%1$s kg · %2$s × %3$s × %4$s cm', 'lovecatz-wc' ),
+												esc_html( $shipment['package']['weight'] ),
+												esc_html( $shipment['package']['length'] ),
+												esc_html( $shipment['package']['width'] ),
+												esc_html( $shipment['package']['height'] )
+											);
+											?>
+										</small>
+									<?php endif; ?>
 								</li>
 							<?php endforeach; ?>
 						</ul>
@@ -324,8 +365,12 @@ class LWC_FedEx_Order_Admin {
 				'quote_failed'  => __( 'FedEx did not return a rate.', 'lovecatz-wc' ),
 				'created'       => __( 'Label created successfully.', 'lovecatz-wc' ),
 				'create_failed' => __( 'FedEx could not create the shipment.', 'lovecatz-wc' ),
+				'cancel_awb'    => __( 'Cancelling the FedEx AWB…', 'lovecatz-wc' ),
+				'confirm_awb'   => __( 'Cancel AWB %s with FedEx? Its items will become available for a replacement label only after FedEx confirms cancellation.', 'lovecatz-wc' ),
 				'request_failed'=> __( 'The request could not be completed.', 'lovecatz-wc' ),
 				'no_items'      => __( 'Select at least one item to ship.', 'lovecatz-wc' ),
+				'package_incomplete' => __( 'Enter weight, length, width, and height together, or leave every carton field blank.', 'lovecatz-wc' ),
+				'package_invalid' => __( 'Carton weight and dimensions must be positive numbers.', 'lovecatz-wc' ),
 				'tracking'      => __( 'Refreshing FedEx tracking…', 'lovecatz-wc' ),
 				'tracking_ok'   => __( 'Tracking updated.', 'lovecatz-wc' ),
 				'pickup_check'  => __( 'Checking FedEx pickup availability…', 'lovecatz-wc' ),
@@ -455,6 +500,9 @@ class LWC_FedEx_Order_Admin {
 		$shipments = $order->get_meta( '_lwc_fedex_shipments' );
 		if ( is_array( $shipments ) ) {
 			foreach ( $shipments as &$shipment ) {
+				if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+					continue;
+				}
 				$number = isset( $shipment['tracking_number'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $shipment['tracking_number'] ) : '';
 				if ( isset( $old[ $number ] ) ) {
 					$shipment['tracking'] = $old[ $number ];
@@ -480,6 +528,55 @@ class LWC_FedEx_Order_Admin {
 		$result = $this->refresh_order_tracking( $order );
 		if ( ! empty( $result['success'] ) ) {
 			$result['html'] = $this->capture_tracking_cards( $result['tracks'], true );
+		}
+		unset( $result['response'] );
+		wp_send_json( $result );
+	}
+
+	/**
+	 * AJAX: cancel an active FedEx AWB and release its items for replacement.
+	 */
+	public function ajax_cancel_shipment() {
+		$order = $this->get_ajax_order();
+		if ( ! isset( $_POST['shipment'] ) ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'Shipment selection is required.', 'lovecatz-wc' ) ) );
+		}
+
+		$pickup = $order->get_meta( '_lwc_fedex_pickup' );
+		if ( is_array( $pickup ) && 'scheduled' === ( isset( $pickup['status'] ) ? $pickup['status'] : '' ) ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'Cancel the scheduled FedEx pickup before cancelling this AWB.', 'lovecatz-wc' ) ) );
+		}
+
+		$index = absint( wp_unslash( $_POST['shipment'] ) );
+		$shipments = $order->get_meta( '_lwc_fedex_shipments' );
+		$shipments = is_array( $shipments ) ? $shipments : array();
+		if ( ! isset( $shipments[ $index ] ) || ! is_array( $shipments[ $index ] ) ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'The selected FedEx shipment was not found.', 'lovecatz-wc' ) ) );
+		}
+		if ( 'cancelled' === ( isset( $shipments[ $index ]['status'] ) ? $shipments[ $index ]['status'] : '' ) ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'This FedEx AWB is already cancelled.', 'lovecatz-wc' ) ) );
+		}
+
+		$tracking_number = isset( $shipments[ $index ]['tracking_number'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $shipments[ $index ]['tracking_number'] ) : '';
+		if ( '' === $tracking_number ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'This shipment has no valid FedEx tracking number to cancel.', 'lovecatz-wc' ) ) );
+		}
+
+		$result = ( new LWC_FedEx_API() )->cancel_shipment( $tracking_number );
+		if ( ! empty( $result['success'] ) ) {
+			$shipments[ $index ]['status'] = 'cancelled';
+			$shipments[ $index ]['cancelled_at'] = current_time( 'mysql' );
+			$order->update_meta_data( '_lwc_fedex_shipments', $shipments );
+			$this->remove_cancelled_tracking_data( $order, $tracking_number );
+			$this->sync_latest_active_shipment( $order, $shipments );
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: FedEx tracking number. */
+					__( 'FedEx AWB cancelled through the carrier API: %s. Its items are available for a replacement label.', 'lovecatz-wc' ),
+					$tracking_number
+				)
+			);
+			$order->save();
 		}
 		unset( $result['response'] );
 		wp_send_json( $result );
@@ -644,6 +741,9 @@ class LWC_FedEx_Order_Admin {
 		$shipments = $order->get_meta( '_lwc_fedex_shipments' );
 		if ( is_array( $shipments ) ) {
 			foreach ( $shipments as $shipment ) {
+				if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+					continue;
+				}
 				if ( ! empty( $shipment['tracking_number'] ) ) {
 					$numbers[] = preg_replace( '/[^A-Za-z0-9]/', '', (string) $shipment['tracking_number'] );
 				}
@@ -654,6 +754,52 @@ class LWC_FedEx_Order_Admin {
 			$numbers[] = preg_replace( '/[^A-Za-z0-9]/', '', $legacy );
 		}
 		return array_values( array_unique( array_filter( $numbers ) ) );
+	}
+
+	/** Remove a cancelled AWB from the current tracking snapshot. */
+	private function remove_cancelled_tracking_data( $order, $tracking_number ) {
+		$data = $order->get_meta( '_lwc_fedex_tracking_data' );
+		if ( ! is_array( $data ) ) {
+			return;
+		}
+		foreach ( array_keys( $data ) as $key ) {
+			if ( $tracking_number === preg_replace( '/[^A-Za-z0-9]/', '', (string) $key ) ) {
+				unset( $data[ $key ] );
+			}
+		}
+		if ( empty( $data ) ) {
+			$order->delete_meta_data( '_lwc_fedex_tracking_data' );
+			$order->delete_meta_data( '_lwc_fedex_tracking_updated_at' );
+		} else {
+			$order->update_meta_data( '_lwc_fedex_tracking_data', $data );
+		}
+	}
+
+	/** Keep legacy single-shipment fields pointed at the newest active AWB. */
+	private function sync_latest_active_shipment( $order, $shipments ) {
+		$active = null;
+		for ( $index = count( $shipments ) - 1; $index >= 0; $index-- ) {
+			if ( is_array( $shipments[ $index ] ) && 'cancelled' !== ( isset( $shipments[ $index ]['status'] ) ? $shipments[ $index ]['status'] : '' ) ) {
+				$active = $shipments[ $index ];
+				break;
+			}
+		}
+
+		if ( null === $active ) {
+			$order->delete_meta_data( '_lwc_fedex_tracking_number' );
+			$order->delete_meta_data( '_lwc_fedex_label_path' );
+			return;
+		}
+		if ( ! empty( $active['tracking_number'] ) ) {
+			$order->update_meta_data( '_lwc_fedex_tracking_number', (string) $active['tracking_number'] );
+		} else {
+			$order->delete_meta_data( '_lwc_fedex_tracking_number' );
+		}
+		if ( ! empty( $active['label_file'] ) ) {
+			$order->update_meta_data( '_lwc_fedex_label_path', (string) $active['label_file'] );
+		} else {
+			$order->delete_meta_data( '_lwc_fedex_label_path' );
+		}
 	}
 
 	/**
