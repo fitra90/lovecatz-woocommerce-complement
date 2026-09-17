@@ -208,6 +208,74 @@ class LWC_FedEx_API {
 	}
 
 	/**
+	 * Verify OAuth and permission for the Basic Integrated Visibility endpoint.
+	 *
+	 * A deliberately nonexistent tracking number keeps this check read-only.
+	 * Any structured response other than an authorization rejection confirms
+	 * that the project may call the Track API.
+	 *
+	 * @return array
+	 */
+	public function test_tracking_connection() {
+		$api_key    = trim( (string) $this->settings['tracking_api_key'] );
+		$api_secret = trim( (string) $this->settings['tracking_api_secret'] );
+		if ( '' === $api_key || '' === $api_secret ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Basic Integrated Visibility Production API Key and Secret Key are required.', 'lovecatz-wc' ),
+			);
+		}
+
+		$token = $this->get_access_token( $api_key, $api_secret );
+		if ( '' === $token ) {
+			return array(
+				'success' => false,
+				'message' => __( 'FedEx rejected the Basic Integrated Visibility credentials (OAuth authentication failed).', 'lovecatz-wc' ),
+			);
+		}
+
+		$response = $this->request(
+			'/track/v1/trackingnumbers',
+			array(
+				'includeDetailedScans' => false,
+				'trackingInfo'         => array(
+					array( 'trackingNumberInfo' => array( 'trackingNumber' => '000000000000' ) ),
+				),
+			),
+			$token
+		);
+		if ( is_wp_error( $response ) ) {
+			return array( 'success' => false, 'message' => sanitize_text_field( $response->get_error_message() ) );
+		}
+
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		$body   = $this->parse_response_body( $response );
+		$message = is_array( $body ) && isset( $body['errors'] )
+			? $this->extract_error_message( $body )
+			: '';
+		$is_authorization_error = in_array( $status, array( 401, 403 ), true )
+			|| ( '' !== $message && preg_match( '/authoriz|permission|credential/i', $message ) );
+		if ( $is_authorization_error ) {
+			return array(
+				'success' => false,
+				'message' => '' !== $message ? $message : __( 'FedEx did not authorize this project to use Basic Integrated Visibility.', 'lovecatz-wc' ),
+			);
+		}
+
+		if ( ! is_array( $body ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'FedEx tracking permission check returned no valid response.', 'lovecatz-wc' ),
+			);
+		}
+
+		return array(
+			'success' => true,
+			'message' => __( 'Basic Integrated Visibility endpoint authorized.', 'lovecatz-wc' ),
+		);
+	}
+
+	/**
 	 * Create a shipment and fetch a label PDF.
 	 *
 	 * @param WC_Order $order WooCommerce order object.

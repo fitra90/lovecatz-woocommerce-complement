@@ -160,7 +160,7 @@ Cartons are derived from product data: items are grouped into packages that resp
 
 Checkout currency handling uses the global currency owner. The built-in LoveCatz converter converts every shipping method when enabled; when CURCY or another supported external converter is active, LoveCatz steps aside and that converter handles the native FedEx rate.
 
-The connection check in Settings → Shipping → FedEx performs separate real OAuth handshakes for the stored Sandbox and Production credentials. Its combined status pill is green only when both environments connect, red when either handshake fails, and orange when either credential set is incomplete.
+The connection check in Settings → Shipping → FedEx performs separate real OAuth handshakes for the stored Sandbox and Production credentials and verifies the dedicated production tracking credentials against `/track/v1/trackingnumbers`. A deliberately nonexistent tracking number keeps the permission probe read-only while distinguishing an authorized endpoint response from HTTP 401/403 or FedEx authorization errors. Its combined status pill is green only when Sandbox, Production, and Basic Integrated Visibility connect; failures and incomplete credential sets remain explicit.
 
 Order edit screen adds a **FedEx Shipping** side metabox (`LWC_FedEx_Order_Admin`) with:
 

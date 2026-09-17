@@ -656,14 +656,19 @@ class LWC_Admin_Settings {
 			$statuses[ $environment ] = get_option( 'lwc_fedex_validation_status_' . $environment, $fallback_status );
 		}
 
-		if ( 'validated' === $statuses['sandbox'] && 'validated' === $statuses['production'] ) {
-			$current = array( 'connected', __( 'Sandbox & Production connected (REST API ready)', 'lovecatz-wc' ) );
+		$tracking_status = get_option( 'lwc_fedex_tracking_validation_status', 'pending' );
+		if ( 'validated' === $statuses['sandbox'] && 'validated' === $statuses['production'] && 'validated' === $tracking_status ) {
+			$current = array( 'connected', __( 'Sandbox, Production & Tracking API connected (REST API ready)', 'lovecatz-wc' ) );
 		} elseif ( 'failed' === $statuses['sandbox'] || 'failed' === $statuses['production'] ) {
 			$failed  = array();
 			$failed[] = 'failed' === $statuses['sandbox'] ? __( 'Sandbox', 'lovecatz-wc' ) : '';
 			$failed[] = 'failed' === $statuses['production'] ? __( 'Production', 'lovecatz-wc' ) : '';
 			$failed   = array_filter( $failed );
 			$current  = array( 'auth_failed', sprintf( __( '%s connection failed. Both environments must be connected.', 'lovecatz-wc' ), implode( ' & ', $failed ) ) );
+		} elseif ( 'failed' === $tracking_status ) {
+			$current = array( 'auth_failed', __( 'Tracking API connection failed.', 'lovecatz-wc' ) );
+		} elseif ( 'validated' === $statuses['sandbox'] && 'validated' === $statuses['production'] ) {
+			$current = array( 'partial', __( 'Sandbox & Production connected; Tracking API credentials are incomplete.', 'lovecatz-wc' ) );
 		} else {
 			$current = array( 'partial', __( 'Sandbox or Production credentials are incomplete.', 'lovecatz-wc' ) );
 		}
@@ -858,7 +863,7 @@ class LWC_Admin_Settings {
 		$api_secret = get_option( 'lwc_fedex_tracking_production_api_secret', '' );
 
 		printf(
-			'<fieldset><legend class="screen-reader-text">%1$s</legend><p><label>%2$s<br><input type="text" name="lwc_fedex_tracking_production_account_number" value="%3$s" class="regular-text" autocomplete="off"></label></p><p><label>%4$s<br><input type="text" name="lwc_fedex_tracking_production_api_key" value="%5$s" class="regular-text" autocomplete="off"></label></p><p><label>%6$s<br><input type="password" name="lwc_fedex_tracking_production_api_secret" value="%7$s" class="regular-text" autocomplete="new-password"></label></p><p class="description">%8$s</p></fieldset>',
+			'<fieldset class="lwc-fedex-tracking-credential-group"><legend class="screen-reader-text">%1$s</legend><p><label>%2$s<br><input type="text" name="lwc_fedex_tracking_production_account_number" value="%3$s" class="regular-text lwc-fedex-tracking-credential-field" data-credential="account_number" autocomplete="off"></label></p><p><label>%4$s<br><input type="text" name="lwc_fedex_tracking_production_api_key" value="%5$s" class="regular-text lwc-fedex-tracking-credential-field" data-credential="api_key" autocomplete="off"></label></p><p><label>%6$s<br><input type="password" name="lwc_fedex_tracking_production_api_secret" value="%7$s" class="regular-text lwc-fedex-tracking-credential-field" data-credential="api_secret" autocomplete="new-password"></label></p><p class="description">%8$s</p></fieldset>',
 			esc_html__( 'Basic Integrated Visibility production credentials', 'lovecatz-wc' ),
 			esc_html__( 'Account Number (optional for tracking number)', 'lovecatz-wc' ),
 			esc_attr( $account ),

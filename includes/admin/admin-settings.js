@@ -45,6 +45,7 @@
 
     function updateFedexConnectionStatus(triggerAjax) {
         var environments = ['sandbox', 'production'];
+        var targets = ['sandbox', 'production', 'tracking'];
 
         function getCredentials(environment) {
             var group = $('.lwc-fedex-credential-group[data-environment="' + environment + '"]');
@@ -56,32 +57,45 @@
             };
         }
 
+        function getTrackingCredentials() {
+            var group = $('.lwc-fedex-tracking-credential-group');
+
+            return {
+                accountNumber: (group.find('[data-credential="account_number"]').val() || '').trim(),
+                apiKey: (group.find('[data-credential="api_key"]').val() || '').trim(),
+                apiSecret: (group.find('[data-credential="api_secret"]').val() || '').trim()
+            };
+        }
+
         function summarize(results) {
-            var labels = {sandbox: 'Sandbox', production: 'Production'};
-            var connected = environments.filter(function (environment) {
-                return results[environment].status === 'connected';
+            var labels = {sandbox: 'Sandbox', production: 'Production', tracking: 'Tracking API'};
+            var connected = targets.filter(function (target) {
+                return results[target].status === 'connected';
             });
-            var failed = environments.filter(function (environment) {
-                return results[environment].status === 'auth_failed' || results[environment].status === 'request_failed';
+            var failed = targets.filter(function (target) {
+                return results[target].status === 'auth_failed' || results[target].status === 'request_failed';
             });
-            var incomplete = environments.filter(function (environment) {
-                return results[environment].status !== 'connected' && failed.indexOf(environment) === -1;
+            var incomplete = targets.filter(function (target) {
+                return results[target].status !== 'connected' && failed.indexOf(target) === -1;
             });
             var parts = [];
 
-            if (connected.length === environments.length) {
-                setFedexConnectionStatus('connected', 'Sandbox & Production connected (REST API ready)');
+            if (connected.length === targets.length) {
+                setFedexConnectionStatus('connected', 'Sandbox, Production & Tracking API connected (REST API ready)');
                 return;
             }
 
             if (failed.length) {
-                parts.push(failed.map(function (environment) { return labels[environment]; }).join(' & ') + ' connection failed');
+				parts.push(failed.map(function (target) {
+					var detail = target === 'tracking' && results[target].label ? ': ' + results[target].label : '';
+					return labels[target] + ' connection failed' + detail;
+				}).join('; '));
             }
             if (incomplete.length) {
-                parts.push(incomplete.map(function (environment) { return labels[environment]; }).join(' & ') + ' credentials incomplete');
+                parts.push(incomplete.map(function (target) { return labels[target]; }).join(' & ') + ' credentials incomplete');
             }
             if (connected.length) {
-                parts.push(connected.map(function (environment) { return labels[environment]; }).join(' & ') + ' connected');
+                parts.push(connected.map(function (target) { return labels[target]; }).join(' & ') + ' connected');
             }
 
             setFedexConnectionStatus(failed.length ? 'auth_failed' : 'partial', parts.join('; '));
@@ -90,7 +104,7 @@
         if (triggerAjax) {
             fedexCheckSequence += 1;
             var checkSequence = fedexCheckSequence;
-            setFedexConnectionStatus('checking', 'Checking Sandbox & Production credentials...');
+            setFedexConnectionStatus('checking', 'Checking Sandbox, Production & Tracking API credentials...');
 
             clearTimeout(fedexCheckTimer);
             fedexCheckTimer = setTimeout(function () {
@@ -121,11 +135,31 @@
                     });
                 });
 
-                $.when.apply($, checks).done(function (sandboxResult, productionResult) {
+				var trackingCredentials = getTrackingCredentials();
+				checks.push($.ajax({
+					url: window.lwcShippingSettings.ajax_url,
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						action: 'lwc_check_fedex_connection',
+						nonce: window.lwcShippingSettings.nonce,
+						service: 'tracking',
+						account_number: trackingCredentials.accountNumber,
+						api_key: trackingCredentials.apiKey,
+						api_secret: trackingCredentials.apiSecret,
+						environment: 'production'
+					}
+				}).then(function (response) {
+					return response && response.success && response.data ? response.data : {status: 'request_failed'};
+				}, function () {
+					return {status: 'request_failed'};
+				}));
+
+                $.when.apply($, checks).done(function (sandboxResult, productionResult, trackingResult) {
                     if (checkSequence !== fedexCheckSequence) {
                         return;
                     }
-                    summarize({sandbox: sandboxResult, production: productionResult});
+                    summarize({sandbox: sandboxResult, production: productionResult, tracking: trackingResult});
                 });
             }, 300);
             return;
@@ -138,6 +172,10 @@
                 status: credentials.accountNumber && credentials.apiKey && credentials.apiSecret ? 'partial' : 'idle'
             };
         });
+		var trackingCredentials = getTrackingCredentials();
+		preview.tracking = {
+			status: trackingCredentials.apiKey && trackingCredentials.apiSecret ? 'partial' : 'idle'
+		};
         summarize(preview);
     }
 
@@ -336,7 +374,7 @@
         }
 
         if ($('.lwc-fedex-credential-field').length) {
-            $('.lwc-fedex-credential-field').on('input change', function () {
+			$('.lwc-fedex-credential-field, .lwc-fedex-tracking-credential-field').on('input change', function () {
                 updateFedexConnectionStatus(true);
             });
 

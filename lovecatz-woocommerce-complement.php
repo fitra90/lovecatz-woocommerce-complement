@@ -421,6 +421,41 @@ function lwc_check_fedex_connection() {
 	$api_secret     = isset( $_POST['api_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['api_secret'] ) ) : '';
 	$environment    = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
 	$test_mode      = 'sandbox' === $environment ? 'yes' : 'no';
+	$service        = isset( $_POST['service'] ) ? sanitize_key( wp_unslash( $_POST['service'] ) ) : 'shipping';
+
+	if ( 'tracking' === $service ) {
+		if ( $api_key && $api_secret ) {
+			if ( ! class_exists( 'LWC_FedEx_API' ) ) {
+				require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
+			}
+
+			$api = new LWC_FedEx_API(
+				array(
+					'tracking_account_number' => $account_number,
+					'tracking_api_key'        => $api_key,
+					'tracking_api_secret'     => $api_secret,
+					'test_mode'               => 'no',
+				)
+			);
+			$result = $api->test_tracking_connection();
+			$status = ! empty( $result['success'] ) ? 'connected' : 'auth_failed';
+			update_option( 'lwc_fedex_tracking_validation_status', ! empty( $result['success'] ) ? 'validated' : 'failed' );
+			wp_send_json_success(
+				array(
+					'status' => $status,
+					'label'  => isset( $result['message'] ) ? $result['message'] : __( 'FedEx rejected the tracking credentials.', 'lovecatz-wc' ),
+				)
+			);
+		}
+
+		update_option( 'lwc_fedex_tracking_validation_status', 'pending' );
+		wp_send_json_success(
+			array(
+				'status' => $account_number || $api_key || $api_secret ? 'partial' : 'idle',
+				'label'  => $account_number || $api_key || $api_secret ? __( 'Incomplete tracking credentials', 'lovecatz-wc' ) : __( 'Waiting for tracking credentials', 'lovecatz-wc' ),
+			)
+		);
+	}
 
 	if ( $account_number && $api_key && $api_secret ) {
 		if ( ! class_exists( 'LWC_FedEx_API' ) ) {
