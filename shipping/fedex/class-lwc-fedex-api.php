@@ -27,10 +27,13 @@ class LWC_FedEx_API {
 		$this->settings = wp_parse_args(
 			$settings,
 			array(
-				'account_number' => LWC_FedEx_Account::get_option_value( 'lwc_fedex_account_number', '' ),
-				'api_key'        => LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_key', '' ),
-				'api_secret'     => LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_secret', '' ),
-				'test_mode'      => LWC_FedEx_Account::get_option_value( 'lwc_fedex_test_mode', 'no' ),
+				'account_number'          => LWC_FedEx_Account::get_option_value( 'lwc_fedex_account_number', '' ),
+				'api_key'                 => LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_key', '' ),
+				'api_secret'              => LWC_FedEx_Account::get_option_value( 'lwc_fedex_api_secret', '' ),
+				'tracking_account_number' => get_option( 'lwc_fedex_tracking_production_account_number', '' ),
+				'tracking_api_key'        => get_option( 'lwc_fedex_tracking_production_api_key', '' ),
+				'tracking_api_secret'     => get_option( 'lwc_fedex_tracking_production_api_secret', '' ),
+				'test_mode'               => LWC_FedEx_Account::get_option_value( 'lwc_fedex_test_mode', 'no' ),
 			)
 		);
 	}
@@ -40,10 +43,15 @@ class LWC_FedEx_API {
 	 *
 	 * @param array $package WooCommerce package data.
 	 * @param float $max_package_weight_kg Split packages above this weight (0 disables splitting).
+	 * @param array $package_override Actual one-carton weight and optional dimensions.
 	 * @return array
 	 */
-	public function get_rate_quotes( $package, $max_package_weight_kg = 0 ) {
-		$payload = $this->build_rate_payload( $package, $max_package_weight_kg );
+	public function get_rate_quotes( $package, $max_package_weight_kg = 0, $package_override = array() ) {
+		$package_override = $this->normalize_package_override( $package_override );
+		if ( is_wp_error( $package_override ) ) {
+			return array( 'success' => false, 'message' => $package_override->get_error_message() );
+		}
+		$payload = $this->build_rate_payload( $package, $max_package_weight_kg, $package_override );
 		$origin  = isset( $payload['requestedShipment']['shipper']['address'] )
 			? $payload['requestedShipment']['shipper']['address']
 			: array();
@@ -206,9 +214,12 @@ class LWC_FedEx_API {
 	 * @param float    $fallback_max_package_weight_kg Used when the order has no stored package weight.
 	 * @param int[]    $item_ids Restrict the shipment to these order item IDs (manual partial shipping).
 	 * @param array    $package_override Actual weight and dimensions for one packed carton.
+	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
+	 * @param int[]    $replaced_item_ids Original order lines fulfilled by catalog substitutions.
+	 * @param string   $service_type_override Explicit order-screen service selection.
 	 * @return array
 	 */
-	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
+	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type_override = '' ) {
 		$package_override = $this->normalize_package_override( $package_override );
 		if ( is_wp_error( $package_override ) ) {
 			return array( 'success' => false, 'message' => $package_override->get_error_message() );
@@ -236,7 +247,7 @@ class LWC_FedEx_API {
 			);
 		}
 
-		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids, $package_override );
+		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids, $package_override, $extra_product_ids, $service_type_override );
 		$response = $this->request( '/ship/v1/shipments', $payload, $token );
 		$body = $this->parse_response_body( $response );
 
@@ -263,7 +274,8 @@ class LWC_FedEx_API {
 			);
 		}
 
-		$label_path = $this->save_label_from_response( $order, $body, $item_ids, $package_override );
+		$actual_service_type = isset( $payload['requestedShipment']['serviceType'] ) ? (string) $payload['requestedShipment']['serviceType'] : '';
+		$label_path = $this->save_label_from_response( $order, $body, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $actual_service_type );
 		if ( false === $label_path ) {
 			return array(
 				'success'  => false,
@@ -366,7 +378,22 @@ class LWC_FedEx_API {
 			return array( 'success' => false, 'message' => __( 'No FedEx tracking number is available.', 'lovecatz-wc' ) );
 		}
 
-		$token = $this->get_access_token();
+		$tracking_account    = trim( (string) $this->settings['tracking_account_number'] );
+		$tracking_api_key    = trim( (string) $this->settings['tracking_api_key'] );
+		$tracking_api_secret = trim( (string) $this->settings['tracking_api_secret'] );
+		$has_tracking_fields = '' !== $tracking_account || '' !== $tracking_api_key || '' !== $tracking_api_secret;
+		if ( $has_tracking_fields && ( '' === $tracking_api_key || '' === $tracking_api_secret ) ) {
+			return array( 'success' => false, 'message' => __( 'Complete both Basic Integrated Visibility Production API Key and Secret Key in FedEx settings.', 'lovecatz-wc' ) );
+		}
+
+		// Legacy FedEx projects may already include Track API permission. Preserve
+		// that behavior until dedicated visibility credentials are supplied.
+		if ( '' === $tracking_api_key ) {
+			$tracking_api_key    = (string) $this->settings['api_key'];
+			$tracking_api_secret = (string) $this->settings['api_secret'];
+		}
+
+		$token = $this->get_access_token( $tracking_api_key, $tracking_api_secret );
 		if ( '' === $token ) {
 			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
 		}
@@ -489,6 +516,7 @@ class LWC_FedEx_API {
 		return array(
 			'success'             => true,
 			'message'             => __( 'FedEx pickup scheduled successfully.', 'lovecatz-wc' ),
+			'pickup_id'            => $confirmation,
 			'confirmation_number' => $confirmation,
 			'location'            => $location,
 			'response'            => $body,
@@ -510,9 +538,12 @@ class LWC_FedEx_API {
 			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
 		}
 
+		$confirmation_number = isset( $pickup['confirmation_number'] )
+			? (string) $pickup['confirmation_number']
+			: ( isset( $pickup['pickup_id'] ) ? (string) $pickup['pickup_id'] : '' );
 		$payload = array(
 			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
-			'confirmationNumber'      => isset( $pickup['confirmation_number'] ) ? (string) $pickup['confirmation_number'] : '',
+			'pickupConfirmationCode'  => $confirmation_number,
 			'location'                => isset( $pickup['location'] ) ? (string) $pickup['location'] : '',
 			'scheduledDate'           => isset( $pickup['date'] ) ? (string) $pickup['date'] : '',
 			'carrierCode'             => isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE',
@@ -550,8 +581,10 @@ class LWC_FedEx_API {
 	 *
 	 * @return string
 	 */
-	private function get_access_token() {
-		$cache_key = 'lwc_fedex_token_' . md5( $this->get_api_base_url() . '|' . $this->settings['api_key'] . '|' . $this->settings['api_secret'] );
+	private function get_access_token( $api_key = '', $api_secret = '' ) {
+		$api_key    = '' !== $api_key ? $api_key : (string) $this->settings['api_key'];
+		$api_secret = '' !== $api_secret ? $api_secret : (string) $this->settings['api_secret'];
+		$cache_key  = 'lwc_fedex_token_' . md5( $this->get_api_base_url() . '|' . $api_key . '|' . $api_secret );
 		$cached = get_transient( $cache_key );
 		if ( is_string( $cached ) && '' !== $cached ) {
 			$this->debug( 'oauth_cache_hit' );
@@ -567,8 +600,8 @@ class LWC_FedEx_API {
 			// Basic authentication is not accepted by the FedEx OAuth endpoint.
 			'body'    => array(
 				'grant_type'    => 'client_credentials',
-				'client_id'     => $this->settings['api_key'],
-				'client_secret' => $this->settings['api_secret'],
+				'client_id'     => $api_key,
+				'client_secret' => $api_secret,
 			),
 			'timeout' => 30,
 		);
@@ -691,7 +724,23 @@ class LWC_FedEx_API {
 	 */
 	private function extract_error_message( $body ) {
 		if ( isset( $body['errors'][0]['message'] ) ) {
-			return (string) $body['errors'][0]['message'];
+			$message = (string) $body['errors'][0]['message'];
+			$fields = array();
+			if ( ! empty( $body['errors'][0]['parameterList'] ) && is_array( $body['errors'][0]['parameterList'] ) ) {
+				foreach ( $body['errors'][0]['parameterList'] as $parameter ) {
+					if ( ! is_array( $parameter ) ) {
+						continue;
+					}
+					$field = isset( $parameter['key'] ) ? $parameter['key'] : ( isset( $parameter['parameter'] ) ? $parameter['parameter'] : '' );
+					if ( is_string( $field ) && '' !== trim( $field ) ) {
+						$fields[] = sanitize_text_field( $field );
+					}
+				}
+			}
+			$fields = array_values( array_unique( $fields ) );
+			return ! empty( $fields )
+				? sprintf( '%1$s (%2$s: %3$s)', $message, __( 'Field', 'lovecatz-wc' ), implode( ', ', $fields ) )
+				: $message;
 		}
 
 		if ( isset( $body['error_description'] ) ) {
@@ -792,12 +841,13 @@ class LWC_FedEx_API {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address_from_order( $order );
 		$relationship = isset( $destination['countryCode'] ) && $destination['countryCode'] === $origin['countryCode'] ? 'DOMESTIC' : 'INTERNATIONAL';
+		$request_type = $date === current_time( 'Y-m-d' ) ? 'SAME_DAY' : 'FUTURE_DAY';
 
 		return array(
-			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
 			'pickupAddress'            => $origin,
-			'pickupRequestType'        => array( $date === current_time( 'Y-m-d' ) ? 'SAME_DAY' : 'FUTURE_DAY' ),
+			'pickupRequestType'        => array( $request_type ),
 			'dispatchDate'             => $date,
+			'numberOfBusinessDays'     => $this->count_pickup_business_days( current_time( 'Y-m-d' ), $date ),
 			'packageReadyTime'         => isset( $pickup['ready_time'] ) ? (string) $pickup['ready_time'] . ':00' : '09:00:00',
 			'customerCloseTime'        => isset( $pickup['close_time'] ) ? (string) $pickup['close_time'] . ':00' : '17:00:00',
 			'carriers'                 => array( isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE' ),
@@ -813,21 +863,20 @@ class LWC_FedEx_API {
 	 * @return array
 	 */
 	private function build_create_pickup_payload( $order, $pickup ) {
-		$context = $this->get_order_shipping_context( $order );
-		$packages = $this->build_packages_from_order( $order, $context['max_package_weight_kg'] );
-		$total_weight = 0.0;
-		foreach ( $packages as $package ) {
-			$total_weight += isset( $package['weight'] ) ? (float) $package['weight'] : 0.0;
-		}
+		$package_summary = $this->get_pickup_package_summary( $order );
 		$date = isset( $pickup['date'] ) ? (string) $pickup['date'] : current_time( 'Y-m-d' );
 		$ready = isset( $pickup['ready_time'] ) ? (string) $pickup['ready_time'] : '09:00';
+		$carrier = isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE';
 		$origin = $this->build_origin_address();
+		$destination = $this->build_destination_address_from_order( $order );
+		$relationship = isset( $destination['countryCode'] ) && $destination['countryCode'] === $origin['countryCode'] ? 'DOMESTIC' : 'INTERNATIONAL';
 		$contact = $this->build_shipper_contact();
 		$contact['companyName'] = get_bloginfo( 'name' );
 
 		return array(
 			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
 			'originDetail' => array(
+				'pickupAddressType' => 'ACCOUNT',
 				'pickupLocation' => array(
 					'contact'       => $contact,
 					'address'       => $origin,
@@ -835,13 +884,76 @@ class LWC_FedEx_API {
 				),
 				'readyDateTimestamp' => $date . 'T' . $ready . ':00',
 				'customerCloseTime'  => isset( $pickup['close_time'] ) ? (string) $pickup['close_time'] . ':00' : '17:00:00',
+				'pickupDateType'     => $date === current_time( 'Y-m-d' ) ? 'SAME_DAY' : 'FUTURE_DAY',
+				'packageLocation'    => 'NONE',
 			),
+			'associatedAccountNumberType' => 'FDXG' === $carrier ? 'FEDEX_GROUND' : 'FEDEX_EXPRESS',
 			'accountAddressOfRecord' => $origin,
-			'carrierCode'           => isset( $pickup['carrier'] ) ? (string) $pickup['carrier'] : 'FDXE',
-			'packageCount'          => max( 1, count( $packages ) ),
-			'totalWeight'           => array( 'units' => 'KG', 'value' => max( 0.5, round( $total_weight, 2 ) ) ),
-			'packageLocation'       => 'NONE',
+			'carrierCode'           => $carrier,
+			'packageCount'          => $package_summary['count'],
+			'totalWeight'           => array( 'units' => 'KG', 'value' => $package_summary['weight'] ),
 			'remarks'               => sprintf( 'WooCommerce order %s', $order->get_order_number() ),
+			'countryRelationships'  => $relationship,
+			'pickupType'            => 'ON_CALL',
+		);
+	}
+
+	/** Count weekdays between the request date and dispatch date. */
+	private function count_pickup_business_days( $start_date, $dispatch_date ) {
+		$start = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $start_date, wp_timezone() );
+		$end = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $dispatch_date, wp_timezone() );
+		if ( ! $start || ! $end || $end <= $start ) {
+			return 0;
+		}
+		$days = 0;
+		for ( $cursor = $start->modify( '+1 day' ); $cursor <= $end; $cursor = $cursor->modify( '+1 day' ) ) {
+			if ( (int) $cursor->format( 'N' ) <= 5 ) {
+				$days++;
+			}
+		}
+		return $days;
+	}
+
+	/** Use active AWB carton overrides for pickup totals, with order estimates as fallback. */
+	private function get_pickup_package_summary( $order ) {
+		$shipments = $order->get_meta( '_lwc_fedex_shipments' );
+		$count = 0;
+		$weight = 0.0;
+		$context = $this->get_order_shipping_context( $order );
+		if ( is_array( $shipments ) ) {
+			foreach ( $shipments as $shipment ) {
+				if ( 'active' !== ( isset( $shipment['status'] ) ? $shipment['status'] : 'active' ) ) {
+					continue;
+				}
+				if ( isset( $shipment['package']['weight'] ) && is_numeric( $shipment['package']['weight'] ) && (float) $shipment['package']['weight'] > 0 ) {
+					$count++;
+					$weight += (float) $shipment['package']['weight'];
+					continue;
+				}
+				$shipment_packages = $this->build_packages_from_order(
+					$order,
+					$context['max_package_weight_kg'],
+					isset( $shipment['item_ids'] ) ? (array) $shipment['item_ids'] : array(),
+					array(),
+					isset( $shipment['extra_product_ids'] ) ? (array) $shipment['extra_product_ids'] : array()
+				);
+				$count += count( $shipment_packages );
+				foreach ( $shipment_packages as $package ) {
+					$weight += isset( $package['weight'] ) ? (float) $package['weight'] : 0.0;
+				}
+			}
+		}
+		if ( $count > 0 && $weight > 0 ) {
+			return array( 'count' => $count, 'weight' => max( 0.5, round( $weight, 2 ) ) );
+		}
+
+		$packages = $this->build_packages_from_order( $order, $context['max_package_weight_kg'] );
+		foreach ( $packages as $package ) {
+			$weight += isset( $package['weight'] ) ? (float) $package['weight'] : 0.0;
+		}
+		return array(
+			'count'  => max( 1, count( $packages ) ),
+			'weight' => max( 0.5, round( $weight, 2 ) ),
 		);
 	}
 
@@ -882,12 +994,13 @@ class LWC_FedEx_API {
 	 *
 	 * @param array $package Package data.
 	 * @param float $max_package_weight_kg Split packages above this weight (0 disables splitting).
+	 * @param array $package_override Actual one-carton weight and optional dimensions.
 	 * @return array
 	 */
-	private function build_rate_payload( $package, $max_package_weight_kg = 0 ) {
+	private function build_rate_payload( $package, $max_package_weight_kg = 0, $package_override = array() ) {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address( $package );
-		$packages = $this->build_packages_from_cart( $package, $max_package_weight_kg );
+		$packages = $this->build_packages_from_cart( $package, $max_package_weight_kg, $package_override );
 		$preferred_currency = strtoupper( (string) get_option( 'woocommerce_currency', 'IDR' ) );
 		if ( ! preg_match( '/^[A-Z]{3}$/', $preferred_currency ) ) {
 			$preferred_currency = 'IDR';
@@ -926,22 +1039,27 @@ class LWC_FedEx_API {
 	 * @param float    $fallback_max_package_weight_kg Used when the order has no stored package weight.
 	 * @param int[]    $item_ids Restrict the shipment to these order item IDs.
 	 * @param array    $package_override Actual weight and dimensions for one packed carton.
+	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
+	 * @param string   $service_type_override Explicit order-screen service selection.
 	 * @return array
 	 */
-	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
+	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $service_type_override = '' ) {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address_from_order( $order );
 		$context = $this->get_order_shipping_context( $order );
 
-		$service_type = '' !== $context['service_type']
+		$service_type_override = strtoupper( trim( (string) $service_type_override ) );
+		$service_type = in_array( $service_type_override, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true )
+			? $service_type_override
+			: ( '' !== $context['service_type']
 			? $context['service_type']
-			: $this->get_service_type( isset( $destination['countryCode'] ) ? $destination['countryCode'] : '' );
+			: $this->get_service_type( isset( $destination['countryCode'] ) ? $destination['countryCode'] : '' ) );
 
 		$max_package_weight_kg = $context['max_package_weight_kg'] > 0
 			? $context['max_package_weight_kg']
 			: (float) $fallback_max_package_weight_kg;
 
-		$packages = $this->build_packages_from_order( $order, $max_package_weight_kg, $item_ids, $package_override );
+		$packages = $this->build_packages_from_order( $order, $max_package_weight_kg, $item_ids, $package_override, $extra_product_ids );
 
 		$payload = array(
 			'accountNumber' => array(
@@ -986,7 +1104,7 @@ class LWC_FedEx_API {
 		}
 
 		if ( '' !== $destination['countryCode'] && 0 !== strcasecmp( $destination['countryCode'], (string) $base_country ) ) {
-			$payload['requestedShipment']['customsClearanceDetail'] = $this->build_customs_detail( $order, $item_ids );
+			$payload['requestedShipment']['customsClearanceDetail'] = $this->build_customs_detail( $order, $item_ids, $extra_product_ids, $package_override );
 		}
 
 		return $payload;
@@ -1032,16 +1150,19 @@ class LWC_FedEx_API {
 	 *
 	 * @param WC_Order $order Order object.
 	 * @param int[]    $item_ids Restrict commodities to these order item IDs.
+	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
+	 * @param array    $package_override Actual one-carton weight and optional dimensions.
 	 * @return array
 	 */
-	private function build_customs_detail( $order, $item_ids = array() ) {
+	private function build_customs_detail( $order, $item_ids = array(), $extra_product_ids = array(), $package_override = array() ) {
 		$currency = $order->get_currency();
 		$base_country = $this->get_base_country();
 		$commodities = array();
 		$total = 0.0;
+		$restrict_order_items = ! empty( $item_ids ) || ! empty( $extra_product_ids );
 
 		foreach ( $order->get_items() as $item ) {
-			if ( ! empty( $item_ids ) && ! in_array( (int) $item->get_id(), array_map( 'intval', $item_ids ), true ) ) {
+			if ( $restrict_order_items && ! in_array( (int) $item->get_id(), array_map( 'intval', $item_ids ), true ) ) {
 				continue;
 			}
 
@@ -1082,6 +1203,42 @@ class LWC_FedEx_API {
 			$commodities[] = $commodity;
 		}
 
+		$extra_product_counts = array_count_values( array_filter( array_map( 'absint', (array) $extra_product_ids ) ) );
+		foreach ( $extra_product_counts as $product_id => $quantity ) {
+			$product = wc_get_product( $product_id );
+			if ( ! $product ) {
+				continue;
+			}
+			$quantity = max( 1, (int) $quantity );
+			$unit_price = (float) wc_get_price_excluding_tax( $product );
+			$line_total = $unit_price * $quantity;
+			$total += $line_total;
+			$product_weight = $product->get_weight() ? (float) wc_get_weight( $product->get_weight(), 'kg' ) : 0.5;
+			$commodities[] = array(
+				'description' => wp_strip_all_tags( $product->get_name() ),
+				'countryOfManufacture' => apply_filters(
+					'lwc_fedex_commodity_country_of_manufacture',
+					$base_country,
+					$product,
+					null
+				),
+				'quantity' => $quantity,
+				'quantityUnits' => 'PCS',
+				'unitPrice' => array(
+					'amount' => LWC_Currency_Converter::round_for_currency( $unit_price, $currency ),
+					'currency' => $currency,
+				),
+				'customsValue' => array(
+					'amount' => LWC_Currency_Converter::round_for_currency( $line_total, $currency ),
+					'currency' => $currency,
+				),
+				'weight' => array(
+					'units' => 'KG',
+					'value' => max( 0.01, round( $product_weight * $quantity, 2 ) ),
+				),
+			);
+		}
+
 		if ( empty( $commodities ) ) {
 			$total = (float) $order->get_total();
 			$commodities[] = array(
@@ -1102,6 +1259,10 @@ class LWC_FedEx_API {
 					'value' => 0.5,
 				),
 			);
+		}
+
+		if ( ! empty( $package_override['weight'] ) ) {
+			$commodities = $this->apply_custom_total_to_commodity_weights( $commodities, (float) $package_override['weight'] );
 		}
 
 		return array(
@@ -1197,7 +1358,7 @@ class LWC_FedEx_API {
 	 * @param float $max_package_weight_kg Split packages above this weight (0 disables splitting).
 	 * @return array
 	 */
-	private function build_packages_from_cart( $package, $max_package_weight_kg = 0 ) {
+	private function build_packages_from_cart( $package, $max_package_weight_kg = 0, $package_override = array() ) {
 		$entries = array();
 
 		if ( ! empty( $package['contents'] ) && is_array( $package['contents'] ) ) {
@@ -1216,6 +1377,10 @@ class LWC_FedEx_API {
 			}
 		}
 
+		if ( ! empty( $package_override ) ) {
+			return $this->build_override_package( $entries, $package_override );
+		}
+
 		return $this->split_into_packages( $entries, $max_package_weight_kg );
 	}
 
@@ -1228,11 +1393,12 @@ class LWC_FedEx_API {
 	 * @param array    $package_override Actual weight and dimensions for one packed carton.
 	 * @return array
 	 */
-	private function build_packages_from_order( $order, $max_package_weight_kg = 0, $item_ids = array(), $package_override = array() ) {
+	private function build_packages_from_order( $order, $max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array() ) {
 		$entries = array();
+		$restrict_order_items = ! empty( $item_ids ) || ! empty( $extra_product_ids );
 
 		foreach ( $order->get_items() as $item ) {
-			if ( ! empty( $item_ids ) && ! in_array( (int) $item->get_id(), array_map( 'intval', $item_ids ), true ) ) {
+			if ( $restrict_order_items && ! in_array( (int) $item->get_id(), array_map( 'intval', $item_ids ), true ) ) {
 				continue;
 			}
 
@@ -1249,21 +1415,70 @@ class LWC_FedEx_API {
 			);
 		}
 
-		if ( ! empty( $package_override ) ) {
-			return array(
-				array(
-					'weight' => round( (float) $package_override['weight'], 2 ),
-					'dimensions' => array(
-						'units'  => 'CM',
-						'length' => (int) ceil( (float) $package_override['length'] ),
-						'width'  => (int) ceil( (float) $package_override['width'] ),
-						'height' => (int) ceil( (float) $package_override['height'] ),
-					),
-				),
+		$extra_product_counts = array_count_values( array_filter( array_map( 'absint', (array) $extra_product_ids ) ) );
+		foreach ( $extra_product_counts as $product_id => $quantity ) {
+			$product = wc_get_product( $product_id );
+			if ( ! $product ) {
+				continue;
+			}
+			$quantity = max( 1, (int) $quantity );
+			$entries[] = array(
+				'weight' => floatval( wc_get_weight( $product->get_weight(), 'kg' ) ) * $quantity,
+				'volume' => $this->get_product_volume_cm3( $product ) * $quantity,
 			);
 		}
 
+		if ( ! empty( $package_override ) ) {
+			return $this->build_override_package( $entries, $package_override );
+		}
+
 		return $this->split_into_packages( $entries, $max_package_weight_kg );
+	}
+
+	/** Build one package using an exact custom weight and optional dimensions. */
+	private function build_override_package( $entries, $package_override ) {
+		$total_volume = 0.0;
+		foreach ( $entries as $entry ) {
+			$total_volume += isset( $entry['volume'] ) ? (float) $entry['volume'] : 0.0;
+		}
+		$dimensions = isset( $package_override['length'], $package_override['width'], $package_override['height'] )
+			? array(
+				'units'  => 'CM',
+				'length' => (int) ceil( (float) $package_override['length'] ),
+				'width'  => (int) ceil( (float) $package_override['width'] ),
+				'height' => (int) ceil( (float) $package_override['height'] ),
+			)
+			: $this->cube_dimensions( $total_volume );
+
+		return array(
+			array(
+				'weight' => round( (float) $package_override['weight'], 2 ),
+				'dimensions' => $dimensions,
+			),
+		);
+	}
+
+	/**
+	 * Make commodity weights add up to the manually entered package total.
+	 * FedEx validates this relationship even when product weights are irrelevant.
+	 */
+	private function apply_custom_total_to_commodity_weights( $commodities, $total_weight ) {
+		$count = count( $commodities );
+		if ( 0 === $count || $total_weight <= 0 ) {
+			return $commodities;
+		}
+		$precision = 2;
+		$units = max( 1, (int) round( $total_weight * pow( 10, $precision ) ) );
+		$base_units = intdiv( $units, $count );
+		$remainder = $units % $count;
+		foreach ( $commodities as $index => $commodity ) {
+			$commodity_units = $base_units + ( $index < $remainder ? 1 : 0 );
+			$commodities[ $index ]['weight'] = array(
+				'units' => 'KG',
+				'value' => round( $commodity_units / pow( 10, $precision ), $precision ),
+			);
+		}
+		return $commodities;
 	}
 
 	/**
@@ -1278,19 +1493,24 @@ class LWC_FedEx_API {
 			return array();
 		}
 
-		$keys = array( 'weight', 'length', 'width', 'height' );
-		foreach ( $keys as $key ) {
-			if ( ! isset( $package_override[ $key ] ) || ! is_numeric( $package_override[ $key ] ) || (float) $package_override[ $key ] <= 0 ) {
-				return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter positive values for carton weight, length, width, and height.', 'lovecatz-wc' ) );
-			}
+		if ( ! isset( $package_override['weight'] ) || ! is_numeric( $package_override['weight'] ) || (float) $package_override['weight'] <= 0 ) {
+			return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter a positive value for the custom carton weight.', 'lovecatz-wc' ) );
 		}
 
 		$normalized = array(
 			'weight' => round( (float) $package_override['weight'], 2 ),
-			'length' => (int) ceil( (float) $package_override['length'] ),
-			'width'  => (int) ceil( (float) $package_override['width'] ),
-			'height' => (int) ceil( (float) $package_override['height'] ),
 		);
+		$dimension_keys = array( 'length', 'width', 'height' );
+		$supplied_dimensions = array_filter( $dimension_keys, static function ( $key ) use ( $package_override ) { return isset( $package_override[ $key ] ) && '' !== $package_override[ $key ]; } );
+		if ( ! empty( $supplied_dimensions ) && count( $supplied_dimensions ) !== count( $dimension_keys ) ) {
+			return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter length, width, and height together, or leave all dimensions blank.', 'lovecatz-wc' ) );
+		}
+		foreach ( $supplied_dimensions as $key ) {
+			if ( ! is_numeric( $package_override[ $key ] ) || (float) $package_override[ $key ] <= 0 ) {
+				return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter positive values for carton dimensions.', 'lovecatz-wc' ) );
+			}
+			$normalized[ $key ] = (int) ceil( (float) $package_override[ $key ] );
+		}
 		$ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
 		if ( $ceiling > 0 && $normalized['weight'] > $ceiling ) {
 			return new WP_Error( 'lwc_fedex_package_too_heavy', sprintf( __( 'The packed carton exceeds the FedEx parcel weight limit of %s kg.', 'lovecatz-wc' ), wc_format_localized_decimal( $ceiling ) ) );
@@ -1723,9 +1943,12 @@ class LWC_FedEx_API {
 	 * @param array $body Response body.
 	 * @param int[] $item_ids Order item IDs included in this shipment.
 	 * @param array $package_override Actual weight and dimensions used for the shipment.
+	 * @param int[] $extra_product_ids Catalog products added only to the FedEx manifest.
+	 * @param int[] $replaced_item_ids Original order lines fulfilled by catalog substitutions.
+	 * @param string $service_type Actual service used for the shipment.
 	 * @return string|false
 	 */
-	private function save_label_from_response( $order, $body, $item_ids = array(), $package_override = array() ) {
+	private function save_label_from_response( $order, $body, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type = '' ) {
 		$label_data = '';
 		$tracking_number = '';
 
@@ -1802,6 +2025,10 @@ class LWC_FedEx_API {
 			'tracking_number' => $tracking_number,
 			'label_file' => $filename,
 			'item_ids' => array_values( array_map( 'intval', (array) $item_ids ) ),
+			'replaced_item_ids' => array_values( array_map( 'intval', (array) $replaced_item_ids ) ),
+			'extra_product_ids' => array_values( array_map( 'intval', (array) $extra_product_ids ) ),
+			'service_type' => strtoupper( trim( (string) $service_type ) ),
+			'contents' => $this->build_manifest_snapshot( $order, $item_ids, $extra_product_ids ),
 			'package' => ! empty( $package_override ) ? $package_override : array(),
 			'created_at' => current_time( 'mysql' ),
 			'status' => 'active',
@@ -1811,6 +2038,37 @@ class LWC_FedEx_API {
 		$order->save();
 
 		return $filename;
+	}
+
+	/** Build an immutable, display-safe snapshot of the contents sent to FedEx. */
+	private function build_manifest_snapshot( $order, $item_ids, $extra_product_ids ) {
+		$contents = array();
+		$item_ids = array_map( 'intval', (array) $item_ids );
+		foreach ( $order->get_items() as $item ) {
+			if ( ! in_array( (int) $item->get_id(), $item_ids, true ) ) {
+				continue;
+			}
+			$contents[] = array(
+				'source' => 'order',
+				'id' => (int) $item->get_id(),
+				'name' => wp_strip_all_tags( $item->get_name() ),
+				'quantity' => max( 1, (float) $item->get_quantity() ),
+			);
+		}
+		$extra_product_counts = array_count_values( array_filter( array_map( 'absint', (array) $extra_product_ids ) ) );
+		foreach ( $extra_product_counts as $product_id => $quantity ) {
+			$product = wc_get_product( $product_id );
+			if ( ! $product ) {
+				continue;
+			}
+			$contents[] = array(
+				'source' => 'catalog',
+				'id' => $product_id,
+				'name' => wp_strip_all_tags( $product->get_name() ),
+				'quantity' => max( 1, (int) $quantity ),
+			);
+		}
+		return $contents;
 	}
 
 	/**

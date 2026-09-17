@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.69
+ * Version:     1.0.70
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.69' );
+define( 'LWC_VERSION', '1.0.70' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -127,6 +127,8 @@ function lwc_init() {
 		add_filter( "option_lwc_fedex_{$lwc_fedex_environment}_api_key", 'lwc_decrypt_secret' );
 		add_filter( "option_lwc_fedex_{$lwc_fedex_environment}_api_secret", 'lwc_decrypt_secret' );
 	}
+	add_filter( 'option_lwc_fedex_tracking_production_api_key', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_fedex_tracking_production_api_secret', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_key', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_secret', 'lwc_decrypt_secret' );
 	foreach ( array( 'express', 'cargo' ) as $lwc_jt_provider ) {
@@ -474,6 +476,58 @@ function lwc_check_fedex_connection() {
 	);
 }
 
+/** Parse the actual packed-carton override shared by rate and label requests. */
+function lwc_fedex_get_posted_package_override() {
+	$measurements = array();
+	foreach ( array( 'weight', 'length', 'width', 'height' ) as $key ) {
+		$post_key = 'package_' . $key;
+		$measurements[ $key ] = isset( $_POST[ $post_key ] ) ? trim( sanitize_text_field( wp_unslash( $_POST[ $post_key ] ) ) ) : '';
+	}
+	$dimension_keys = array( 'length', 'width', 'height' );
+	$supplied_dimensions = array_filter( $dimension_keys, static function ( $key ) use ( $measurements ) { return '' !== $measurements[ $key ]; } );
+	$has_custom_weight = '' !== $measurements['weight'];
+	if ( ! empty( $supplied_dimensions ) && ( ! $has_custom_weight || count( $supplied_dimensions ) !== count( $dimension_keys ) ) ) {
+		return new WP_Error( 'lwc_fedex_incomplete_package', __( 'Enter a custom weight. Dimensions may be blank, but length, width, and height must be entered together.', 'lovecatz-wc' ) );
+	}
+	if ( ! $has_custom_weight ) {
+		return array();
+	}
+
+	$weight = wc_format_decimal( $measurements['weight'] );
+	if ( ! is_numeric( $weight ) || (float) $weight <= 0 ) {
+		return new WP_Error( 'lwc_fedex_invalid_weight', __( 'Carton weight must be a positive number.', 'lovecatz-wc' ) );
+	}
+	$override = array( 'weight' => round( (float) $weight, 2 ) );
+	foreach ( $supplied_dimensions as $key ) {
+		$value = wc_format_decimal( $measurements[ $key ] );
+		if ( ! is_numeric( $value ) || (float) $value <= 0 ) {
+			return new WP_Error( 'lwc_fedex_invalid_dimensions', __( 'Carton dimensions must be positive numbers.', 'lovecatz-wc' ) );
+		}
+		$override[ $key ] = (int) ceil( (float) $value );
+	}
+	$weight_ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
+	if ( $weight_ceiling > 0 && $override['weight'] > $weight_ceiling ) {
+		return new WP_Error( 'lwc_fedex_package_too_heavy', sprintf( __( 'The packed carton exceeds the FedEx parcel weight limit of %s kg.', 'lovecatz-wc' ), wc_format_localized_decimal( $weight_ceiling ) ) );
+	}
+	return $override;
+}
+
+/** Read a unique positive-ID array from the current admin request. */
+function lwc_fedex_get_posted_ids( $key ) {
+	if ( ! isset( $_POST[ $key ] ) || ! is_array( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		return array();
+	}
+	return array_values( array_unique( array_filter( array_map( 'absint', wp_unslash( $_POST[ $key ] ) ) ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+}
+
+/** Read positive catalog product IDs while preserving repeated additions. */
+function lwc_fedex_get_posted_product_ids( $key ) {
+	if ( ! isset( $_POST[ $key ] ) || ! is_array( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		return array();
+	}
+	return array_values( array_filter( array_map( 'absint', wp_unslash( $_POST[ $key ] ) ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+}
+
 /**
  * Fetch a FedEx shipping rate quote via AJAX.
  */
@@ -497,9 +551,43 @@ function lwc_fedex_get_rate_quote() {
 		),
 		'contents' => array(),
 	);
+	$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
+	$order = $order_id ? wc_get_order( $order_id ) : false;
+	$item_ids = lwc_fedex_get_posted_ids( 'item_ids' );
+	$extra_product_ids = lwc_fedex_get_posted_product_ids( 'extra_product_ids' );
+	if ( $order ) {
+		foreach ( $order->get_items() as $item ) {
+			if ( ! in_array( (int) $item->get_id(), $item_ids, true ) || ! $item->get_product() ) {
+				continue;
+			}
+			$package['contents'][] = array( 'data' => $item->get_product(), 'quantity' => max( 1, (float) $item->get_quantity() ) );
+		}
+	}
+	foreach ( $extra_product_ids as $product_id ) {
+		$product = wc_get_product( $product_id );
+		if ( $product ) {
+			$package['contents'][] = array( 'data' => $product, 'quantity' => 1 );
+		}
+	}
+	$package_override = lwc_fedex_get_posted_package_override();
+	if ( is_wp_error( $package_override ) ) {
+		wp_send_json( array( 'success' => false, 'message' => $package_override->get_error_message() ) );
+	}
+	if ( empty( $package['contents'] ) && empty( $package_override ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'Add at least one package item or enter a custom carton weight before requesting rates.', 'lovecatz-wc' ) ) );
+	}
 
 	$api = new LWC_FedEx_API();
-	$result = $api->get_rate_quotes( $package );
+	$result = $api->get_rate_quotes( $package, 0, $package_override );
+	if ( ! empty( $result['success'] ) ) {
+		$result['quote_context'] = array(
+			'weight' => isset( $package_override['weight'] ) ? $package_override['weight'] : null,
+			'length' => isset( $package_override['length'] ) ? $package_override['length'] : null,
+			'width' => isset( $package_override['width'] ) ? $package_override['width'] : null,
+			'height' => isset( $package_override['height'] ) ? $package_override['height'] : null,
+			'item_count' => count( $package['contents'] ),
+		);
+	}
 
 	// Keep a single "rate" field for backward compatibility.
 	if ( ! empty( $result['success'] ) && ! empty( $result['quotes'] ) ) {
@@ -540,42 +628,85 @@ function lwc_fedex_create_shipment() {
 	}
 
 	// Manual partial shipping: only the selected line items go on this AWB.
-	$item_ids = array();
-	if ( isset( $_POST['item_ids'] ) && is_array( $_POST['item_ids'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		$item_ids = array_map( 'absint', wp_unslash( $_POST['item_ids'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		$item_ids = array_values( array_filter( $item_ids ) );
+	$item_ids = lwc_fedex_get_posted_ids( 'item_ids' );
+	$extra_product_ids = lwc_fedex_get_posted_product_ids( 'extra_product_ids' );
+	$replaced_item_ids = lwc_fedex_get_posted_ids( 'replaced_item_ids' );
+	$service_type = isset( $_POST['service_type'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['service_type'] ) ) ) : '';
+	if ( ! in_array( $service_type, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'Select FedEx International Priority or FedEx International Economy.', 'lovecatz-wc' ) ) );
+	}
+	$manifest_mode = isset( $_POST['manifest_mode'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['manifest_mode'] ) );
+
+	// A cancelled shipment releases its items, but an active AWB must never be
+	// duplicated. Empty item_ids are used by the order-list action and resolve to
+	// all line items that are not already covered by an active shipment.
+	$order_item_ids = array_map(
+		static function ( $item ) {
+			return (int) $item->get_id();
+		},
+		array_values( $order->get_items() )
+	);
+	$active_item_ids = array();
+	$has_unscoped_active_shipment = false;
+	$shipments = $order->get_meta( '_lwc_fedex_shipments' );
+	foreach ( is_array( $shipments ) ? $shipments : array() as $shipment ) {
+		if ( ! is_array( $shipment ) || 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+			continue;
+		}
+		if ( ! empty( $shipment['replaced_item_ids'] ) && is_array( $shipment['replaced_item_ids'] ) ) {
+			$active_item_ids = array_merge( $active_item_ids, array_map( 'intval', $shipment['replaced_item_ids'] ) );
+		}
+		if ( empty( $shipment['item_ids'] ) || ! is_array( $shipment['item_ids'] ) ) {
+			if ( empty( $shipment['extra_product_ids'] ) ) {
+				$has_unscoped_active_shipment = true;
+			}
+			continue;
+		}
+		$active_item_ids = array_merge( $active_item_ids, array_map( 'intval', $shipment['item_ids'] ) );
+	}
+	$active_item_ids = array_values( array_unique( $active_item_ids ) );
+
+	if ( $has_unscoped_active_shipment ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'An active FedEx AWB does not identify its items. Cancel that AWB before creating another one.', 'lovecatz-wc' ) ) );
+	}
+	$available_order_item_ids = array_values( array_diff( $order_item_ids, $active_item_ids ) );
+	if ( empty( $item_ids ) && ! $manifest_mode ) {
+		$item_ids = array_values( array_diff( $order_item_ids, $active_item_ids ) );
+	} elseif ( array_diff( $item_ids, $order_item_ids ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'One or more selected order items are invalid.', 'lovecatz-wc' ) ) );
+	}
+	if ( array_intersect( $item_ids, $active_item_ids ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'One or more selected items are already covered by an active FedEx AWB.', 'lovecatz-wc' ) ) );
+	}
+	if ( array_diff( $replaced_item_ids, $order_item_ids ) || array_intersect( $replaced_item_ids, $active_item_ids ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'One or more replaced order items are invalid or already shipped.', 'lovecatz-wc' ) ) );
+	}
+	if ( empty( $extra_product_ids ) ) {
+		$replaced_item_ids = array();
+	}
+	if ( $manifest_mode && empty( $available_order_item_ids ) && ! empty( $extra_product_ids ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'All original order items are already covered by active FedEx AWBs. Cancel the relevant AWB before replacing its contents.', 'lovecatz-wc' ) ) );
+	}
+	foreach ( $extra_product_ids as $product_id ) {
+		$product = wc_get_product( $product_id );
+		if ( ! $product || ! $product->exists() ) {
+			wp_send_json( array( 'success' => false, 'message' => __( 'One or more added catalog products are invalid.', 'lovecatz-wc' ) ) );
+		}
+		if ( ! $product->is_in_stock() ) {
+			wp_send_json( array( 'success' => false, 'message' => sprintf( __( '%s is out of stock and cannot be added to the FedEx package.', 'lovecatz-wc' ), wp_strip_all_tags( $product->get_name() ) ) ) );
+		}
+	}
+	if ( empty( $item_ids ) && empty( $extra_product_ids ) ) {
+		wp_send_json( array( 'success' => false, 'message' => __( 'All order items are already covered by active FedEx AWBs.', 'lovecatz-wc' ) ) );
 	}
 
-	// Optional actual measurements for one fully packed carton. Accept either a
-	// complete set or no override so FedEx never receives a partially estimated
-	// package from this admin action.
-	$measurement_keys = array( 'weight', 'length', 'width', 'height' );
-	$measurements = array();
-	foreach ( $measurement_keys as $key ) {
-		$post_key = 'package_' . $key;
-		$measurements[ $key ] = isset( $_POST[ $post_key ] ) ? trim( sanitize_text_field( wp_unslash( $_POST[ $post_key ] ) ) ) : '';
-	}
-	$supplied_measurements = array_filter( $measurements, static function ( $value ) { return '' !== $value; } );
-	$package_override = array();
-	if ( ! empty( $supplied_measurements ) ) {
-		if ( count( $supplied_measurements ) !== count( $measurement_keys ) ) {
-			wp_send_json( array( 'success' => false, 'message' => __( 'Enter weight, length, width, and height together, or leave all carton measurements blank.', 'lovecatz-wc' ) ) );
-		}
-		foreach ( $measurements as $key => $value ) {
-			$value = wc_format_decimal( $value );
-			if ( ! is_numeric( $value ) || (float) $value <= 0 ) {
-				wp_send_json( array( 'success' => false, 'message' => __( 'Carton weight and dimensions must be positive numbers.', 'lovecatz-wc' ) ) );
-			}
-			$package_override[ $key ] = 'weight' === $key ? round( (float) $value, 2 ) : (int) ceil( (float) $value );
-		}
-		$weight_ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
-		if ( $weight_ceiling > 0 && $package_override['weight'] > $weight_ceiling ) {
-			wp_send_json( array( 'success' => false, 'message' => sprintf( __( 'The packed carton exceeds the FedEx parcel weight limit of %s kg.', 'lovecatz-wc' ), wc_format_localized_decimal( $weight_ceiling ) ) ) );
-		}
+	$package_override = lwc_fedex_get_posted_package_override();
+	if ( is_wp_error( $package_override ) ) {
+		wp_send_json( array( 'success' => false, 'message' => $package_override->get_error_message() ) );
 	}
 
 	$api = new LWC_FedEx_API();
-	$result = $api->create_shipment( $order, 0, $item_ids, $package_override );
+	$result = $api->create_shipment( $order, 0, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $service_type );
 
 	if ( ! empty( $result['success'] ) ) {
 		// The raw response embeds the base64 label; keep it out of the AJAX payload.

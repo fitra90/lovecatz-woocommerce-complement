@@ -10,6 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class LWC_Admin_Settings {
+	const MEMBER_DEFAULT_PASSWORD_OPTION = 'lwc_member_default_password';
 
 	/**
 	 * Store the latest import result for display on the page.
@@ -30,6 +31,7 @@ class LWC_Admin_Settings {
 		add_action( 'admin_post_lwc_print_own_member_card', array( $this, 'print_own_member_card' ) );
 		add_action( 'admin_post_lwc_delete_store_member', array( $this, 'delete_store_member' ) );
 		add_action( 'admin_post_lwc_download_member_import_template', array( $this, 'download_member_import_template' ) );
+		add_action( 'admin_post_lwc_save_member_default_password', array( $this, 'save_member_default_password' ) );
 		add_action( 'woocommerce_account_dashboard', array( $this, 'render_customer_member_card_button' ) );
 	}
 
@@ -79,6 +81,7 @@ class LWC_Admin_Settings {
 			'settings'      => __( 'Setting', 'lovecatz-wc' ),
 			'products'      => __( 'Products', 'lovecatz-wc' ),
 			'store-members' => __( 'Members', 'lovecatz-wc' ),
+			'review'        => __( 'Review', 'lovecatz-wc' ),
 			'shipping'      => __( 'Shipping', 'lovecatz-wc' ),
 			'promo'         => __( 'Promo', 'lovecatz-wc' ),
 			'payment'       => __( 'Payment', 'lovecatz-wc' ),
@@ -158,7 +161,7 @@ class LWC_Admin_Settings {
 		if ( 'couriers' === $active_tab ) {
 			$active_tab = 'shipping';
 		}
-		if ( ! in_array( $active_tab, array( 'settings', 'products', 'shipping', 'promo', 'payment', 'currency', 'store-members' ), true ) ) {
+		if ( ! in_array( $active_tab, array( 'settings', 'products', 'shipping', 'promo', 'payment', 'currency', 'store-members', 'review' ), true ) ) {
 			$active_tab = 'settings';
 		}
 
@@ -180,6 +183,7 @@ class LWC_Admin_Settings {
 				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=products" class="nav-tab <?php echo 'products' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Products', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo 'store-members' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=review" class="nav-tab <?php echo 'review' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Review', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo 'shipping' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=promo" class="nav-tab <?php echo 'promo' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Promo', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=payment" class="nav-tab <?php echo 'payment' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Payment', 'lovecatz-wc' ); ?></a>
@@ -247,12 +251,16 @@ class LWC_Admin_Settings {
 				<form method="post" action="options.php">
 					<?php settings_fields( 'lwc_products_options' ); do_settings_sections( 'lwc_products_options' ); submit_button(); ?>
 				</form>
+			<?php elseif ( 'review' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php settings_fields( 'lwc_review_options' ); do_settings_sections( 'lwc_review_options' ); submit_button(); ?>
+				</form>
 			<?php elseif ( 'payment' === $active_tab ) : ?>
 				<form method="post" action="options.php">
 					<?php
 					settings_fields( 'lwc_payment_options' );
 					do_settings_sections( 'lwc_payment_options' );
-					submit_button( null, 'primary', 'submit', true, $this->is_official_paypal_plugin_active() ? array() : array( 'disabled' => 'disabled' ) );
+					submit_button();
 					?>
 				</form>
 			<?php elseif ( 'currency' === $active_tab ) : ?>
@@ -378,6 +386,9 @@ class LWC_Admin_Settings {
 			register_setting( 'lwc_shipping_fedex_options', "lwc_fedex_{$fedex_environment}_api_key", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 			register_setting( 'lwc_shipping_fedex_options', "lwc_fedex_{$fedex_environment}_api_secret", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		}
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_tracking_production_account_number', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_tracking_production_api_key', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_tracking_production_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_phone', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 
@@ -423,6 +434,14 @@ class LWC_Admin_Settings {
 		foreach ( array( 'sandbox' => __( 'Sandbox Credentials', 'lovecatz-wc' ), 'production' => __( 'Production Credentials', 'lovecatz-wc' ) ) as $environment => $label ) {
 			add_settings_field( "lwc_fedex_{$environment}_credentials", $label, array( $this, 'render_fedex_credentials_field' ), 'lwc_shipping_fedex_options', 'lwc_shipping_fedex_section', array( 'environment' => $environment ) );
 		}
+
+		add_settings_field(
+			'lwc_fedex_tracking_production_credentials',
+			__( 'Tracking Production Credentials', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_tracking_credentials_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
 
 		add_settings_field(
 			'lwc_fedex_shipper_name',
@@ -487,23 +506,44 @@ class LWC_Admin_Settings {
 			'lwc_general_section_menu'
 		);
 
-		// PayPal surcharge settings.
-		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
-		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_type', array( 'default' => 'percentage', 'sanitize_callback' => array( $this, 'sanitize_paypal_fee_type' ) ) );
-		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_amount', array( 'default' => 0, 'sanitize_callback' => array( $this, 'sanitize_paypal_fee_amount' ) ) );
-		register_setting( 'lwc_payment_options', 'lwc_paypal_fee_label', array( 'default' => __( 'PayPal admin fee', 'lovecatz-wc' ), 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'lwc_review_options', 'lwc_product_review_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		add_settings_section(
+			'lwc_review_section',
+			__( 'Completed Order Reviews', 'lovecatz-wc' ),
+			array( $this, 'render_review_section_intro' ),
+			'lwc_review_options'
+		);
+		add_settings_field(
+			'lwc_product_review_enabled',
+			__( 'Enable review links', 'lovecatz-wc' ),
+			array( $this, 'render_product_review_enabled_field' ),
+			'lwc_review_options',
+			'lwc_review_section'
+		);
+
+		// International order handling settings. Eligibility never depends on the
+		// payment method selected by the shopper.
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_ENABLED, array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_MATCH_MODE, array( 'default' => 'any', 'sanitize_callback' => array( $this, 'sanitize_international_fee_match_mode' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_TRIGGER_USD, array( 'default' => 'yes', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_TRIGGER_ABROAD, array( 'default' => 'yes', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_TYPE, array( 'default' => 'percentage', 'sanitize_callback' => array( $this, 'sanitize_international_fee_type' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_AMOUNT, array( 'default' => 0, 'sanitize_callback' => array( $this, 'sanitize_international_fee_amount' ) ) );
+		register_setting( 'lwc_payment_options', LWC_International_Order_Fee::OPT_LABEL, array( 'default' => __( 'International order handling', 'lovecatz-wc' ), 'sanitize_callback' => 'sanitize_text_field' ) );
 
 		add_settings_section(
-			'lwc_payment_section_paypal_fee',
-			__( 'PayPal Admin Fee', 'lovecatz-wc' ),
-			array( $this, 'render_paypal_fee_section_intro' ),
+			'lwc_payment_section_international_fee',
+			__( 'International Order Handling', 'lovecatz-wc' ),
+			array( $this, 'render_international_fee_section_intro' ),
 			'lwc_payment_options'
 		);
 
-		add_settings_field( 'lwc_paypal_fee_enabled', __( 'Charge the buyer', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_enabled_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
-		add_settings_field( 'lwc_paypal_fee_type', __( 'Fee type', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_type_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
-		add_settings_field( 'lwc_paypal_fee_amount', __( 'Fee amount', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_amount_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
-		add_settings_field( 'lwc_paypal_fee_label', __( 'Checkout label', 'lovecatz-wc' ), array( $this, 'render_paypal_fee_label_field' ), 'lwc_payment_options', 'lwc_payment_section_paypal_fee' );
+		add_settings_field( LWC_International_Order_Fee::OPT_ENABLED, __( 'Enable fee', 'lovecatz-wc' ), array( $this, 'render_international_fee_enabled_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
+		add_settings_field( 'lwc_international_fee_triggers', __( 'Apply when', 'lovecatz-wc' ), array( $this, 'render_international_fee_triggers_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
+		add_settings_field( LWC_International_Order_Fee::OPT_MATCH_MODE, __( 'Trigger matching', 'lovecatz-wc' ), array( $this, 'render_international_fee_match_mode_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
+		add_settings_field( LWC_International_Order_Fee::OPT_TYPE, __( 'Fee type', 'lovecatz-wc' ), array( $this, 'render_international_fee_type_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
+		add_settings_field( LWC_International_Order_Fee::OPT_AMOUNT, __( 'Fee amount', 'lovecatz-wc' ), array( $this, 'render_international_fee_amount_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
+		add_settings_field( LWC_International_Order_Fee::OPT_LABEL, __( 'Checkout label', 'lovecatz-wc' ), array( $this, 'render_international_fee_label_field' ), 'lwc_payment_options', 'lwc_payment_section_international_fee' );
 
 		register_setting(
 			'lwc_products_options',
@@ -811,6 +851,25 @@ class LWC_Admin_Settings {
 		printf( '<div class="lwc-fedex-credential-group" data-environment="%1$s"><p><label>%2$s<br><input type="text" name="lwc_fedex_%1$s_account_number" value="%3$s" class="regular-text lwc-fedex-credential-field" data-credential="account_number" autocomplete="off"></label></p><p><label>%4$s<br><input type="text" name="lwc_fedex_%1$s_api_key" value="%5$s" class="regular-text lwc-fedex-credential-field" data-credential="api_key" autocomplete="off"></label></p><p><label>%6$s<br><input type="password" name="lwc_fedex_%1$s_api_secret" value="%7$s" class="regular-text lwc-fedex-credential-field" data-credential="api_secret" autocomplete="new-password"></label></p></div>', esc_attr( $environment ), esc_html__( 'Account Number', 'lovecatz-wc' ), esc_attr( $account ), esc_html__( 'API Key', 'lovecatz-wc' ), esc_attr( $api_key ), esc_html__( 'API Secret', 'lovecatz-wc' ), esc_attr( $api_secret ) );
 	}
 
+	/** Render credentials from the dedicated Basic Integrated Visibility project. */
+	public function render_fedex_tracking_credentials_field() {
+		$account    = get_option( 'lwc_fedex_tracking_production_account_number', '' );
+		$api_key    = get_option( 'lwc_fedex_tracking_production_api_key', '' );
+		$api_secret = get_option( 'lwc_fedex_tracking_production_api_secret', '' );
+
+		printf(
+			'<fieldset><legend class="screen-reader-text">%1$s</legend><p><label>%2$s<br><input type="text" name="lwc_fedex_tracking_production_account_number" value="%3$s" class="regular-text" autocomplete="off"></label></p><p><label>%4$s<br><input type="text" name="lwc_fedex_tracking_production_api_key" value="%5$s" class="regular-text" autocomplete="off"></label></p><p><label>%6$s<br><input type="password" name="lwc_fedex_tracking_production_api_secret" value="%7$s" class="regular-text" autocomplete="new-password"></label></p><p class="description">%8$s</p></fieldset>',
+			esc_html__( 'Basic Integrated Visibility production credentials', 'lovecatz-wc' ),
+			esc_html__( 'Account Number (optional for tracking number)', 'lovecatz-wc' ),
+			esc_attr( $account ),
+			esc_html__( 'API Key', 'lovecatz-wc' ),
+			esc_attr( $api_key ),
+			esc_html__( 'Secret Key', 'lovecatz-wc' ),
+			esc_attr( $api_secret ),
+			esc_html__( 'Use the Production credentials from the separate Basic Integrated Visibility (formerly Track API) project. API Key and Secret Key are required; the account number is stored for reference. These fields are used only for tracking and do not change rates, labels, shipments, or pickups.', 'lovecatz-wc' )
+		);
+	}
+
 	public function sanitize_fedex_environment( $value ) {
 		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
 	}
@@ -933,87 +992,142 @@ class LWC_Admin_Settings {
 		echo '</div>';
 	}
 
-	/** Explain when the PayPal surcharge is added. */
-	public function render_paypal_fee_section_intro() {
-		if ( ! $this->is_official_paypal_plugin_active() ) {
-			$installed = class_exists( 'LWC_PayPal_Admin_Fee' ) && LWC_PayPal_Admin_Fee::is_official_plugin_installed();
-			$message   = $installed
-				? __( 'WooCommerce PayPal Payments is installed but inactive. Activate the official payment plugin to use the PayPal admin fee settings.', 'lovecatz-wc' )
-				: __( 'This feature requires the official WooCommerce PayPal Payments plugin. Install and activate it to use the PayPal admin fee settings.', 'lovecatz-wc' );
-			$url       = $installed ? self_admin_url( 'plugins.php' ) : self_admin_url( 'plugin-install.php?s=woocommerce%20paypal%20payments&tab=search&type=term' );
-			$button    = $installed ? __( 'Open Plugins', 'lovecatz-wc' ) : __( 'Install WooCommerce PayPal Payments', 'lovecatz-wc' );
+	/** Explain the customer review link feature. */
+	public function render_review_section_intro() {
+		echo '<p>' . esc_html__( 'Add a Write Review column to My Account orders. Review links are shown only for products in completed orders.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'WooCommerce product reviews must also be enabled under WooCommerce product settings.', 'lovecatz-wc' ) . '</p>';
+	}
 
-			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'PayPal fee settings are unavailable.', 'lovecatz-wc' ) . '</strong> ' . esc_html( $message );
-			if ( current_user_can( $installed ? 'activate_plugins' : 'install_plugins' ) ) {
+	/** Render the customer review feature switch. */
+	public function render_product_review_enabled_field() {
+		$current = get_option( 'lwc_product_review_enabled', 'no' );
+		echo '<input type="hidden" name="lwc_product_review_enabled" value="no" />';
+		echo '<label><input type="checkbox" name="lwc_product_review_enabled" value="yes" ' . checked( $current, 'yes', false ) . ' /> ' . esc_html__( 'Allow customers to open product review forms from completed orders.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Explain when the international handling fee is added. */
+	public function render_international_fee_section_intro() {
+		if ( ! $this->is_paypal_gateway_enabled() ) {
+			$plugin_active = class_exists( 'LWC_International_Order_Fee' ) && LWC_International_Order_Fee::is_official_plugin_active();
+			$installed     = class_exists( 'LWC_International_Order_Fee' ) && LWC_International_Order_Fee::is_official_plugin_installed();
+
+			if ( $plugin_active ) {
+				$message = __( 'WooCommerce PayPal Payments is active, but its main PayPal gateway is disabled. Enable the gateway to configure international order handling.', 'lovecatz-wc' );
+				$url     = self_admin_url( 'admin.php?page=wc-settings&tab=checkout&section=ppcp-gateway' );
+				$button  = __( 'Open PayPal Settings', 'lovecatz-wc' );
+				$can_act = current_user_can( 'manage_woocommerce' );
+			} elseif ( $installed ) {
+				$message = __( 'WooCommerce PayPal Payments is installed but inactive. Activate it and enable its PayPal gateway to use this feature.', 'lovecatz-wc' );
+				$url     = self_admin_url( 'plugins.php' );
+				$button  = __( 'Open Plugins', 'lovecatz-wc' );
+				$can_act = current_user_can( 'activate_plugins' );
+			} else {
+				$message = __( 'Install WooCommerce PayPal Payments, then enable its PayPal gateway to use this feature.', 'lovecatz-wc' );
+				$url     = self_admin_url( 'plugin-install.php?s=woocommerce%20paypal%20payments&tab=search&type=term' );
+				$button  = __( 'Install WooCommerce PayPal Payments', 'lovecatz-wc' );
+				$can_act = current_user_can( 'install_plugins' );
+			}
+
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'International handling settings are unavailable.', 'lovecatz-wc' ) . '</strong> ' . esc_html( $message );
+			if ( $can_act ) {
 				echo ' <a class="button button-secondary" href="' . esc_url( $url ) . '">' . esc_html( $button ) . '</a>';
 			}
 			echo '</p></div>';
-			return;
 		}
 
-		echo '<p>' . esc_html__( 'Add an admin fee only when the buyer selects a payment method provided by WooCommerce PayPal Payments. The fee is shown separately in the checkout totals and saved with the order.', 'lovecatz-wc' ) . '</p>';
+		echo '<p>' . esc_html__( 'Add a transparent handling fee based on USD checkout currency, a shipping destination outside Indonesia, or both. Eligibility does not depend on the payment method selected at checkout.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Use this only for genuine international order handling. Do not use it to pass PayPal processing charges to the buyer.', 'lovecatz-wc' ) . '</p>';
 	}
 
-	/** Render the PayPal surcharge master switch. */
-	public function render_paypal_fee_enabled_field() {
-		$current  = get_option( 'lwc_paypal_fee_enabled', 'no' );
-		$disabled = $this->paypal_field_disabled_attribute();
-		echo '<input type="hidden" name="lwc_paypal_fee_enabled" value="' . esc_attr( $this->is_official_paypal_plugin_active() ? 'no' : $current ) . '" />';
-		echo '<label><input type="checkbox" name="lwc_paypal_fee_enabled" value="yes" ' . checked( $current, 'yes', false ) . $disabled . ' /> ' . esc_html__( 'Pass the configured PayPal admin fee on to the buyer.', 'lovecatz-wc' ) . '</label>';
+	/** Render the international handling master switch. */
+	public function render_international_fee_enabled_field() {
+		$current  = get_option( LWC_International_Order_Fee::OPT_ENABLED, 'no' );
+		$disabled = $this->international_fee_disabled_attribute();
+		echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_ENABLED ) . '" value="no" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_International_Order_Fee::OPT_ENABLED ) . '" value="yes" ' . checked( $current, 'yes', false ) . $disabled . ' /> ' . esc_html__( 'Add the configured handling fee to eligible international orders.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render currency and destination trigger checkboxes. */
+	public function render_international_fee_triggers_field() {
+		$usd       = get_option( LWC_International_Order_Fee::OPT_TRIGGER_USD, 'yes' );
+		$abroad    = get_option( LWC_International_Order_Fee::OPT_TRIGGER_ABROAD, 'yes' );
+		$available = $this->is_paypal_gateway_enabled();
+		$disabled  = $this->international_fee_disabled_attribute();
+		echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_TRIGGER_USD ) . '" value="' . esc_attr( $available ? 'no' : $usd ) . '" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_International_Order_Fee::OPT_TRIGGER_USD ) . '" value="yes" ' . checked( $usd, 'yes', false ) . $disabled . ' /> ' . esc_html__( 'Checkout currency is USD', 'lovecatz-wc' ) . '</label><br />';
+		echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_TRIGGER_ABROAD ) . '" value="' . esc_attr( $available ? 'no' : $abroad ) . '" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_International_Order_Fee::OPT_TRIGGER_ABROAD ) . '" value="yes" ' . checked( $abroad, 'yes', false ) . $disabled . ' /> ' . esc_html__( 'Shipping country is outside Indonesia', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render whether any or all enabled triggers must match. */
+	public function render_international_fee_match_mode_field() {
+		$current = get_option( LWC_International_Order_Fee::OPT_MATCH_MODE, 'any' );
+		if ( ! $this->is_paypal_gateway_enabled() ) {
+			echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_MATCH_MODE ) . '" value="' . esc_attr( $current ) . '" />';
+		}
+		echo '<select name="' . esc_attr( LWC_International_Order_Fee::OPT_MATCH_MODE ) . '"' . $this->international_fee_disabled_attribute() . '>';
+		echo '<option value="any"' . selected( $current, 'any', false ) . '>' . esc_html__( 'Any enabled condition (OR)', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="all"' . selected( $current, 'all', false ) . '>' . esc_html__( 'All enabled conditions (AND)', 'lovecatz-wc' ) . '</option>';
+		echo '</select>';
 	}
 
 	/** Render percentage/fixed fee selection. */
-	public function render_paypal_fee_type_field() {
-		$current = get_option( 'lwc_paypal_fee_type', 'percentage' );
-		if ( ! $this->is_official_paypal_plugin_active() ) {
-			echo '<input type="hidden" name="lwc_paypal_fee_type" value="' . esc_attr( $current ) . '" />';
+	public function render_international_fee_type_field() {
+		$current = get_option( LWC_International_Order_Fee::OPT_TYPE, 'percentage' );
+		if ( ! $this->is_paypal_gateway_enabled() ) {
+			echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_TYPE ) . '" value="' . esc_attr( $current ) . '" />';
 		}
-		echo '<select name="lwc_paypal_fee_type"' . $this->paypal_field_disabled_attribute() . '>';
+		echo '<select name="' . esc_attr( LWC_International_Order_Fee::OPT_TYPE ) . '"' . $this->international_fee_disabled_attribute() . '>';
 		echo '<option value="percentage"' . selected( $current, 'percentage', false ) . '>' . esc_html__( 'Percentage', 'lovecatz-wc' ) . '</option>';
 		echo '<option value="fixed"' . selected( $current, 'fixed', false ) . '>' . esc_html__( 'Fixed amount', 'lovecatz-wc' ) . '</option>';
 		echo '</select>';
 	}
 
-	/** Render the numeric PayPal fee value. */
-	public function render_paypal_fee_amount_field() {
-		$value = get_option( 'lwc_paypal_fee_amount', 0 );
-		if ( ! $this->is_official_paypal_plugin_active() ) {
-			echo '<input type="hidden" name="lwc_paypal_fee_amount" value="' . esc_attr( $value ) . '" />';
+	/** Render the numeric international handling fee value. */
+	public function render_international_fee_amount_field() {
+		$value = get_option( LWC_International_Order_Fee::OPT_AMOUNT, 0 );
+		if ( ! $this->is_paypal_gateway_enabled() ) {
+			echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_AMOUNT ) . '" value="' . esc_attr( $value ) . '" />';
 		}
-		echo '<input type="number" name="lwc_paypal_fee_amount" value="' . esc_attr( $value ) . '" min="0" step="0.01" class="small-text"' . $this->paypal_field_disabled_attribute() . ' />';
-		echo '<p class="description">' . esc_html__( 'For Percentage, enter a value such as 4.4. For Fixed amount, enter a value in the WooCommerce store currency.', 'lovecatz-wc' ) . '</p>';
+		echo '<input type="number" name="' . esc_attr( LWC_International_Order_Fee::OPT_AMOUNT ) . '" value="' . esc_attr( $value ) . '" min="0" step="0.01" class="small-text"' . $this->international_fee_disabled_attribute() . ' />';
+		echo '<p class="description">' . esc_html__( 'For Percentage, enter a value such as 4.4. For Fixed amount, enter a value in the WooCommerce base currency.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/** Render the fee label visible to the buyer. */
-	public function render_paypal_fee_label_field() {
-		$value = get_option( 'lwc_paypal_fee_label', __( 'PayPal admin fee', 'lovecatz-wc' ) );
-		if ( ! $this->is_official_paypal_plugin_active() ) {
-			echo '<input type="hidden" name="lwc_paypal_fee_label" value="' . esc_attr( $value ) . '" />';
+	public function render_international_fee_label_field() {
+		$value = get_option( LWC_International_Order_Fee::OPT_LABEL, __( 'International order handling', 'lovecatz-wc' ) );
+		if ( ! $this->is_paypal_gateway_enabled() ) {
+			echo '<input type="hidden" name="' . esc_attr( LWC_International_Order_Fee::OPT_LABEL ) . '" value="' . esc_attr( $value ) . '" />';
 		}
-		echo '<input type="text" name="lwc_paypal_fee_label" value="' . esc_attr( $value ) . '" class="regular-text"' . $this->paypal_field_disabled_attribute() . ' />';
+		echo '<input type="text" name="' . esc_attr( LWC_International_Order_Fee::OPT_LABEL ) . '" value="' . esc_attr( $value ) . '" class="regular-text"' . $this->international_fee_disabled_attribute() . ' />';
 	}
 
-	/** Whether the required official PayPal plugin is active. */
-	private function is_official_paypal_plugin_active() {
-		return class_exists( 'LWC_PayPal_Admin_Fee' ) && LWC_PayPal_Admin_Fee::is_official_plugin_active();
+	/** Whether the required official PayPal gateway is active in WooCommerce. */
+	private function is_paypal_gateway_enabled() {
+		return class_exists( 'LWC_International_Order_Fee' ) && LWC_International_Order_Fee::is_paypal_gateway_enabled();
 	}
 
-	/** Disabled HTML attribute used while the official PayPal plugin is unavailable. */
-	private function paypal_field_disabled_attribute() {
-		return $this->is_official_paypal_plugin_active() ? '' : ' disabled="disabled" aria-disabled="true"';
+	/** Disabled HTML attribute used while the PayPal gateway is unavailable. */
+	private function international_fee_disabled_attribute() {
+		return $this->is_paypal_gateway_enabled() ? '' : ' disabled="disabled" aria-disabled="true"';
 	}
 
-	/** Normalize the PayPal fee calculation type. */
-	public function sanitize_paypal_fee_type( $value ) {
+	/** Normalize the trigger matching mode. */
+	public function sanitize_international_fee_match_mode( $value ) {
+		return 'all' === sanitize_key( $value ) ? 'all' : 'any';
+	}
+
+	/** Normalize the international fee calculation type. */
+	public function sanitize_international_fee_type( $value ) {
 		return 'fixed' === sanitize_key( $value ) ? 'fixed' : 'percentage';
 	}
 
-	/** Normalize the PayPal fee amount and constrain percentage values. */
-	public function sanitize_paypal_fee_amount( $value ) {
+	/** Normalize the international fee amount and constrain percentage values. */
+	public function sanitize_international_fee_amount( $value ) {
 		$amount = (float) str_replace( ',', '.', (string) $value );
 		$amount = max( 0, $amount );
 
-		if ( isset( $_POST['lwc_paypal_fee_type'] ) && 'percentage' === sanitize_key( wp_unslash( $_POST['lwc_paypal_fee_type'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Settings API verifies the request nonce.
+		if ( isset( $_POST[ LWC_International_Order_Fee::OPT_TYPE ] ) && 'percentage' === sanitize_key( wp_unslash( $_POST[ LWC_International_Order_Fee::OPT_TYPE ] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Settings API verifies the request nonce.
 			$amount = min( 100, $amount );
 		}
 
@@ -1180,8 +1294,64 @@ class LWC_Admin_Settings {
 			return;
 		}
 
-		$this->last_import_result = $this->import_users_from_rows( $rows );
+		$default_role = isset( $_POST['lwc_import_default_role'] ) ? sanitize_key( wp_unslash( $_POST['lwc_import_default_role'] ) ) : 'customer';
+		$roles        = $this->get_importable_roles();
+		if ( ! isset( $roles[ $default_role ] ) ) {
+			$this->last_import_result = array(
+				'success' => false,
+				'message' => __( 'The selected default role is not available.', 'lovecatz-wc' ),
+			);
+			@unlink( $file['tmp_name'] );
+			return;
+		}
+
+		$default_password = $this->get_member_default_password();
+		if ( '' === $default_password ) {
+			$this->last_import_result = array(
+				'success' => false,
+				'message' => __( 'Save a default password before importing users.', 'lovecatz-wc' ),
+			);
+			return;
+		}
+
+		$this->last_import_result = $this->import_users_from_rows( $rows, $default_role, $default_password );
 		@unlink( $file['tmp_name'] );
+	}
+
+	/** Save the password assigned to newly imported users. */
+	public function save_member_default_password() {
+		check_admin_referer( 'lwc_save_member_default_password' );
+
+		if ( ! current_user_can( 'create_users' ) ) {
+			wp_die( esc_html__( 'You do not have permission to configure the import password.', 'lovecatz-wc' ) );
+		}
+
+		$password = isset( $_POST['lwc_member_default_password'] ) ? (string) wp_unslash( $_POST['lwc_member_default_password'] ) : '';
+		$status   = 'empty';
+		if ( '' !== $password ) {
+			$stored_password = function_exists( 'lwc_encrypt_secret' ) ? lwc_encrypt_secret( $password ) : $password;
+			update_option( self::MEMBER_DEFAULT_PASSWORD_OPTION, $stored_password, false );
+			$status = 'saved';
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'                   => 'lovecatz-wc',
+					'tab'                    => 'store-members',
+					'member_password_status' => $status,
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/** Read and decrypt the configured import password. */
+	private function get_member_default_password() {
+		$password = (string) get_option( self::MEMBER_DEFAULT_PASSWORD_OPTION, '' );
+
+		return function_exists( 'lwc_decrypt_secret' ) ? (string) lwc_decrypt_secret( $password ) : $password;
 	}
 
 	/**
@@ -1211,30 +1381,42 @@ class LWC_Admin_Settings {
 		$page     = isset( $_GET['member_page'] ) ? max( 1, absint( $_GET['member_page'] ) ) : 1;
 		$query    = new WP_User_Query(
 			array(
-				'role'    => 'customer',
-				'number'  => $per_page,
-				'offset'  => ( $page - 1 ) * $per_page,
-				'orderby' => 'registered',
-				'order'   => 'DESC',
+				'number'     => $per_page,
+				'offset'     => ( $page - 1 ) * $per_page,
+				'orderby'    => 'registered',
+				'order'      => 'DESC',
+				'meta_query' => array(
+					'relation' => 'OR',
+					array( 'key' => 'lwc_imported_member', 'compare' => 'EXISTS' ),
+					array( 'key' => 'lwc_customer_id', 'compare' => 'EXISTS' ),
+				),
 			)
 		);
 		$members  = $query->get_results();
 		$total    = (int) $query->get_total();
+		$password_status     = isset( $_GET['member_password_status'] ) ? sanitize_key( wp_unslash( $_GET['member_password_status'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only redirect status.
+		$password_configured = '' !== (string) get_option( self::MEMBER_DEFAULT_PASSWORD_OPTION, '' );
 		?>
+		<?php if ( 'saved' === $password_status ) : ?>
+			<div class="notice notice-success inline"><p><?php esc_html_e( 'Default import password saved.', 'lovecatz-wc' ); ?></p></div>
+		<?php elseif ( 'empty' === $password_status ) : ?>
+			<div class="notice notice-error inline"><p><?php esc_html_e( 'Default import password cannot be empty.', 'lovecatz-wc' ); ?></p></div>
+		<?php endif; ?>
 		<h2><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></h2>
-		<p><?php esc_html_e( 'This list displays only users with the Customer role.', 'lovecatz-wc' ); ?></p>
+		<p><?php esc_html_e( 'This list displays users imported through the member importer, including legacy imported customers.', 'lovecatz-wc' ); ?></p>
 		<table class="wp-list-table widefat fixed striped">
 			<thead><tr>
 				<th><?php esc_html_e( 'Customer ID', 'lovecatz-wc' ); ?></th>
 				<th><?php esc_html_e( 'Name', 'lovecatz-wc' ); ?></th>
 				<th><?php esc_html_e( 'Email', 'lovecatz-wc' ); ?></th>
+				<th><?php esc_html_e( 'Role', 'lovecatz-wc' ); ?></th>
 				<th><?php esc_html_e( 'Phone Number', 'lovecatz-wc' ); ?></th>
 				<th><?php esc_html_e( 'Member Card', 'lovecatz-wc' ); ?></th>
 				<th><?php esc_html_e( 'Settings', 'lovecatz-wc' ); ?></th>
 			</tr></thead>
 			<tbody>
 			<?php if ( empty( $members ) ) : ?>
-				<tr><td colspan="6"><?php esc_html_e( 'No members found.', 'lovecatz-wc' ); ?></td></tr>
+				<tr><td colspan="7"><?php esc_html_e( 'No members found.', 'lovecatz-wc' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $members as $member ) : ?>
 					<?php if ( ! $this->is_store_member( $member ) ) { continue; } ?>
@@ -1247,6 +1429,7 @@ class LWC_Admin_Settings {
 						<td><?php echo esc_html( get_user_meta( $member->ID, 'lwc_customer_id', true ) ); ?></td>
 						<td><a href="<?php echo esc_url( get_edit_user_link( $member->ID ) ); ?>"><?php echo esc_html( $member->display_name ); ?></a></td>
 						<td><?php echo esc_html( $member->user_email ); ?></td>
+						<td><?php echo esc_html( $this->get_user_role_label( $member ) ); ?></td>
 						<td><?php echo esc_html( $phone ); ?></td>
 						<td><a class="button button-secondary" href="<?php echo esc_url( $print_url ); ?>" target="_blank"><?php esc_html_e( 'Print Member Card', 'lovecatz-wc' ); ?></a></td>
 						<td><a href="<?php echo esc_url( get_edit_user_link( $member->ID ) ); ?>"><?php esc_html_e( 'Update', 'lovecatz-wc' ); ?></a> | <a href="<?php echo esc_url( $delete_url ); ?>" class="submitdelete" onclick="return confirm('<?php echo esc_js( __( 'Permanently delete this member?', 'lovecatz-wc' ) ); ?>');"><?php esc_html_e( 'Delete', 'lovecatz-wc' ); ?></a></td>
@@ -1273,9 +1456,30 @@ class LWC_Admin_Settings {
 		<hr />
 		<h2><?php esc_html_e( 'Import Members', 'lovecatz-wc' ); ?></h2>
 		<p><a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=lwc_download_member_import_template' ), 'lwc_download_member_import_template' ) ); ?>"><?php esc_html_e( 'Download Excel Template', 'lovecatz-wc' ); ?></a></p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:flex;align-items:flex-end;gap:8px;margin:12px 0 18px;">
+			<input type="hidden" name="action" value="lwc_save_member_default_password" />
+			<?php wp_nonce_field( 'lwc_save_member_default_password' ); ?>
+			<label for="lwc_member_default_password">
+				<strong><?php esc_html_e( 'Default password', 'lovecatz-wc' ); ?></strong><br />
+				<input type="password" name="lwc_member_default_password" id="lwc_member_default_password" value="<?php echo esc_attr( $this->get_member_default_password() ); ?>" autocomplete="new-password" placeholder="<?php esc_attr_e( 'Enter a password', 'lovecatz-wc' ); ?>" required />
+			</label>
+			<button type="submit" class="button button-secondary"><?php esc_html_e( 'Save Default Password', 'lovecatz-wc' ); ?></button>
+		</form>
+		<?php if ( $password_configured ) : ?>
+			<p class="description" style="margin-top:-12px;"><?php esc_html_e( 'The filled password field confirms that a default password is saved.', 'lovecatz-wc' ); ?></p>
+		<?php endif; ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=lovecatz-wc&tab=store-members' ) ); ?>" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'lwc_import_users_action', 'lwc_import_users_nonce' ); ?>
-			<p><?php esc_html_e( 'Upload an Excel (.xls/.xlsx) or CSV file. All imported users will receive the Customer role.', 'lovecatz-wc' ); ?></p>
+			<p><?php esc_html_e( 'Upload an Excel (.xls/.xlsx) or CSV file. Only Email and Name are required. Existing email addresses are skipped; only new users are created.', 'lovecatz-wc' ); ?></p>
+			<p>
+				<label for="lwc_import_default_role"><strong><?php esc_html_e( 'Default role', 'lovecatz-wc' ); ?></strong></label><br />
+				<select name="lwc_import_default_role" id="lwc_import_default_role" required>
+					<?php foreach ( $this->get_importable_roles() as $role_slug => $role_name ) : ?>
+						<option value="<?php echo esc_attr( $role_slug ); ?>" <?php selected( 'customer', $role_slug ); ?>><?php echo esc_html( $role_name ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<span class="description"><?php esc_html_e( 'Used when the Role cell is empty. The Excel template also provides a per-row Role dropdown.', 'lovecatz-wc' ); ?></span>
+			</p>
 			<input type="file" name="lwc_import_file" accept=".csv,.xls,.xlsx" required />
 			<?php submit_button( __( 'Import Members', 'lovecatz-wc' ), 'primary', 'lwc_import_users_submit' ); ?>
 		</form>
@@ -1283,7 +1487,7 @@ class LWC_Admin_Settings {
 	}
 
 	/**
-	 * Determine whether a user is exclusively a WooCommerce customer.
+	 * Determine whether a user belongs to the member import feature.
 	 *
 	 * @param WP_User|int $user User object or ID.
 	 * @return bool
@@ -1293,7 +1497,30 @@ class LWC_Admin_Settings {
 			$user = get_userdata( (int) $user );
 		}
 
-		return $user instanceof WP_User && array( 'customer' ) === array_values( $user->roles );
+		return $user instanceof WP_User && (
+			metadata_exists( 'user', $user->ID, 'lwc_imported_member' ) ||
+			metadata_exists( 'user', $user->ID, 'lwc_customer_id' )
+		);
+	}
+
+	/** Return WordPress roles the current administrator is allowed to assign. */
+	private function get_importable_roles() {
+		$roles = function_exists( 'get_editable_roles' ) ? get_editable_roles() : wp_roles()->roles;
+		$items = array();
+
+		foreach ( $roles as $slug => $details ) {
+			$items[ sanitize_key( $slug ) ] = translate_user_role( $details['name'] );
+		}
+
+		return $items;
+	}
+
+	/** Get a readable label for the first role assigned to a user. */
+	private function get_user_role_label( $user ) {
+		$roles = $this->get_importable_roles();
+		$role  = ! empty( $user->roles ) ? reset( $user->roles ) : '';
+
+		return isset( $roles[ $role ] ) ? $roles[ $role ] : $role;
 	}
 
 	/**
@@ -1525,8 +1752,8 @@ class LWC_Admin_Settings {
 	 */
 	private function get_member_import_template_files() {
 		$headers   = array(
-			'External ID', 'Name', 'Company Name', 'Contact Name', 'Email', 'Job Position', 'Phone', 'Mobile',
-			'Street', 'Street2', 'City', 'State', 'Zip', 'Country', 'Website', 'Notes',
+			'Username', 'Email', 'First Name', 'Last Name', 'Role', 'External ID', 'Company Name', 'Phone', 'Mobile',
+			'Address 1', 'Address 2', 'City', 'State', 'Postcode', 'Country', 'Website', 'Notes',
 		);
 		$cells     = array();
 		foreach ( $headers as $index => $header ) {
@@ -1535,14 +1762,27 @@ class LWC_Admin_Settings {
 		$sheet_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
 			. '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">'
 			. implode( '', $cells )
-			. '</row><row r="2"/></sheetData></worksheet>';
+			. '</row><row r="2"/></sheetData><dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Invalid role" error="Select a role from the list." sqref="E2:E1048576"><formula1>AllowedRoles</formula1></dataValidation></dataValidations></worksheet>';
+
+		$role_cells = array();
+		$role_row   = 2;
+		foreach ( $this->get_importable_roles() as $role_slug => $role_name ) {
+			$role_cells[] = '<row r="' . $role_row . '"><c r="A' . $role_row . '" t="inlineStr"><is><t>' . htmlspecialchars( $role_slug, ENT_XML1 | ENT_COMPAT, 'UTF-8' ) . '</t></is></c><c r="B' . $role_row . '" t="inlineStr"><is><t>' . htmlspecialchars( $role_name, ENT_XML1 | ENT_COMPAT, 'UTF-8' ) . '</t></is></c></row>';
+			$role_row++;
+		}
+		$roles_last_row = max( 2, $role_row - 1 );
+		$roles_sheet_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+			. '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Role</t></is></c><c r="B1" t="inlineStr"><is><t>Role Name</t></is></c></row>'
+			. implode( '', $role_cells )
+			. '</sheetData></worksheet>';
 
 		return array(
-			array( 'name' => '[Content_Types].xml', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' ),
+			array( 'name' => '[Content_Types].xml', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' ),
 			array( 'name' => '_rels/.rels', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' ),
-			array( 'name' => 'xl/workbook.xml', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Members Import" sheetId="1" r:id="rId1"/></sheets></workbook>' ),
-			array( 'name' => 'xl/_rels/workbook.xml.rels', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' ),
+			array( 'name' => 'xl/workbook.xml', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Members Import" sheetId="1" r:id="rId1"/><sheet name="Roles" sheetId="2" state="hidden" r:id="rId2"/></sheets><definedNames><definedName name="AllowedRoles">Roles!$A$2:$A$' . $roles_last_row . '</definedName></definedNames></workbook>' ),
+			array( 'name' => 'xl/_rels/workbook.xml.rels', 'content' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>' ),
 			array( 'name' => 'xl/worksheets/sheet1.xml', 'content' => $sheet_xml ),
+			array( 'name' => 'xl/worksheets/sheet2.xml', 'content' => $roles_sheet_xml ),
 		);
 	}
 
@@ -1606,8 +1846,9 @@ class LWC_Admin_Settings {
 				if ( $shared_strings_items ) {
 					foreach ( $shared_strings_items as $string_item ) {
 						$text = '';
+						$string_item->registerXPathNamespace( 'main', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' );
 						$text_nodes = $string_item->xpath( './/main:t' );
-						foreach ( $text_nodes as $text_node ) {
+						foreach ( (array) $text_nodes as $text_node ) {
 							$text .= (string) $text_node;
 						}
 						$shared_strings[] = $text;
@@ -1670,6 +1911,7 @@ class LWC_Admin_Settings {
 
 		foreach ( $sheet_rows as $row ) {
 			$values = array();
+			$row->registerXPathNamespace( 'main', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' );
 			$cell_nodes = $row->xpath( './main:c' );
 			if ( empty( $cell_nodes ) ) {
 				$cell_nodes = $row->xpath( './c' );
@@ -1686,8 +1928,9 @@ class LWC_Admin_Settings {
 					$shared_string_index = (int) $cell->v;
 					$cell_value = isset( $shared_strings[ $shared_string_index ] ) ? $shared_strings[ $shared_string_index ] : '';
 				} elseif ( 'inlineStr' === $cell_type ) {
+					$cell->registerXPathNamespace( 'main', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' );
 					$inline_text_nodes = $cell->xpath( './main:is/main:t' );
-					foreach ( $inline_text_nodes as $inline_text_node ) {
+					foreach ( (array) $inline_text_nodes as $inline_text_node ) {
 						$cell_value .= (string) $inline_text_node;
 					}
 				} else {
@@ -1970,40 +2213,40 @@ class LWC_Admin_Settings {
 	/**
 	 * Import users from normalized rows.
 	 *
-	 * @param array $rows Rows to import.
+	 * @param array  $rows             Rows to import.
+	 * @param string $default_role     Role used when a row has no role value.
+	 * @param string $default_password Password assigned to imported users.
 	 * @return array
 	 */
-	private function import_users_from_rows( $rows ) {
+	private function import_users_from_rows( $rows, $default_role, $default_password ) {
 		$imported = 0;
 		$skipped   = 0;
 		$errors    = array();
+		$roles     = $this->get_importable_roles();
  
 		foreach ( $rows as $row ) {
-			// FIX: added 'external_id' so it matches the "External ID" column
-			// used by the current .xlsx template (Odoo-style CRM export),
-			// while still supporting the legacy CSV column names.
 			$main_id = sanitize_text_field( $this->get_row_value( $row, array( 'id_pelanggan', 'customer_id', 'id_customer', 'external_id', 'id' ) ) );
-			$email   = $this->get_row_value( $row, array( 'email', 'e_mail_address', 'email_address', 'user_email' ) );
-			if ( '' === $main_id ) {
+			$email   = sanitize_email( $this->get_row_value( $row, array( 'email', 'e_mail_address', 'email_address', 'user_email' ) ) );
+			if ( '' === $email || ! is_email( $email ) ) {
 				$skipped++;
-				$errors[] = __( 'Skipped a row because an ID (External ID / ID_PELANGGAN) is required.', 'lovecatz-wc' );
+				$errors[] = __( 'Skipped a row because a valid email address is required.', 'lovecatz-wc' );
 				continue;
 			}
- 
-			$username = sanitize_user( $main_id, true );
+
+			if ( email_exists( $email ) ) {
+				$skipped++;
+				$errors[] = sprintf( __( 'Skipped %s because that email address already exists.', 'lovecatz-wc' ), $email );
+				continue;
+			}
+
+			$username_source = $this->get_row_value( $row, array( 'username', 'user_login', 'login' ) );
+			if ( '' === $username_source ) {
+				$username_source = '' !== $main_id ? $main_id : strstr( $email, '@', true );
+			}
+			$username = $this->get_unique_import_username( $username_source );
 			if ( '' === $username ) {
 				$skipped++;
-				$errors[] = sprintf( __( 'Skipped customer ID %s because it cannot be used as a login.', 'lovecatz-wc' ), $main_id );
-				continue;
-			}
- 
-			if ( '' === $email || ! is_email( $email ) ) {
-				$email = $this->get_placeholder_email( '' !== $main_id ? $main_id : $username );
-			}
- 
-			if ( username_exists( $username ) || email_exists( $email ) ) {
-				$skipped++;
-				$errors[] = sprintf( __( 'Skipped %s because the user already exists.', 'lovecatz-wc' ), $username );
+				$errors[] = sprintf( __( 'Skipped %s because a valid username could not be generated.', 'lovecatz-wc' ), $email );
 				continue;
 			}
  
@@ -2029,24 +2272,26 @@ class LWC_Admin_Settings {
 				}
 			}
 			$company_name = sanitize_text_field( $this->get_row_value( $row, array( 'company_name' ) ) );
-			if ( '' === $first_name && '' === $last_name && '' !== $company_name ) {
-				$first_name = $company_name;
-			}
 			$first_name = sanitize_text_field( $first_name );
 			$last_name  = sanitize_text_field( $last_name );
+			if ( '' === trim( $first_name . ' ' . $last_name ) ) {
+				$skipped++;
+				$errors[] = sprintf( __( 'Skipped %s because a name is required.', 'lovecatz-wc' ), $email );
+				continue;
+			}
  
-			// This import belongs to the Store Members feature, so imported users
-			// always receive WooCommerce's customer role regardless of file contents.
-			$role = 'customer';
- 
-			// Imported members get a random password plus a password-reset email,
-			// so credentials are never predictable from the customer ID.
-			$password = wp_generate_password( 16, true, false );
+			$role_value = $this->get_row_value( $row, array( 'role', 'roles', 'user_role' ) );
+			$role       = $this->resolve_import_role( $role_value, $default_role, $roles );
+			if ( '' === $role ) {
+				$skipped++;
+				$errors[] = sprintf( __( 'Skipped %s because role "%s" is not available.', 'lovecatz-wc' ), $email, $role_value );
+				continue;
+			}
  
 			// FIX: added 'street' so it matches the "Street" column used by
 			// the current .xlsx template, while still supporting legacy names.
 			$street   = sanitize_text_field( $this->get_row_value( $row, array( 'street_adress', 'street_address', 'street', 'address', 'address_1' ) ) );
-			$street2  = sanitize_text_field( $this->get_row_value( $row, array( 'street2' ) ) );
+			$street2  = sanitize_text_field( $this->get_row_value( $row, array( 'street2', 'address_2' ) ) );
 			if ( '' !== $street2 ) {
 				$street = trim( $street . ' ' . $street2 );
 			}
@@ -2063,9 +2308,9 @@ class LWC_Admin_Settings {
 				'user_email'   => $email,
 				'first_name'   => $first_name,
 				'last_name'    => $last_name,
-				'user_pass'    => $password,
+				'user_pass'    => $default_password,
 				'role'         => $role,
-				'display_name' => trim( $first_name . ' ' . $last_name ),
+				'display_name' => trim( $first_name . ' ' . $last_name ) ?: $username,
 			);
  
 			$user_id = wp_insert_user( $user_data );
@@ -2073,6 +2318,8 @@ class LWC_Admin_Settings {
 				$skipped++;
 				$errors[] = $user_id->get_error_message();
 			} else {
+				update_user_meta( $user_id, 'lwc_imported_member', 1 );
+				update_user_meta( $user_id, 'billing_email', $email );
 				if ( '' !== $main_id ) {
 					update_user_meta( $user_id, 'lwc_customer_id', $main_id );
 				}
@@ -2131,26 +2378,42 @@ class LWC_Admin_Settings {
 		);
 	}
 
-	/**
-	 * Generate a unique, syntactically valid placeholder email for imported users
-	 * whose source email is empty or invalid.
-	 *
-	 * @param string $identifier Customer ID or username.
-	 * @return string
-	 */
-	private function get_placeholder_email( $identifier ) {
-		$local_part = sanitize_title( $identifier );
-		if ( '' === $local_part ) {
-			$local_part = 'customer';
+	/** Resolve a role slug or translated role label against editable roles. */
+	private function resolve_import_role( $value, $default_role, $roles ) {
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return isset( $roles[ $default_role ] ) ? $default_role : '';
 		}
 
-		$email   = $local_part . '@no-email.local';
-		$counter = 1;
-		while ( email_exists( $email ) ) {
-			$email = $local_part . '+' . $counter . '@no-email.local';
-			$counter++;
+		$slug = sanitize_key( $value );
+		if ( isset( $roles[ $slug ] ) ) {
+			return $slug;
 		}
 
-		return $email;
+		foreach ( $roles as $role_slug => $role_name ) {
+			if ( 0 === strcasecmp( $value, $role_name ) ) {
+				return $role_slug;
+			}
+		}
+
+		return '';
 	}
+
+	/** Generate a valid, unused WordPress login for a new email address. */
+	private function get_unique_import_username( $source ) {
+		$base = sanitize_user( $source, true );
+		if ( '' === $base ) {
+			return '';
+		}
+
+		$username = $base;
+		$suffix   = 2;
+		while ( username_exists( $username ) ) {
+			$username = $base . '-' . $suffix;
+			$suffix++;
+		}
+
+		return $username;
+	}
+
 }

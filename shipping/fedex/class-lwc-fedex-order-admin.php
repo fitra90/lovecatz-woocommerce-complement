@@ -62,8 +62,13 @@ class LWC_FedEx_Order_Admin {
 			return;
 		}
 
-		wp_enqueue_style( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.js', array( 'jquery' ), LWC_VERSION, true );
+		$style_path     = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-order-admin.css';
+		$script_path    = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-order-admin.js';
+		$style_version  = file_exists( $style_path ) ? (string) filemtime( $style_path ) : LWC_VERSION;
+		$script_version = file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION;
+		wp_enqueue_style( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.css', array(), $style_version );
+		wp_enqueue_script( 'wc-enhanced-select' );
+		wp_enqueue_script( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.js', array( 'jquery', 'wc-enhanced-select' ), $script_version, true );
 		wp_localize_script( 'lwc-fedex-order-admin', 'lwcFedexOrder', $this->get_script_config() );
 	}
 
@@ -140,24 +145,48 @@ class LWC_FedEx_Order_Admin {
 
 		// Items already covered by a previous (partial) shipment.
 		$shipped_item_ids = array();
+		$has_cancelled_shipments = false;
 		foreach ( $shipments as $shipment ) {
 			if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+				$has_cancelled_shipments = true;
 				continue;
 			}
 			if ( ! empty( $shipment['item_ids'] ) && is_array( $shipment['item_ids'] ) ) {
 				$shipped_item_ids = array_merge( $shipped_item_ids, array_map( 'intval', $shipment['item_ids'] ) );
 			}
+			if ( ! empty( $shipment['replaced_item_ids'] ) && is_array( $shipment['replaced_item_ids'] ) ) {
+				$shipped_item_ids = array_merge( $shipped_item_ids, array_map( 'intval', $shipment['replaced_item_ids'] ) );
+			}
 		}
 		$shipped_item_ids = array_unique( $shipped_item_ids );
 
 		$order_items = array();
+		$has_available_items = false;
 		foreach ( $order->get_items() as $item ) {
+			$item_shipped = in_array( (int) $item->get_id(), $shipped_item_ids, true );
+			$product = $item->get_product();
 			$order_items[] = array(
 				'id' => (int) $item->get_id(),
+				'product_id' => $product ? (int) $product->get_id() : 0,
 				'name' => wp_strip_all_tags( $item->get_name() ),
 				'quantity' => (float) $item->get_quantity(),
-				'shipped' => in_array( (int) $item->get_id(), $shipped_item_ids, true ),
+				'shipped' => $item_shipped,
 			);
+			$has_available_items = $has_available_items || ! $item_shipped;
+		}
+		$is_replacement = $has_cancelled_shipments && $has_available_items;
+		$selected_service_type = 'INTERNATIONAL_ECONOMY';
+		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
+			$stored_service_type = strtoupper( trim( (string) $shipping_item->get_meta( 'lwc_fedex_service' ) ) );
+			if ( in_array( $stored_service_type, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true ) ) {
+				$selected_service_type = $stored_service_type;
+				break;
+			}
+		}
+		if ( $is_replacement ) {
+			$create_label_text = $is_sandbox ? __( 'Create replacement test AWB', 'lovecatz-wc' ) : __( 'Create replacement AWB', 'lovecatz-wc' );
+		} else {
+			$create_label_text = $is_sandbox ? __( 'Create test label', 'lovecatz-wc' ) : __( 'Create FedEx label', 'lovecatz-wc' );
 		}
 
 		$download_url = '';
@@ -189,17 +218,27 @@ class LWC_FedEx_Order_Admin {
 					<?php esc_html_e( 'Configure your FedEx credentials under LoveCatz → Shipping → FedEx to create labels.', 'lovecatz-wc' ); ?>
 				</p>
 			<?php else : ?>
+				<label class="lwc-fedex-service-field" for="lwc_fedex_service_type">
+					<span><?php esc_html_e( 'FedEx service', 'lovecatz-wc' ); ?></span>
+					<select id="lwc_fedex_service_type">
+						<option value="FEDEX_INTERNATIONAL_PRIORITY" <?php selected( $selected_service_type, 'FEDEX_INTERNATIONAL_PRIORITY' ); ?>><?php esc_html_e( 'FedEx International Priority', 'lovecatz-wc' ); ?></option>
+						<option value="INTERNATIONAL_ECONOMY" <?php selected( $selected_service_type, 'INTERNATIONAL_ECONOMY' ); ?>><?php esc_html_e( 'FedEx International Economy', 'lovecatz-wc' ); ?></option>
+					</select>
+				</label>
 				<p class="lwc-fedex-order-actions">
 					<button type="button" class="button" id="lwc_fedex_quote_btn"><?php esc_html_e( 'Test rate quote', 'lovecatz-wc' ); ?></button>
-					<button type="button" class="button button-primary" id="lwc_fedex_create_label_btn"><?php echo esc_html( $is_sandbox ? __( 'Create test label', 'lovecatz-wc' ) : __( 'Create FedEx label', 'lovecatz-wc' ) ); ?></button>
+					<button type="button" class="button button-primary" id="lwc_fedex_create_label_btn" <?php disabled( ! $has_available_items ); ?>><?php echo esc_html( $create_label_text ); ?></button>
 				</p>
+				<?php if ( $is_replacement ) : ?>
+					<div class="notice notice-info inline"><p><?php esc_html_e( 'The previous FedEx AWB is cancelled. Confirm the selected items and actual carton measurements, then create the replacement AWB.', 'lovecatz-wc' ); ?></p></div>
+				<?php endif; ?>
 				<?php if ( $is_sandbox ) : ?>
 					<div class="notice notice-warning inline lwc-fedex-sandbox-notice"><p><?php esc_html_e( 'Sandbox mode: rates and labels are for testing only. Live tracking and courier pickup are disabled.', 'lovecatz-wc' ); ?></p></div>
 				<?php endif; ?>
 
 				<fieldset class="lwc-fedex-package-fields">
 					<legend><?php esc_html_e( 'Actual packed carton (optional)', 'lovecatz-wc' ); ?></legend>
-					<p class="description"><?php esc_html_e( 'For one packed carton, enter its outside measurements. Leave every field blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Enter the actual packed weight as a fully custom value. Dimensions are optional; leave them blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
 					<label>
 						<?php esc_html_e( 'Weight (kg)', 'lovecatz-wc' ); ?>
 						<input type="number" id="lwc_fedex_package_weight" min="0.01" max="68" step="0.01" inputmode="decimal" />
@@ -214,17 +253,20 @@ class LWC_FedEx_Order_Admin {
 				<?php if ( ! empty( $order_items ) ) : ?>
 					<div class="lwc-fedex-items">
 						<p class="description">
-							<?php esc_html_e( 'Select the items for this AWB. Leave everything checked to ship the whole order; uncheck items to split the shipment manually.', 'lovecatz-wc' ); ?>
+							<?php esc_html_e( 'Check the items included in this FedEx package. Item selection affects the manifest and customs only; a custom carton weight is never recalculated from the checked items.', 'lovecatz-wc' ); ?>
 						</p>
-						<?php foreach ( $order_items as $item ) : ?>
-							<label class="lwc-fedex-item <?php echo $item['shipped'] ? 'is-shipped' : ''; ?>">
-								<input
-									type="checkbox"
-									class="lwc-fedex-item-checkbox"
-									value="<?php echo esc_attr( (string) $item['id'] ); ?>"
-									<?php checked( ! $item['shipped'] ); ?>
-									<?php disabled( $item['shipped'] ); ?>
-								/>
+						<div id="lwc-fedex-package-items" class="lwc-fedex-package-items">
+							<?php foreach ( $order_items as $item ) : ?>
+								<div class="lwc-fedex-item <?php echo $item['shipped'] ? 'is-shipped' : ''; ?>" data-product-id="<?php echo esc_attr( (string) $item['product_id'] ); ?>">
+									<input
+										type="checkbox"
+										id="lwc_fedex_item_<?php echo esc_attr( (string) $item['id'] ); ?>"
+										class="lwc-fedex-item-checkbox"
+										value="<?php echo esc_attr( (string) $item['id'] ); ?>"
+										<?php checked( ! $item['shipped'] ); ?>
+										<?php disabled( $item['shipped'] ); ?>
+									/>
+									<label for="lwc_fedex_item_<?php echo esc_attr( (string) $item['id'] ); ?>">
 								<?php
 								printf(
 									/* translators: 1: product name, 2: quantity */
@@ -236,8 +278,27 @@ class LWC_FedEx_Order_Admin {
 									echo ' — <em>' . esc_html__( 'already shipped', 'lovecatz-wc' ) . '</em>';
 								}
 								?>
-							</label>
-						<?php endforeach; ?>
+									</label>
+									<?php if ( ! $item['shipped'] ) : ?>
+										<button type="button" class="button-link-delete lwc-fedex-remove-package-item"><?php esc_html_e( 'Remove', 'lovecatz-wc' ); ?></button>
+									<?php endif; ?>
+								</div>
+							<?php endforeach; ?>
+						</div>
+						<div class="lwc-fedex-add-item">
+							<div class="lwc-fedex-product-search-wrap">
+								<select
+									id="lwc_fedex_product_search"
+									class="wc-product-search"
+									style="width:100%;max-width:100%"
+									data-width="100%"
+									data-placeholder="<?php esc_attr_e( 'Search an in-stock product…', 'lovecatz-wc' ); ?>"
+									data-action="woocommerce_json_search_products_and_variations"
+									data-allow_clear="true"
+								></select>
+							</div>
+							<button type="button" class="button" id="lwc_fedex_add_package_item"><?php esc_html_e( 'Add item', 'lovecatz-wc' ); ?></button>
+						</div>
 					</div>
 				<?php endif; ?>
 
@@ -265,18 +326,26 @@ class LWC_FedEx_Order_Admin {
 											<?php esc_html_e( 'Cancel AWB', 'lovecatz-wc' ); ?>
 										</button>
 									<?php endif; ?>
-									<?php if ( ! empty( $shipment['package'] ) && is_array( $shipment['package'] ) && isset( $shipment['package']['weight'], $shipment['package']['length'], $shipment['package']['width'], $shipment['package']['height'] ) ) : ?>
+									<?php if ( ! empty( $shipment['package'] ) && is_array( $shipment['package'] ) && isset( $shipment['package']['weight'] ) ) : ?>
 										<small class="lwc-fedex-shipment-package">
 											<?php
-											printf(
-												/* translators: 1: weight kg, 2: length cm, 3: width cm, 4: height cm. */
-												esc_html__( '%1$s kg · %2$s × %3$s × %4$s cm', 'lovecatz-wc' ),
-												esc_html( $shipment['package']['weight'] ),
-												esc_html( $shipment['package']['length'] ),
-												esc_html( $shipment['package']['width'] ),
-												esc_html( $shipment['package']['height'] )
-											);
+											echo esc_html( $shipment['package']['weight'] . ' kg' );
+											if ( isset( $shipment['package']['length'], $shipment['package']['width'], $shipment['package']['height'] ) ) {
+												echo esc_html( ' · ' . $shipment['package']['length'] . ' × ' . $shipment['package']['width'] . ' × ' . $shipment['package']['height'] . ' cm' );
+											} else {
+												echo ' · ' . esc_html__( 'estimated dimensions', 'lovecatz-wc' );
+											}
 											?>
+										</small>
+									<?php endif; ?>
+									<?php if ( ! empty( $shipment['service_type'] ) ) : ?>
+										<small class="lwc-fedex-shipment-service">
+											<?php echo esc_html( ( new LWC_FedEx_API() )->get_service_label( $shipment['service_type'] ) ); ?>
+										</small>
+									<?php endif; ?>
+									<?php if ( ! empty( $shipment['contents'] ) && is_array( $shipment['contents'] ) ) : ?>
+										<small class="lwc-fedex-shipment-contents">
+											<?php esc_html_e( 'Essential Oils', 'lovecatz-wc' ); ?>
 										</small>
 									<?php endif; ?>
 								</li>
@@ -310,15 +379,27 @@ class LWC_FedEx_Order_Admin {
 						<p><strong><?php esc_html_e( 'FedEx pickup', 'lovecatz-wc' ); ?></strong></p>
 						<?php if ( 'scheduled' === ( isset( $pickup['status'] ) ? $pickup['status'] : '' ) ) : ?>
 							<div class="lwc-fedex-pickup-summary">
+								<?php $pickup_id = isset( $pickup['pickup_id'] ) ? $pickup['pickup_id'] : ( isset( $pickup['confirmation_number'] ) ? $pickup['confirmation_number'] : '' ); ?>
+								<span class="lwc-fedex-pickup-summary__id">
+									<strong><?php esc_html_e( 'Pickup ID (confirmation):', 'lovecatz-wc' ); ?></strong>
+									<?php echo esc_html( $pickup_id ); ?>
+								</span>
+								<?php if ( ! empty( $pickup['location'] ) ) : ?>
+									<span class="lwc-fedex-pickup-summary__location">
+										<strong><?php esc_html_e( 'FedEx location code:', 'lovecatz-wc' ); ?></strong>
+										<?php echo esc_html( $pickup['location'] ); ?>
+									</span>
+								<?php endif; ?>
+								<span class="lwc-fedex-pickup-summary__schedule">
 								<?php
 								printf(
-									/* translators: 1: confirmation, 2: pickup date, 3: ready time */
-									esc_html__( 'Scheduled: %1$s on %2$s, ready at %3$s', 'lovecatz-wc' ),
-									esc_html( isset( $pickup['confirmation_number'] ) ? $pickup['confirmation_number'] : '' ),
+									/* translators: 1: pickup date, 2: ready time */
+									esc_html__( 'Scheduled for %1$s, ready at %2$s', 'lovecatz-wc' ),
 									esc_html( isset( $pickup['date'] ) ? $pickup['date'] : '' ),
 									esc_html( isset( $pickup['ready_time'] ) ? $pickup['ready_time'] : '' )
 								);
 								?>
+								</span>
 							</div>
 							<p><button type="button" class="button button-link-delete" id="lwc_fedex_cancel_pickup_btn"><?php esc_html_e( 'Cancel pickup', 'lovecatz-wc' ); ?></button></p>
 						<?php else : ?>
@@ -352,6 +433,7 @@ class LWC_FedEx_Order_Admin {
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'lwc_fedex_connection_check' ),
 			'order_id' => 0,
+			'currency' => get_option( 'woocommerce_currency', 'IDR' ),
 			'address'  => array(
 				'country'  => '',
 				'state'    => '',
@@ -369,8 +451,12 @@ class LWC_FedEx_Order_Admin {
 				'confirm_awb'   => __( 'Cancel AWB %s with FedEx? Its items will become available for a replacement label only after FedEx confirms cancellation.', 'lovecatz-wc' ),
 				'request_failed'=> __( 'The request could not be completed.', 'lovecatz-wc' ),
 				'no_items'      => __( 'Select at least one item to ship.', 'lovecatz-wc' ),
-				'package_incomplete' => __( 'Enter weight, length, width, and height together, or leave every carton field blank.', 'lovecatz-wc' ),
+				'package_incomplete' => __( 'Enter a custom weight. Dimensions may be blank, but length, width, and height must be entered together.', 'lovecatz-wc' ),
 				'package_invalid' => __( 'Carton weight and dimensions must be positive numbers.', 'lovecatz-wc' ),
+				'estimated_weight' => __( 'Product-derived weight', 'lovecatz-wc' ),
+				'select_product' => __( 'Choose a product before adding it.', 'lovecatz-wc' ),
+				'catalog_item' => __( '(catalog replacement)', 'lovecatz-wc' ),
+				'remove_item' => __( 'Remove', 'lovecatz-wc' ),
 				'tracking'      => __( 'Refreshing FedEx tracking…', 'lovecatz-wc' ),
 				'tracking_ok'   => __( 'Tracking updated.', 'lovecatz-wc' ),
 				'pickup_check'  => __( 'Checking FedEx pickup availability…', 'lovecatz-wc' ),
@@ -627,6 +713,7 @@ class LWC_FedEx_Order_Admin {
 				$pickup,
 				array(
 					'status'              => 'scheduled',
+					'pickup_id'           => isset( $result['pickup_id'] ) ? $result['pickup_id'] : $result['confirmation_number'],
 					'confirmation_number' => $result['confirmation_number'],
 					'location'            => isset( $result['location'] ) ? $result['location'] : '',
 					'created_at'          => current_time( 'mysql' ),
@@ -634,7 +721,14 @@ class LWC_FedEx_Order_Admin {
 			);
 			$order->update_meta_data( '_lwc_fedex_pickup', $record );
 			$order->delete_meta_data( '_lwc_fedex_pickup_availability' );
-			$order->add_order_note( sprintf( __( 'FedEx pickup scheduled. Confirmation: %s', 'lovecatz-wc' ), $record['confirmation_number'] ) );
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: pickup confirmation number, 2: FedEx location code. */
+					__( 'FedEx pickup scheduled. Pickup ID (confirmation): %1$s. Location code: %2$s', 'lovecatz-wc' ),
+					$record['pickup_id'],
+					'' !== $record['location'] ? $record['location'] : '-'
+				)
+			);
 			$order->save();
 		}
 		unset( $result['response'] );
@@ -657,7 +751,8 @@ class LWC_FedEx_Order_Admin {
 			$pickup['status'] = 'cancelled';
 			$pickup['cancelled_at'] = current_time( 'mysql' );
 			$order->update_meta_data( '_lwc_fedex_pickup', $pickup );
-			$order->add_order_note( sprintf( __( 'FedEx pickup cancelled. Confirmation: %s', 'lovecatz-wc' ), $pickup['confirmation_number'] ) );
+			$pickup_id = isset( $pickup['pickup_id'] ) ? $pickup['pickup_id'] : ( isset( $pickup['confirmation_number'] ) ? $pickup['confirmation_number'] : '' );
+			$order->add_order_note( sprintf( __( 'FedEx pickup cancelled. Pickup ID (confirmation): %s', 'lovecatz-wc' ), $pickup_id ) );
 			$order->save();
 		}
 		unset( $result['response'] );

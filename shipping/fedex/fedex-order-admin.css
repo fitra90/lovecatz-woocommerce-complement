@@ -8,6 +8,18 @@
 	margin: 8px 0;
 }
 
+.lwc-fedex-service-field {
+	display: grid;
+	gap: 4px;
+	margin: 8px 0;
+	font-weight: 600;
+}
+
+.lwc-fedex-service-field select {
+	width: 100%;
+	max-width: 100%;
+}
+
 .lwc-fedex-package-fields {
 	display: grid;
 	gap: 7px;
@@ -41,14 +53,88 @@
 }
 
 .lwc-fedex-item {
-	display: block;
-	margin: 2px 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 0;
+	padding: 6px 0;
+	border-bottom: 1px solid #f0f0f1;
 	font-weight: 400;
+}
+
+.lwc-fedex-item > input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0;
+}
+
+.lwc-fedex-item label,
+.lwc-fedex-item span {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.lwc-fedex-item label {
+	font-weight: 400;
+}
+
+.lwc-fedex-item.is-catalog em {
+	color: #646970;
+	font-size: 11px;
 }
 
 .lwc-fedex-item.is-shipped {
 	color: #646970;
 	text-decoration: line-through;
+}
+
+.lwc-fedex-add-item {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	margin-top: 9px;
+	box-sizing: border-box;
+}
+
+.lwc-fedex-product-search-wrap,
+.lwc-fedex-product-search-wrap select,
+.lwc-fedex-product-search-wrap .select2-container {
+	display: block;
+	width: 100% !important;
+	max-width: 100% !important;
+	min-width: 0 !important;
+	box-sizing: border-box;
+}
+
+.lwc-fedex-product-search-wrap .select2-selection--single {
+	width: 100%;
+	min-height: 36px;
+	box-sizing: border-box;
+}
+
+.lwc-fedex-product-search-wrap .select2-selection__rendered {
+	max-width: 100%;
+	padding-right: 28px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#lwc_fedex_add_package_item.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	max-width: 100%;
+	min-height: 36px;
+	margin: 0;
+	box-sizing: border-box;
+	line-height: 1.2;
+	white-space: nowrap;
 }
 
 .lwc-fedex-shipments ul {
@@ -68,9 +154,16 @@
 	margin-left: 4px;
 }
 
-.lwc-fedex-shipment-package {
+.lwc-fedex-shipment-package,
+.lwc-fedex-shipment-service {
 	display: block;
 	margin-top: 2px;
+}
+
+.lwc-fedex-shipment-contents {
+	display: block;
+	margin-top: 2px;
+	color: #646970;
 }
 
 .lwc-fedex-order-status {
@@ -117,6 +210,15 @@
 	border: 1px solid #dcdcde;
 	border-radius: 5px;
 	background: #fff;
+}
+
+.lwc-fedex-pickup-summary > span {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.lwc-fedex-pickup-summary > span:last-child {
+	margin-bottom: 0;
 }
 
 .lwc-fedex-track-card + .lwc-fedex-track-card {

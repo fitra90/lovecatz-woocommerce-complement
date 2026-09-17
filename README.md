@@ -12,11 +12,20 @@
   - Allow all products, or only products selected through a searchable selector, to be ordered while out of stock.
   - Pre-order status is retained in the cart, Checkout Blocks, and order line items.
 
+- **International Order Handling**
+  - Add an optional fixed or percentage handling fee when checkout uses USD, the shipping country is outside Indonesia, or both.
+  - Supports OR/AND matching and stays unavailable unless the official WooCommerce PayPal Payments gateway is enabled.
+  - Eligibility is independent of the payment method selected by the shopper.
+
 - **User Import & Membership Management**  
   - Bulk import users via CSV/Excel with custom fields.  
   - Automatic membership assignment based on user roles or purchased products.  
   - **Digital membership card** generation for each member (PDF/PNG).  
   - Manage membership levels, expiration dates, and renewal reminders.
+
+- **Completed Order Reviews**
+  - Optional Review tab setting adds product review buttons to completed orders in My Account.
+  - Each button opens the purchased product's review section.
 
 ### 🛠️ In Progress
 
@@ -52,9 +61,10 @@
 ## 🧑‍💻 Usage
 
 ### User Import
-- Prepare a CSV file with columns: `email`, `first_name`, `last_name`, `role`, `membership_level`.
-- Go to **All in One → Import Users**, upload the file, and map the columns.
-- The plugin will create/update users and assign membership cards automatically.
+- Download the Excel template from **LoveCatz → Members**; it includes standard WordPress user fields and a role dropdown using the roles available on the site.
+- Upload the completed CSV/XLS/XLSX file and choose a default role for rows whose `Role` cell is empty.
+- The importer creates only new users. Email and name are required; every other column may be empty. Existing email addresses are skipped.
+- Set and save the default password beside the import form before importing users.
 
 ### Membership Cards
 - Each member gets a unique card (customizable via **All in One → Card Settings**).
