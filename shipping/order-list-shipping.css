@@ -167,6 +167,39 @@
 	font-size: 11px;
 }
 
+.lwc-shipping-modal .lwc-fedex-track-card p {
+	margin: 8px 0;
+}
+
+.lwc-shipping-modal .lwc-fedex-track-events {
+	margin: 8px 0 0 22px;
+}
+
+.lwc-shipping-modal .lwc-fedex-track-events li {
+	margin-bottom: 10px;
+}
+
+.lwc-shipping-modal .lwc-fedex-track-events li > * + * {
+	margin-top: 4px;
+}
+
+.lwc-shipping-modal .lwc-fedex-track-events time,
+.lwc-shipping-modal .lwc-fedex-track-events strong,
+.lwc-shipping-modal .lwc-fedex-track-events span,
+.lwc-shipping-modal .lwc-fedex-track-event-time,
+.lwc-shipping-modal .lwc-fedex-track-event-status,
+.lwc-shipping-modal .lwc-fedex-track-event-location {
+	display: block;
+}
+
+.lwc-shipping-modal .lwc-fedex-track-events time,
+.lwc-shipping-modal .lwc-fedex-track-events span,
+.lwc-shipping-modal .lwc-fedex-track-event-time,
+.lwc-shipping-modal .lwc-fedex-track-event-location {
+	color: #50575e;
+	font-size: 12px;
+}
+
 @media (max-width: 782px) {
 	.lwc-pickup-grid {
 		grid-template-columns: 1fr;

@@ -162,8 +162,12 @@ class LWC_Order_List_Shipping {
 		if ( ! $screen || ! in_array( $screen->id, array( 'edit-shop_order', 'woocommerce_page_wc-orders' ), true ) ) {
 			return;
 		}
-		wp_enqueue_style( 'lwc-order-list-shipping', LWC_PLUGIN_URL . 'shipping/order-list-shipping.css', array(), LWC_VERSION );
-		wp_enqueue_script( 'lwc-order-list-shipping', LWC_PLUGIN_URL . 'shipping/order-list-shipping.js', array( 'jquery' ), LWC_VERSION, true );
+		$style_path = LWC_PLUGIN_DIR . 'shipping/order-list-shipping.css';
+		$script_path = LWC_PLUGIN_DIR . 'shipping/order-list-shipping.js';
+		wp_enqueue_style( 'lwc-order-list-shipping', LWC_PLUGIN_URL . 'shipping/order-list-shipping.css', array(), file_exists( $style_path ) ? (string) filemtime( $style_path ) : LWC_VERSION );
+		$tracking_script_path = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-tracking.js';
+		wp_enqueue_script( 'lwc-fedex-tracking-time', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.js', array(), file_exists( $tracking_script_path ) ? (string) filemtime( $tracking_script_path ) : LWC_VERSION, true );
+		wp_enqueue_script( 'lwc-order-list-shipping', LWC_PLUGIN_URL . 'shipping/order-list-shipping.js', array( 'jquery', 'lwc-fedex-tracking-time' ), file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION, true );
 		wp_localize_script( 'lwc-order-list-shipping', 'lwcOrderShipping', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonces'  => array( 'jt' => wp_create_nonce( 'lwc_jt_order' ), 'fedex' => wp_create_nonce( 'lwc_fedex_connection_check' ), 'rayspeed' => wp_create_nonce( 'lwc_rayspeed_order' ) ),

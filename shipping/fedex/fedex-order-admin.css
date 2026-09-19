@@ -246,14 +246,23 @@
 	margin-bottom: 8px;
 }
 
+.lwc-fedex-track-events li > * + * {
+	margin-top: 3px;
+}
+
 .lwc-fedex-track-events time,
 .lwc-fedex-track-events strong,
-.lwc-fedex-track-events span {
+.lwc-fedex-track-events span,
+.lwc-fedex-track-event-time,
+.lwc-fedex-track-event-status,
+.lwc-fedex-track-event-location {
 	display: block;
 }
 
 .lwc-fedex-track-events time,
-.lwc-fedex-track-events span {
+.lwc-fedex-track-events span,
+.lwc-fedex-track-event-time,
+.lwc-fedex-track-event-location {
 	font-size: 11px;
 	color: #646970;
 }

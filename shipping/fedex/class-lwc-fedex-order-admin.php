@@ -64,11 +64,14 @@ class LWC_FedEx_Order_Admin {
 
 		$style_path     = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-order-admin.css';
 		$script_path    = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-order-admin.js';
+		$tracking_script_path = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-tracking.js';
 		$style_version  = file_exists( $style_path ) ? (string) filemtime( $style_path ) : LWC_VERSION;
 		$script_version = file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION;
+		$tracking_script_version = file_exists( $tracking_script_path ) ? (string) filemtime( $tracking_script_path ) : LWC_VERSION;
 		wp_enqueue_style( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.css', array(), $style_version );
 		wp_enqueue_script( 'wc-enhanced-select' );
-		wp_enqueue_script( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.js', array( 'jquery', 'wc-enhanced-select' ), $script_version, true );
+		wp_enqueue_script( 'lwc-fedex-tracking-time', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.js', array(), $tracking_script_version, true );
+		wp_enqueue_script( 'lwc-fedex-order-admin', LWC_PLUGIN_URL . 'shipping/fedex/fedex-order-admin.js', array( 'jquery', 'wc-enhanced-select', 'lwc-fedex-tracking-time' ), $script_version, true );
 		wp_localize_script( 'lwc-fedex-order-admin', 'lwcFedexOrder', $this->get_script_config() );
 	}
 
@@ -107,7 +110,10 @@ class LWC_FedEx_Order_Admin {
 	 */
 	public function enqueue_customer_assets() {
 		if ( function_exists( 'is_account_page' ) && is_account_page() ) {
-			wp_enqueue_style( 'lwc-fedex-tracking', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.css', array(), LWC_VERSION );
+			$style_path  = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-tracking.css';
+			$script_path = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-tracking.js';
+			wp_enqueue_style( 'lwc-fedex-tracking', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.css', array(), file_exists( $style_path ) ? (string) filemtime( $style_path ) : LWC_VERSION );
+			wp_enqueue_script( 'lwc-fedex-tracking-time', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.js', array(), file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION, true );
 		}
 	}
 
@@ -918,13 +924,18 @@ class LWC_FedEx_Order_Admin {
 					<a href="<?php echo esc_url( 'https://www.fedex.com/fedextrack/?trknbr=' . rawurlencode( $number ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $number ); ?></a>
 				</div>
 				<?php if ( ! empty( $track['location'] ) ) : ?><p><?php echo esc_html( $track['location'] ); ?></p><?php endif; ?>
-				<?php if ( $eta ) : ?><p><strong><?php echo esc_html( ! empty( $track['actual_delivery'] ) ? __( 'Delivered:', 'lovecatz-wc' ) : __( 'Estimated delivery:', 'lovecatz-wc' ) ); ?></strong> <?php echo esc_html( $this->format_tracking_date( $eta ) ); ?></p><?php endif; ?>
+				<?php if ( $eta ) : ?><p><strong><?php echo esc_html( ! empty( $track['actual_delivery'] ) ? __( 'Delivered:', 'lovecatz-wc' ) : __( 'Estimated delivery:', 'lovecatz-wc' ) ); ?></strong> <?php echo $this->get_local_tracking_time_html( $eta ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p><?php endif; ?>
 				<?php if ( ! empty( $track['events'] ) ) : ?>
 					<details <?php echo $compact ? '' : 'open'; ?>>
 						<summary><?php esc_html_e( 'Tracking history', 'lovecatz-wc' ); ?></summary>
 						<ol class="lwc-fedex-track-events">
 							<?php foreach ( $track['events'] as $event ) : ?>
-								<li><time><?php echo esc_html( $this->format_tracking_date( isset( $event['date'] ) ? $event['date'] : '' ) ); ?></time><strong><?php echo esc_html( isset( $event['description'] ) ? $event['description'] : '' ); ?></strong><?php if ( ! empty( $event['location'] ) ) : ?><span><?php echo esc_html( $event['location'] ); ?></span><?php endif; ?><?php if ( ! empty( $event['exception'] ) ) : ?><span class="lwc-fedex-track-exception"><?php echo esc_html( $event['exception'] ); ?></span><?php endif; ?></li>
+								<li>
+									<div class="lwc-fedex-track-event-time"><?php echo $this->get_local_tracking_time_html( isset( $event['date'] ) ? $event['date'] : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+									<div class="lwc-fedex-track-event-status"><strong><?php echo esc_html( isset( $event['description'] ) ? $event['description'] : '' ); ?></strong></div>
+									<?php if ( ! empty( $event['location'] ) ) : ?><div class="lwc-fedex-track-event-location"><?php echo esc_html( $event['location'] ); ?></div><?php endif; ?>
+									<?php if ( ! empty( $event['exception'] ) ) : ?><div class="lwc-fedex-track-exception"><?php echo esc_html( $event['exception'] ); ?></div><?php endif; ?>
+								</li>
 							<?php endforeach; ?>
 						</ol>
 					</details>
@@ -945,5 +956,19 @@ class LWC_FedEx_Order_Admin {
 	private function format_tracking_date( $value ) {
 		$timestamp = strtotime( (string) $value );
 		return $timestamp ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $timestamp ) : (string) $value;
+	}
+
+	/** Build a safe time element that the browser converts to its local timezone. */
+	private function get_local_tracking_time_html( $value ) {
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return '';
+		}
+
+		return sprintf(
+			'<time class="lwc-fedex-local-time" datetime="%1$s">%2$s</time>',
+			esc_attr( $value ),
+			esc_html( $this->format_tracking_date( $value ) )
+		);
 	}
 }

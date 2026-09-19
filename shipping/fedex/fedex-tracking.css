@@ -33,14 +33,23 @@
 	padding-left: .75rem;
 }
 
+.lwc-fedex-customer-tracking .lwc-fedex-track-events li > * + * {
+	margin-top: .25rem;
+}
+
 .lwc-fedex-customer-tracking .lwc-fedex-track-events time,
 .lwc-fedex-customer-tracking .lwc-fedex-track-events strong,
-.lwc-fedex-customer-tracking .lwc-fedex-track-events span {
+.lwc-fedex-customer-tracking .lwc-fedex-track-events span,
+.lwc-fedex-customer-tracking .lwc-fedex-track-event-time,
+.lwc-fedex-customer-tracking .lwc-fedex-track-event-status,
+.lwc-fedex-customer-tracking .lwc-fedex-track-event-location {
 	display: block;
 }
 
 .lwc-fedex-customer-tracking .lwc-fedex-track-events time,
-.lwc-fedex-customer-tracking .lwc-fedex-track-events span {
+.lwc-fedex-customer-tracking .lwc-fedex-track-events span,
+.lwc-fedex-customer-tracking .lwc-fedex-track-event-time,
+.lwc-fedex-customer-tracking .lwc-fedex-track-event-location {
 	font-size: .875em;
 	opacity: .75;
 }

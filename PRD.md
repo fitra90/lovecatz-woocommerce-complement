@@ -177,6 +177,8 @@ FedEx courier pickup is a two-step Production-only flow. **Check availability** 
 
 Order fulfillment metaboxes are provider-specific: FedEx controls and assets load only when an order shipping item has method ID `lwc_fedex`, while RaySpeed controls and assets load only for `lwc_rayspeed`. J&T orders therefore do not display unrelated FedEx or RaySpeed settings. This routing reads the order's shipping items and supports both classic and HPOS order screens.
 
+FedEx ETA and scan-event timestamps retain the offset supplied by FedEx in semantic `<time datetime>` markup and are formatted in the accessing browser's local computer timezone using a 24-hour clock and a short timezone label. This applies to the order-list tracking modal, the order metabox, and customer My Account tracking. Each event uses separate block rows for time, shipment status, and location so the details never run together.
+
 ### Built-in currency converter
 
 `LWC_Currency_Converter` (Currency tab) switches the shop between the base currency and manually configured targets. Rates use one line per currency, `CODE=rate`, where rate is base-currency units per one unit of the target (`USD=16500` means 1 USD = 16,500 IDR; conversion divides). Shoppers switch with `?currency=USD`, persisted in a 30-day `lwc_currency` cookie.
