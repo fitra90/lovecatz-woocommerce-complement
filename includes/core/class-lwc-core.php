@@ -238,7 +238,6 @@ class LWC_Core {
 	public function register_shipping_methods( $methods ) {
 		LWC_Logger::log( 'Registering shipping methods.', 'info' );
 		$methods['lwc_jt_express'] = 'LWC_Shipping_JT_Express';
-		$methods['lwc_jt_cargo'] = 'LWC_Shipping_JT_Cargo';
 		// Legacy alias: pre-split J&T zone instances keep working as Express.
 		$methods['lwc_jt'] = 'LWC_Shipping_JT_Express';
 		$methods['lwc_fedex'] = 'LWC_Shipping_FedEx';

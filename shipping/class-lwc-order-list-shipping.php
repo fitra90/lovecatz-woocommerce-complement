@@ -105,7 +105,17 @@ class LWC_Order_List_Shipping {
 			$this->action_button( 'track', 'dashicons-location-alt', __( 'Tracking', 'lovecatz-wc' ) );
 		}
 		if ( 'jt_cargo' === $provider ) {
-			echo '<span class="lwc-action-unavailable" title="' . esc_attr__( 'J&T Cargo AWB and tracking API are not configured.', 'lovecatz-wc' ) . '">—</span>';
+			$cargo_awb = $order->get_meta( '_lwc_jt_cargo_awb' );
+			if ( '' !== (string) $cargo_awb && class_exists( 'LWC_JTC_Label' ) ) {
+				$print_url = LWC_JTC_Label::get_print_url( $order->get_id() );
+				echo '<a class="button lwc-shipping-action" href="' . esc_url( $print_url ) . '" target="_blank" rel="noopener" title="' . esc_attr__( 'Print J&T Cargo label', 'lovecatz-wc' ) . '"><span class="dashicons dashicons-printer" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'Print label', 'lovecatz-wc' ) . '</span></a>';
+
+				// Live tracking: rendered entirely from the carrier response.
+				$track_url = LWC_JTC_Label::get_track_url( $order->get_id() );
+				echo '<a class="button lwc-shipping-action" href="' . esc_url( $track_url ) . '" target="_blank" rel="noopener" title="' . esc_attr__( 'Track J&T Cargo shipment', 'lovecatz-wc' ) . '"><span class="dashicons dashicons-location-alt" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'Tracking', 'lovecatz-wc' ) . '</span></a>';
+			} else {
+				echo '<span class="lwc-action-unavailable" title="' . esc_attr__( 'J&T Cargo AWB is not assigned yet.', 'lovecatz-wc' ) . '">—</span>';
+			}
 		}
 		echo '</span>';
 	}
@@ -159,7 +169,11 @@ class LWC_Order_List_Shipping {
 
 	public function enqueue_assets( $hook ) {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || ! in_array( $screen->id, array( 'edit-shop_order', 'woocommerce_page_wc-orders' ), true ) ) {
+		// Order lists plus the single order screens: the "Change Shipping"
+		// metabox reuses the create-AWB handler defined by this script, and on
+		// HPOS the list and the single order share the wc-orders screen id.
+		$screens = array( 'edit-shop_order', 'shop_order', 'woocommerce_page_wc-orders' );
+		if ( ! $screen || ! in_array( $screen->id, $screens, true ) ) {
 			return;
 		}
 		$style_path = LWC_PLUGIN_DIR . 'shipping/order-list-shipping.css';

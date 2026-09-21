@@ -12,53 +12,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * J&T Express parcel courier. Separate API provider from J&T Cargo.
  */
-class LWC_Shipping_JT_Express extends LWC_Shipping_JT_Base {
+class LWC_Shipping_JT_Express extends WC_Shipping_Method {
 
-	/**
-	 * Provider slug.
-	 *
-	 * @var string
-	 */
-	protected $provider = 'express';
-
-	/**
-	 * Express parcels auto-split above this weight by default.
-	 *
-	 * @var float
-	 */
-	protected $default_threshold_kg = 10;
-
-	/**
-	 * Provider identity and copy.
-	 *
-	 * @return array
-	 */
-	protected function get_provider_config() {
-		return array(
-			'title'                => __( 'J&T Express', 'lovecatz-wc' ),
-			'description'          => __( 'J&T Express shipping method for regular parcel delivery', 'lovecatz-wc' ),
-			'checkout_description' => __( 'Deliver via J&T Express', 'lovecatz-wc' ),
-			'weight_description'   => sprintf(
-				/* translators: %s: weight limit */
-				__( 'Parcels heavier than this are split into multiple packages. Capped at the J&T Express limit of %s kg.', 'lovecatz-wc' ),
-				'100'
-			),
-		);
-	}
-
-	/**
-	 * Carrier-specific maximum weight per package in kilograms.
-	 *
-	 * @return float
-	 */
-	protected function get_provider_weight_ceiling() {
-		return (float) apply_filters( 'lwc_jt_express_package_weight_ceiling_kg', 100 );
+	public function __construct( $instance_id = 0 ) {
+		$this->id                 = 'lwc_jt_express';
+		$this->instance_id        = absint( $instance_id );
+		$this->method_title       = __( 'J&T Express', 'lovecatz-wc' );
+		$this->method_description = __( 'J&T Express shipping method for regular parcel delivery', 'lovecatz-wc' );
+		$this->supports           = array( 'shipping-zones', 'instance-settings' );
+		parent::__construct( $instance_id );
+		$this->init_form_fields();
+		$this->init_settings();
+		$this->title = $this->get_option( 'title', $this->method_title );
 	}
 
 	/** Express price and parcel rules come from the live provider settings. */
 	public function init_form_fields() {
-		parent::init_form_fields();
-		unset( $this->form_fields['description'], $this->form_fields['flat_cost'], $this->form_fields['max_package_weight_kg'] );
+		$this->form_fields = array(
+			'enabled' => array( 'title' => __( 'Enable/Disable', 'lovecatz-wc' ), 'type' => 'checkbox', 'label' => __( 'Enable J&T Express Shipping', 'lovecatz-wc' ), 'default' => 'no' ),
+			'title' => array( 'title' => __( 'Method Title', 'lovecatz-wc' ), 'type' => 'text', 'default' => __( 'J&T Express', 'lovecatz-wc' ) ),
+		);
+	}
+
+	/** Restrict J&T Express to its configured Indonesian service area. */
+	public function is_available( $package = array() ) {
+		$country = isset( $package['destination']['country'] ) ? strtoupper( trim( (string) $package['destination']['country'] ) ) : '';
+		if ( 'ID' !== $country || 'yes' !== get_option( 'lwc_jt_express_enabled', 'no' ) ) {
+			return false;
+		}
+		if ( 'java' === get_option( 'lwc_jt_express_service_area', 'indonesia' ) && ! self::is_java_destination( $package ) ) {
+			return false;
+		}
+		return 0 === $this->instance_id ? true : parent::is_available( $package );
+	}
+
+	/** Determine whether a destination belongs to one of Java's six provinces. */
+	public static function is_java_destination( $package ) {
+		$destination = isset( $package['destination'] ) ? (array) $package['destination'] : array();
+		$country = isset( $destination['country'] ) ? strtoupper( trim( (string) $destination['country'] ) ) : '';
+		if ( 'ID' !== $country ) {
+			return false;
+		}
+		$state = isset( $destination['state'] ) ? strtoupper( trim( (string) $destination['state'] ) ) : '';
+		$state = trim( preg_replace( '/[^A-Z0-9]+/', ' ', preg_replace( '/^ID[-_]/', '', $state ) ) );
+		return in_array( $state, array( 'BT', 'JK', 'JB', 'JT', 'YO', 'JI', 'BANTEN', 'DKI JAKARTA', 'JAKARTA', 'JAWA BARAT', 'JAWA TENGAH', 'JAWA TIMUR', 'DI YOGYAKARTA', 'DAERAH ISTIMEWA YOGYAKARTA', 'DIY', 'YOGYAKARTA' ), true );
 	}
 
 	/** Calculate live J&T rates for a zone instance. */

@@ -30,6 +30,7 @@ class LWC_Promo_Admin {
 		$coupon = $this->get_requested_coupon();
 		$editing = $coupon instanceof WC_Coupon && $coupon->get_id();
 		$values = $this->get_form_values( $coupon );
+		$combination_coupons = $this->get_combination_coupon_options( $values['id'] );
 		?>
 		<div class="lwc-promo-manager">
 			<div class="lwc-promo-manager-heading">
@@ -61,7 +62,23 @@ class LWC_Promo_Admin {
 					<label class="lwc-promo-image-field"><span><?php esc_html_e( 'Disabled card image', 'lovecatz-wc' ); ?></span><input type="hidden" id="lwc_promo_disabled_image_id" name="disabled_image_id" value="<?php echo esc_attr( $values['disabled_image_id'] ); ?>" /><button type="button" class="button lwc-promo-image-select" data-target="#lwc_promo_disabled_image_id"><?php esc_html_e( 'Choose image', 'lovecatz-wc' ); ?></button><?php $this->render_image_preview( $values['disabled_image_id'] ); ?><small><?php esc_html_e( 'Shown for expired or fully used coupons.', 'lovecatz-wc' ); ?></small></label>
 				</div>
 				<p><label><input type="checkbox" name="coupon_active" value="yes" <?php checked( $values['active'] ); ?> /> <?php esc_html_e( 'Active coupon', 'lovecatz-wc' ); ?></label><br /><small><?php esc_html_e( 'Inactive coupons remain saved in the admin list but cannot be applied and are hidden from checkout.', 'lovecatz-wc' ); ?></small></p>
-				<p><label><input type="checkbox" name="individual_use" value="yes" <?php checked( $values['individual_use'], 'yes' ); ?> /> <?php esc_html_e( 'Cannot be combined with other coupons', 'lovecatz-wc' ); ?></label></p>
+				<div class="lwc-promo-combination-field">
+					<label class="lwc-promo-combination-toggle"><input type="checkbox" name="allow_combination" id="lwc_promo_allow_combination" value="yes" <?php checked( $values['allow_combination'] ); ?> aria-controls="lwc_promo_combination_coupons" /> <strong><?php esc_html_e( 'Allow combination', 'lovecatz-wc' ); ?></strong></label>
+					<p class="description"><?php esc_html_e( 'Allow this coupon to be paired only with the selected coupons. Saving also updates the reciprocal pairing rule.', 'lovecatz-wc' ); ?></p>
+					<div id="lwc_promo_combination_coupons" class="lwc-promo-combination-coupons" <?php echo $values['allow_combination'] ? '' : 'hidden'; ?>>
+						<?php if ( empty( $combination_coupons ) ) : ?>
+							<p class="description"><?php esc_html_e( 'No other coupons are available yet. New coupons will be allowed by default.', 'lovecatz-wc' ); ?></p>
+						<?php else : ?>
+							<div class="lwc-promo-combination-actions"><button type="button" class="button-link lwc-promo-combination-all"><?php esc_html_e( 'Select all', 'lovecatz-wc' ); ?></button><span aria-hidden="true"> · </span><button type="button" class="button-link lwc-promo-combination-none"><?php esc_html_e( 'Clear all', 'lovecatz-wc' ); ?></button></div>
+							<div class="lwc-promo-combination-list">
+								<?php foreach ( $combination_coupons as $combination_coupon ) : ?>
+									<?php $combination_checked = $combination_coupon['allows_current'] && ( 'all' === $values['combination_coupon_ids'] || in_array( $combination_coupon['id'], (array) $values['combination_coupon_ids'], true ) ); ?>
+									<label><input type="checkbox" name="combination_coupon_ids[]" value="<?php echo esc_attr( $combination_coupon['id'] ); ?>" <?php checked( $combination_checked ); ?> <?php disabled( ! $combination_coupon['allows_combination'] ); ?> /> <span><?php echo esc_html( $combination_coupon['code'] ); ?><?php echo $combination_coupon['allows_combination'] ? '' : ' — ' . esc_html__( 'combination disabled', 'lovecatz-wc' ); ?></span></label>
+								<?php endforeach; ?>
+							</div>
+						<?php endif; ?>
+					</div>
+				</div>
 				<?php submit_button( $editing ? __( 'Update coupon', 'lovecatz-wc' ) : __( 'Create coupon', 'lovecatz-wc' ), 'primary', 'submit', false ); ?>
 			</form>
 			<h2><?php esc_html_e( 'Promo coupons', 'lovecatz-wc' ); ?></h2>
@@ -120,6 +137,13 @@ class LWC_Promo_Admin {
 		$usage_limit    = isset( $_POST['usage_limit'] ) ? max( 0, (int) wp_unslash( $_POST['usage_limit'] ) ) : 0;
 		$per_user_limit = isset( $_POST['usage_limit_per_user'] ) ? max( 0, (int) wp_unslash( $_POST['usage_limit_per_user'] ) ) : 0;
 		$maximum        = isset( $_POST['maximum_discount'] ) ? max( 0, (int) wp_unslash( $_POST['maximum_discount'] ) ) : 0;
+		$allow_combination = isset( $_POST['allow_combination'] );
+		$combination_options = $this->get_combination_coupon_options( $id );
+		$available_combination_ids = array_values( array_column( array_filter( $combination_options, function( $option ) { return $option['allows_combination']; } ), 'id' ) );
+		$submitted_combination_ids = isset( $_POST['combination_coupon_ids'] ) && is_array( $_POST['combination_coupon_ids'] )
+			? array_values( array_intersect( $available_combination_ids, array_map( 'absint', wp_unslash( $_POST['combination_coupon_ids'] ) ) ) )
+			: array();
+		$combination_ids = count( $submitted_combination_ids ) === count( $available_combination_ids ) ? 'all' : $submitted_combination_ids;
 
 		try {
 			$coupon->set_code( $code );
@@ -127,7 +151,7 @@ class LWC_Promo_Admin {
 			$coupon->set_amount( $amount );
 			$coupon->set_status( $active ? 'publish' : 'draft' );
 			$coupon->set_free_shipping( false );
-			$coupon->set_individual_use( isset( $_POST['individual_use'] ) );
+			$coupon->set_individual_use( ! $allow_combination );
 			$coupon->set_usage_limit( $usage_limit );
 			$coupon->set_usage_limit_per_user( $per_user_limit );
 			$coupon->set_email_restrictions( $emails );
@@ -140,6 +164,9 @@ class LWC_Promo_Admin {
 			update_post_meta( $id, '_lwc_promo_maximum_discount', in_array( $type, array( 'percent', 'lwc_free_shipping' ), true ) && $maximum > 0 ? $maximum : '' );
 			update_post_meta( $id, '_lwc_promo_active_image_id', isset( $_POST['active_image_id'] ) ? absint( $_POST['active_image_id'] ) : 0 );
 			update_post_meta( $id, '_lwc_promo_disabled_image_id', isset( $_POST['disabled_image_id'] ) ? absint( $_POST['disabled_image_id'] ) : 0 );
+			update_post_meta( $id, '_lwc_promo_allow_combination', $allow_combination ? 'yes' : 'no' );
+			update_post_meta( $id, '_lwc_promo_combination_coupon_ids', $allow_combination ? $combination_ids : array() );
+			$this->synchronize_combination_partners( $id, $allow_combination ? $submitted_combination_ids : array(), $available_combination_ids );
 		} catch ( Throwable $error ) {
 			if ( class_exists( 'LWC_Logger' ) ) {
 				LWC_Logger::log( 'Unable to save promo coupon: ' . $error->getMessage(), 'error' );
@@ -228,6 +255,9 @@ class LWC_Promo_Admin {
 		$type              = $coupon ? $coupon->get_discount_type() : 'percent';
 		$amount            = $coupon ? $coupon->get_amount() : '';
 		$eligible_user_ids = $id ? $this->normalize_user_ids( get_post_meta( $id, '_lwc_promo_eligible_user_ids', true ) ) : array();
+		$allow_combination = $id && metadata_exists( 'post', $id, '_lwc_promo_allow_combination' )
+			? 'yes' === get_post_meta( $id, '_lwc_promo_allow_combination', true )
+			: ( ! $coupon || ! $coupon->get_individual_use() );
 
 		return array(
 			'id'                  => $id,
@@ -242,10 +272,75 @@ class LWC_Promo_Admin {
 			'usage_limit'         => $coupon ? $coupon->get_usage_limit() : 0,
 			'usage_limit_per_user' => $coupon ? $coupon->get_usage_limit_per_user() : 0,
 			'active'              => ! $coupon || 'publish' === $coupon->get_status(),
-			'individual_use'      => $coupon && $coupon->get_individual_use() ? 'yes' : 'no',
+			'allow_combination'   => $allow_combination,
+			'combination_coupon_ids' => $id && metadata_exists( 'post', $id, '_lwc_promo_combination_coupon_ids' ) ? get_post_meta( $id, '_lwc_promo_combination_coupon_ids', true ) : 'all',
 			'active_image_id'     => $id ? absint( get_post_meta( $id, '_lwc_promo_active_image_id', true ) ) : 0,
 			'disabled_image_id'   => $id ? absint( get_post_meta( $id, '_lwc_promo_disabled_image_id', true ) ) : 0,
 		);
+	}
+
+	/** Return every non-trashed coupon that may be selected as a combination partner. */
+	private function get_combination_coupon_options( $exclude_id = 0 ) {
+		$posts = get_posts(
+			array(
+				'post_type'      => 'shop_coupon',
+				'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
+				'posts_per_page' => -1,
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+				'exclude'        => $exclude_id ? array( absint( $exclude_id ) ) : array(),
+			)
+		);
+
+		return array_map(
+			function( $post ) use ( $exclude_id ) {
+				$coupon = new WC_Coupon( $post->ID );
+				$allows_combination = class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::allows_combination( $coupon ) : ! $coupon->get_individual_use();
+				$allowed_ids = class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::get_combination_coupon_ids( $coupon ) : null;
+				return array(
+					'id'                 => (int) $post->ID,
+					'code'               => (string) $post->post_title,
+					'allows_combination' => $allows_combination,
+					'allows_current'     => ! $exclude_id || null === $allowed_ids || in_array( (int) $exclude_id, $allowed_ids, true ),
+				);
+			},
+			$posts
+		);
+	}
+
+	/** Keep pair permissions symmetrical so the order coupons are applied cannot change the result. */
+	private function synchronize_combination_partners( $coupon_id, $selected_ids, $available_ids ) {
+		$selected_ids = array_map( 'absint', $selected_ids );
+		$all_coupon_ids = get_posts(
+			array(
+				'post_type'      => 'shop_coupon',
+				'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			)
+		);
+
+		foreach ( $available_ids as $partner_id ) {
+			$partner = new WC_Coupon( $partner_id );
+			if ( ! $partner->get_id() || ( class_exists( 'LWC_Promo_Discounts' ) && ! LWC_Promo_Discounts::allows_combination( $partner ) ) ) {
+				continue;
+			}
+
+			$selected = in_array( $partner_id, $selected_ids, true );
+			$partner_ids = class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::get_combination_coupon_ids( $partner ) : null;
+			if ( null === $partner_ids ) {
+				if ( $selected ) {
+					continue;
+				}
+				$partner_ids = array_values( array_diff( array_map( 'absint', $all_coupon_ids ), array( $partner_id, $coupon_id ) ) );
+			} elseif ( $selected ) {
+				$partner_ids[] = $coupon_id;
+			} else {
+				$partner_ids = array_diff( $partner_ids, array( $coupon_id ) );
+			}
+
+			update_post_meta( $partner_id, '_lwc_promo_combination_coupon_ids', array_values( array_unique( array_map( 'absint', $partner_ids ) ) ) );
+		}
 	}
 
 	/** Convert submitted eligibility values to real, positive WordPress user IDs. */

@@ -120,7 +120,7 @@ class LWC_JT_Order_Admin {
 		}
 
 		$environment = $this->get_order_environment( $order );
-		$result      = ( new LWC_JT_Express_API() )->get_print_url( $awb, LWC_JT_Account::get_credentials( 'express', $environment ) );
+		$result      = ( new LWC_JT_Express_API() )->get_print_url( $awb, LWC_JT_Account::get_credentials( $environment ) );
 		if ( is_wp_error( $result ) ) {
 			if ( class_exists( 'LWC_Logger' ) ) {
 				LWC_Logger::log(
@@ -158,7 +158,7 @@ class LWC_JT_Order_Admin {
 			return array( 'success' => true, 'already_cancelled' => true );
 		}
 		$environment = $this->get_order_environment( $order );
-		$result = ( new LWC_JT_Express_API() )->cancel_order( $this->get_jt_order_id( $order ), __( 'Cancelled in WooCommerce', 'lovecatz-wc' ), LWC_JT_Account::get_credentials( 'express', $environment ) );
+		$result = ( new LWC_JT_Express_API() )->cancel_order( $this->get_jt_order_id( $order ), __( 'Cancelled in WooCommerce', 'lovecatz-wc' ), LWC_JT_Account::get_credentials( $environment ) );
 		if ( is_wp_error( $result ) ) {
 			$order->update_meta_data( '_lwc_jt_cancel_error', $result->get_error_message() );
 			$order->save();
@@ -304,7 +304,7 @@ class LWC_JT_Order_Admin {
 			'expresstype'      => '1',
 			'goodsvalue'       => min( 99999999, max( 1, (int) ceil( $value ) ) ),
 		);
-		$result = ( new LWC_JT_Express_API() )->create_order( $data, LWC_JT_Account::get_credentials( 'express', $environment ) );
+		$result = ( new LWC_JT_Express_API() )->create_order( $data, LWC_JT_Account::get_credentials( $environment ) );
 		if ( is_wp_error( $result ) ) {
 			return $this->save_create_error( $order, $result );
 		}
@@ -324,7 +324,7 @@ class LWC_JT_Order_Admin {
 		if ( '' === $awb ) {
 			return new WP_Error( 'lwc_jt_missing_awb', __( 'Create the J&T order before requesting tracking.', 'lovecatz-wc' ) );
 		}
-		$result = ( new LWC_JT_Express_API() )->track( $awb, LWC_JT_Account::get_credentials( 'express', $this->get_order_environment( $order ) ) );
+		$result = ( new LWC_JT_Express_API() )->track( $awb, LWC_JT_Account::get_credentials( $this->get_order_environment( $order ) ) );
 		if ( is_wp_error( $result ) ) {
 			$order->update_meta_data( '_lwc_jt_tracking_error', $result->get_error_message() );
 			$order->save();
@@ -359,7 +359,7 @@ class LWC_JT_Order_Admin {
 		}
 		$order->delete_meta_data( '_lwc_jt_cancel_error' );
 		$environment = $this->get_order_environment( $order );
-		$credentials = LWC_JT_Account::get_credentials( 'express', $environment );
+		$credentials = LWC_JT_Account::get_credentials( $environment );
 		if ( ! empty( $credentials['cancel_key'] ) && ! empty( $credentials['cancel_username'] ) && ! empty( $credentials['cancel_api_key'] ) ) {
 			LWC_JT_Account::set_service_status( $environment, 'cancellation', 'connected', __( 'Cancellation verified by J&T tracking status 162/163.', 'lovecatz-wc' ), $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) );
 		}

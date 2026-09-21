@@ -23,6 +23,13 @@
   - **Digital membership card** generation for each member (PDF/PNG).  
   - Manage membership levels, expiration dates, and renewal reminders.
 
+- **Courier Switching on Unprocessed Orders**
+  - A **Change Shipping** box is added to orders that are still `on-hold`/`pending`, so the courier can be swapped before the order is processed.
+  - Available couriers are detected from this WordPress install: **J&T Express** and **J&T Cargo** (bundled) and **JNE** (external `jne-shipping-official` plugin), plus FedEx and RaySpeed. Detection reads the active plugin list, the shipping methods registered in WooCommerce, and the configured shipping zones.
+  - After selecting the replacement service, **Check rate** must succeed and display the quoted service/cost before **Change Shipping** is enabled. The short-lived quote is revalidated when the change is submitted.
+  - Before a change is applied, the target courier is re-validated as installed and active; couriers that publish no live rate can be checked with the current cost or a manually entered cost.
+  - FedEx/RaySpeed/J&T orders that already have an AWB still require cancellation proof, as before.
+
 - **Completed Order Reviews**
   - Optional Review tab setting adds product review buttons to completed orders in My Account.
   - Each button opens the purchased product's review section.

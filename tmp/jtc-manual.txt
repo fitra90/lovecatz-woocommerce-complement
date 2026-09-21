@@ -1,0 +1,523 @@
+
+===== PAGE 1 =====
+Panduan Integrasi OpenAPI
+January 20, 2025
+IT T ECHNOLOGY DEPARTMENT
+PT. GLOBAL JET C ARGO (J&T C ARGO )
+===== PAGE 2 =====
+Table of Contents
+1 Introduction 1
+2 Mulai Langsung 2
+3 API Interface Reference 5
+3.1 Environments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.2 Struktur Request API . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.2.1 Struktur Header . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.2.2 Struktur Body . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.2.3 Contoh Implementasi cURL . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.3 Digest Generation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.1 Header Signature (Header Digest . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.2 Body Signature (bizContent Digest) . . . . . . . . . . . . . . . . . . . . . . . 7
+3.4 Order Service Interface . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.4.1 Create Order . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.4.2 Check Order . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+3.4.3 Cancel Order . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.4.4 Order Status Return . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.4.5 Waybill Template Inquiry . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.4.6 Freight Aging Inquiry . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.4.7 10-Character Code Inquiry (TLC Inquiry) . . . . . . . . . . . . . . . . . . . . . 15
+3.4.8 Province, City, District Inquiry . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.4.9 Get Batch BillCode . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.5 Logistics Trajectory Interface . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.5.1 Logistics Track Query . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.5.2 Logistics Track Subscription . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.5.3 Logistics Trajectory Return . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+4 FAQ 18
+===== PAGE 3 =====
+1 Introduction
+Selamat datang di J&T Cargo! Kami sangat gembira untuk menyambut Anda di sini. Untuk memper-
+mudah proses Anda menggunakan Open Platform J&T Cargo, kami menyiapkan dokumen ini untuk
+membantu Anda bernavigasi di antara beberapa hal yang mungkin Anda ingin ketahui ketika memulai
+dengan J&T Cargo.
+Platform OpenAPI kami diharapkan dapat membantu Anda dengan kebutuhan pengiriman-pengiriman
+paket besar yang cocok untuk kasus penggunaan seperti e-commmerce, retail, pengiriman rutin,
+UKM (Usaha Kecil & Menengah), dan segala sesuatu diantaranya.
+OpenAPI J&T Cargo membantu developer untuk mengakses fungsionalitas J&T Cargo. Beberapa
+contoh metode API yang dapat digunakan meliputi pembuatan pesanan pengiriman, cek biaya kirim,
+cek SLA (Service Level Agreement), dan pelacakan status paket.
+1
+===== PAGE 4 =====
+2 Mulai Langsung
+Untuk langsung mulai menggunakan Open Platform kami, silakan mengikuti langkah berikut.
+1. Login ke sistem Open Platform kami. Silakan daftar jika Anda belum memiliki akun developer
+Open Platform kami.
+2. Pastikan akun Anda telah melewati tahap Developer certification dan Enterprise certification di
+halaman Console.
+3. Untuk dapat mencoba atau melakukan pengiriman menggunakan J&T Cargo, Anda harus
+memiliki kredensial API dan kredensial pelanggan Anda.
+(a) Masuk ke halaman Personal Center untuk mendapatkan kredensial API, yaituApiAccount
+dan PrivateKey Anda.
+2
+===== PAGE 5 =====
+(b) Silakan hubungi point of contact/sales J&T Cargo Anda untuk mendapatkan kredensial
+pelanggan, yaitu CustomerCode dan Plaintext password Anda. Contohnya:
+• CustomerCode: J0086024191
+• Plaintext Pwd: JRz1xzo9
+(c) Sangat disarankan untuk menjaga kerahasiaan kredensial Anda untuk memastikan
+bahwa kredensial tersebut tidak digunakan oleh pihak tidak berwenang.
+4. Open Platform J&T Cargo memiliki dua jenis interface:
+• API: Sistem klien harus hit interface dengan request API sebelum J&T Cargo mengirim
+response sesuai dengan request yang dikirimkan.
+• Webhook: J&T Cargo mengirim data secara otomatis satu arah kepada sistem klien.
+5. Proses integrasi termasuk dua tahap: staging debugging dan production integration.
+6. Staging Debugging:
+(a) Silakan hit test endpoint URL untuk interface API yang ingin di-integrasi dengan sistem
+Anda sebanyak 3 kali berturut dan sukses.
+(b) Apabila interface sudah berhasil ter-debug, maka di bagian Sandbox management di
+menu Console akan terlihat status interface tersebut menjadi succesful joint debugging.
+3
+===== PAGE 6 =====
+7. Production Integration:
+(a) Interface yang sudah terdebug dapat live melalui menu Inteface management.
+(b) Klik tombol Application untuk mendaftarkan interface tersebut.
+(c) Apabila berhasil didaftarkan, maka interface yg didaftarkan akan berstatus In Application.
+(d) Kalau interface sudah diaktifkan, interface tersebut akan berpindah ke status Online.
+Interface yang sudah online sudah dapat digunakan secara live.
+4
+===== PAGE 7 =====
+3 API Interface Reference
+3.1 Environments
+Di bawah merupakan environments yang digunakan untuk keperluan development dan integrasi
+production.
+Environment Base URL
+Sandbox https://demoopenapi.jtcargo.co.id/webopenplatformapi/api
+Production https://openapi.jtcargo.co.id/webopenplatformapi/api
+3.2 Struktur Request API
+Struktur request API Open Platform di lingkungan production dan sandbox memiliki struktur yang
+sama, yaitu Header dan Body.
+3.2.1 Struktur Header
+Header untuk setiap request memiliki struktur yang sama, yaitu apiAccount, digest, dan timestamp.
+Key Type Required? Value Description
+apiAccount Numeric Y apiAccount of the developer account
+digest String Y Header Signature
+timestamp Numeric Y Timestamp in UNIX format, in milliseconds
+3.2.2 Struktur Body
+Body dari request hanya memiliki satu parameter yaitubusiness parameter atau disebut juga bizCon-
+tent. Parameter bizContent berisi parameter-parameter lain terkait untuk interface yang digunakan.
+Key Type Required? Value Description
+bizContent String Y Business Parameter / Body Content
+3.2.3 Contoh Implementasi cURL
+1 curl -- l oc at ion ’{ API E nd poi nt URL } ’ \
+2 -- header ’ a p i A c c o u n t : { a p i A c c o u n t } ’ \
+3 -- header ’ digest : { Header S i g n a t u r e } ’ \
+4 -- header ’ t i m e s t a m p : { Current UNIX T i m e s t a m p } ’ \
+5 -- header ’ Content - Type : a p p l i c a t i o n /x - www - form - u r l e n c o d e d ’ \
+6 -- data - u r l e n c o d e ’ b i z C o n t e n t ={ body content } ’
+5
+===== PAGE 8 =====
+3.3 Digest Generation
+Setiap request Open API J&T Cargo memiliki dua jenis signature/digest untuk memastikan bahwa
+request yang dikirim adalah asli dan tidak diubah oleh pihak ketiga: Header Signature dan Body
+Signature.
+3.3.1 Header Signature (Header Digest
+Header Signature digunakan untuk verifikasi bahwa konten dari request API yang dikirimkan tidak
+dicegat dan diubah tanpa wewenang.
+Algoritma untuk menghasilkan Header Digest sebagai berikut:
+digest = Base64(MD5(bizContent + privateKey))
+Contoh implementasi dalam PHP:
+1 <? php
+2 /* *
+3 * Ge ne ra te a Header Digest for a u t h e n t i c a t i o n .
+4 *
+5 * @param string $ b i z C o n t e n t The b usi ne ss content to be i nc lud ed in the
+digest .
+6 * @param string $ p r i v a t e K e y The private key used to gen er at e the digest .
+7 * @return string The base64 - encoded header digest .
+8 */
+9 fu nc ti on g e n e r a t e H e a d e r D i g e s t ( $bizContent , $ p r i v a t e K e y ) {
+10 // Step 1: C a l c u l a t e the MD5 hash of the c o n c a t e n a t e d b usi ne ss content and
+private key
+11 $m d5 Ha sh = md5 ( $ b i z C o n t e n t . $ p r i v a t e K e y ) ;
+12
+13 // Step 2: Convert the MD5 hash ( h e x a d e c i m a l ) to binary and then base64
+encode it
+14 $digest = b a s e 6 4 _ e n c o d e ( hex2bin ( $md 5H as h ) ) ; // Hex to Base64
+15
+16 // Return the digest string
+17 return $digest ;
+18 }
+6
+===== PAGE 9 =====
+3.3.2 Body Signature (bizContent Digest)
+Body Signature digunakan untuk verifikasi identitas pelanggan dan mitigasi kemungkinan kesalahan
+penggunaan customerCode untuk pelanggan yang memiliki beberapa customerCode.
+cipherText = strToUpper(MD5(plaintext pwd + "jadada236t2"))
+digest = Base64(MD5(customercode + cipherText + privateKey))
+Contoh implementasi dalam PHP
+1 <? php
+2 /* *
+3 * Ge ne ra te a Body Digest for a u t h e n t i c a t i o n .
+4 *
+5 * @param string $ c u s t o m e r C o d e The unique code i d e n t i f y i n g the cu st om er .
+6 * @param string $ p l a i n t e x t P w d The cus to me r ’s p l a i n t e x t pa ss wo rd .
+7 * @param string $ p r i v a t e K e y The private key for the digest c a l c u l a t i o n .
+8 * @return string The base64 - encoded body digest .
+9 */
+10 fu nc ti on g e n e r a t e B o d y D i g e s t ( $customerCode , $plaintextPwd , $ p r i v a t e K e y ) {
+11 // Step 1: Ge ner at e the salted MD5 hash of the p l a i n t e x t pa ss wo rd
+12 $salt = " j a d a d a 2 3 6 t 2 " ; // Static salt value for pa ss wo rd hashing
+13 $ m d 5 P l a i n t e x t = s t r t o u p p e r ( md5 ( $ p l a i n t e x t P w d . $salt ) ) ; // Combine
+pa ss wo rd and salt , then hash
+14
+15 // Step 2: Combine the cu st om er code , hashed password , and private key
+16 $ c o m b i n e d S t r i n g = $ c u s t o m e r C o d e . $ m d 5 P l a i n t e x t . $ p r i v a t e K e y ;
+17
+18 // Step 3: Ge ner at e the MD5 hash of the c om bi ne d string
+19 $ m d 5 F i n a l = md5 ( $ c o m b i n e d S t r i n g ) ;
+20
+21 // Step 4: Convert the MD5 hash ( h e x a d e c i m a l ) to binary and then base64
+encode it
+22 $digest = b a s e 6 4 _ e n c o d e ( hex2bin ( $ m d 5 F i n a l ) ) ; // Hex to Base64
+23
+24 // Return the final body digest
+25 return $digest ;
+26 }
+7
+===== PAGE 10 =====
+3.4 Order Service Interface
+Order Service interface adalah kumpulan interface yang digunakan terkait pesanan pengiriman,
+termasuk pembuatan pesanan, pembatalan pesanan, dan cek ongkir & SLA.
+3.4.1 Create Order
+Interface Create Order digunakan untuk membuat pesanan pengiriman J&T Cargo. Pesanan yang
+dibuat melalui interface ini akan masuk ke penjadwalan outlet J&T Cargo.
+Sandbox: {BASE_URL}/order/addOrder?uuid={UUID}
+Production: {BASE_URL}/order/addOrder
+Request Method: POST
+Type of Data: X-WWW-FORM-URLENCODED
+Response Type: JSON (URL-encoded)
+Dokumentasi: [Link]
+Body Parameter:
+Parameter Data Type Required Description Example
+bizContent String Y JSON of business parame-
+ter
+Lihat [1]
+8
+===== PAGE 11 =====
+Business Parameters (bizContent)
+Parameter Name Data Type Required Description Example
+customerCode String(30) Y Kode pelanggan J0086024191
+digest String(30) Y Body signature Lihat [3.3.2]
+txlogisticId String(50) Y Nomor order pelanggan ID12345678
+expressType String(30) Y Jenis Layanan FT
+FT : FastTrack
+orderType String(30) Y Jenis pelanggan 2
+1 : Non-VIP / 2 : VIP
+serviceType String(30) Y Metode Pickup 01
+01 : Pick-Up / 02 : Drop Off
+deliveryType String(30) Y Metode Penerimaan 101
+101 : Pengiriman sampai tujuan
+payType String(30) Y Metode penyelesaian PP_PM
+PP_PM : Bulanan
+CC_CASH : Tunai (pengirim)
+PP_CASH : DFOD (penerima)
+sender Object[] Y Informasi pengirim Lihat [7]
+receiver Object[] Y Informasi penerima Lihat [8]
+transferInfo String(30) N Informasi retur Lihat [9]
+(bila alamat pengirim dan
+alamat retur tidak sama)
+goodsType String(30) Y Jenis Barang bm000007
+bm000001 : Pakaian
+bm000002 : Mesin Besar
+bm000003 : Elektronik
+bm000004 : Produk Lifestyle
+bm000005 : Fragile
+bm000006 : Perabotan
+bm000007 : Others
+bm000008 : Perangkat rumah
+bm000009 : Makanan/Obat
+bm000010 : Bahan bangunan
+bm000011 : Hardware Instrument
+length Int(6) N Panjang (cm) 10
+width Int(6) N Lebar (cm) 10
+height Int(6) N Tinggi (cm) 10
+weight String(12) Y Total Berat (KG) 11
+Min: 1 KG / Max: 9999.99 KG
+totalQuantity Int(4) N Jumlah koli 5
+offerFee String(12) N Nilai Barang (IDR) 2500000
+Untuk perhitungan biaya asuransi
+remark String(200) N Keterangan tambahan
+items Object[] N Daftar barang Lihat [5]
+signReceipt Int(4) N Apakah DO Kembali 0
+0 : Tidak / 1 : Y a
+waybillNo String(50) N Nomor AWB 200012345678
+9
+===== PAGE 12 =====
+Object: Sender Information (sender)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama pengirim Kucing Oren
+company String(100) N Perusahaan pengirim PT Kucing Sejahtera
+postCode String(32) N Kode pos pengirim 12345
+mobile String(30) Y Nomor ponsel pengirim 0821987654321
+phone String(30) N Nomor landline pengirim 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi pengirim DKI Jakarta
+city String(32) Y Kota/Kabupaten pengirim Jakarta Utara
+area String(32) Y Kecamatan pengirim Penjaringan
+town String(32) N Kelurahan pengirim Pluit
+address String(150) Y Alamat lengkap pengirim Jl. ABC No. 123
+Object: Receiver Information (receiver)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama penerima Kucing Hitam
+company String(100) N Perusahaan penerima PT Kucing Bahagia
+postCode String(32) N Kode pos penerima 12345
+mobile String(30) Y Nomor ponsel penerima 0821987654321
+phone String(30) N Nomor landline penerima 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi penerima DKI Jakarta
+city String(32) Y Kota/Kabupaten penerima Jakarta Utara
+area String(32) Y Kecamatan penerima Penjaringan
+town String(32) N Kelurahan penerima Pluit
+address String(150) Y Alamat lengkap penerima Jl. ABC No. 123
+Object: Return Information (transferInfo)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama penerima retur Kucing Retur
+postCode String(32) N Kode pos retur 32345
+mobile String(30) Y Nomor ponsel retur 0821987654321
+phone String(30) N Nomor landline retur 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi tujuan retur DKI Jakarta
+city String(32) Y Kota/Kabupaten tujuan retur Jakarta Utara
+area String(32) Y Kecamatan tujuan retur Penjaringan
+town String(32) N Kelurahan tujuan retur Pluit
+address String(150) Y Alamat lengkap tujuan retur Jl. ABC No. 123
+10
+===== PAGE 13 =====
+Object: Items Information (item) - not required
+Attribute Name Data Type Required Description Example
+itemType String(30) N Jenis barang bm000004
+itemName String(30) N Nama barang Whiskas
+number int(4) N Jumlah barang dalam paket 10
+itemValue String(20) N Nilai barang 100000
+priceCurrency String(20) N Mata uang nilai barang IDR
+desc String(100) N Deskripsi barang Makanan kucing
+itemUrl String(100) N URL Barang www.abc.com/whiskas
+Response Parameter:
+Parameter Data Type Required Description Example
+code String Y Return code Lihat dokumentasi
+msg String Y Request status (success/-
+fail)
+success / fail
+data Object Y Response content
+Data Parameters (data)
+Parameter Data Type Required Description Example
+billCode String Y Nomor AWB/resi 200012345678
+txlogisticId String Y Nomor order customer ID12345678
+createOrderTime Datetime Y Waktu pembuatan
+pesanan (yyyy-MM-dd
+HH:mm:ss)
+2024-12-31 09:00:01
+sortingCode String Y Kode TLC / kode sortir JKT -JKT001A-A10
+sumFreight String N Total Biaya Kirim (IDR) 750234
+sumFreight =
+customerCost +
+insuranceCost
+customerCost String N Nominal Biaya Kirim
+(IDR)
+650234
+insuranceCost String N Nominal Biaya Proteksi
+Kerusakan (IDR)
+100000
+routing String N Kode rute JKT
+zone String N Kode sortir kargo A01
+11
+===== PAGE 14 =====
+3.4.2 Check Order
+Interface Check Order digunakan untuk melihat informasi pesanan pengiriman yang telah dibuat.
+Sandbox: {BASE_URL}/order/getOrders?uuid={UUID}
+Production: {BASE_URL}/order/getOrders
+Request Method: POST
+Type of Data: X-WWW-FORM-URLENCODED
+Response Type: JSON (URL-encoded)
+Dokumentasi: [Link]
+Body Parameter:
+Parameter Data Type Required Description Example
+bizContent String Y JSON of business parame-
+ter
+Lihat [6]
+12
+===== PAGE 15 =====
+Business Parameters (bizContent)
+Parameter Name Data Type Required Description Example
+customerCode String(30) Y Kode pelanggan J0086024191
+digest String(30) Y Body signature Lihat [3.3.2]
+txlogisticId String(50) Y Nomor order pelanggan ID12345678
+expressType String(30) Y Jenis Layanan FT
+FT : FastTrack
+orderType String(30) Y Jenis pelanggan 2
+1 : Non-VIP / 2 : VIP
+serviceType String(30) Y Metode Pickup 01
+01 : Pick-Up / 02 : Drop Off
+deliveryType String(30) Y Metode Penerimaan 101
+101 : Pengiriman sampai tujuan
+payType String(30) Y Metode penyelesaian PP_PM
+PP_PM : Bulanan
+CC_CASH : Tunai (pengirim)
+PP_CASH : DFOD (penerima)
+sender Object[] Y Informasi pengirim Lihat [7]
+receiver Object[] Y Informasi penerima Lihat [8]
+transferInfo String(30) N Informasi retur Lihat [9]
+(bila alamat pengirim dan
+alamat retur tidak sama)
+goodsType String(30) Y Jenis Barang bm000007
+bm000001 : Pakaian
+bm000002 : Mesin Besar
+bm000003 : Elektronik
+bm000004 : Produk Lifestyle
+bm000005 : Fragile
+bm000006 : Perabotan
+bm000007 : Others
+bm000008 : Perangkat rumah
+bm000009 : Makanan/Obat
+bm000010 : Bahan bangunan
+bm000011 : Hardware Instrument
+length Int(6) N Panjang (cm) 10
+width Int(6) N Lebar (cm) 10
+height Int(6) N Tinggi (cm) 10
+weight String(12) Y Total Berat (KG) 11
+Min: 1 KG / Max: 9999.99 KG
+totalQuantity Int(4) N Jumlah koli 5
+offerFee String(12) N Nilai Barang (IDR) 2500000
+Untuk perhitungan biaya asuransi
+remark String(200) N Keterangan tambahan
+items Object[] N Daftar barang
+signReceipt Int(4) N Apakah DO Kembali 0
+0 : Tidak / 1 : Y a
+waybillNo String(50) N Nomor AWB 200012345678
+13
+===== PAGE 16 =====
+Sender Information (sender)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama pengirim Kucing Oren
+company String(100) N Perusahaan pengirim PT Kucing Sejahtera
+postCode String(32) N Kode pos pengirim 12345
+mobile String(30) Y Nomor ponsel pengirim 0821987654321
+phone String(30) N Nomor landline pengirim 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi pengirim DKI Jakarta
+city String(32) Y Kota/Kabupaten pengirim Jakarta Utara
+area String(32) Y Kecamatan pengirim Penjaringan
+town String(32) N Kelurahan pengirim Pluit
+address String(150) Y Alamat lengkap pengirim Jl. ABC No. 123
+Receiver Information (receiver)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama penerima Kucing Hitam
+company String(100) N Perusahaan penerima PT Kucing Bahagia
+postCode String(32) N Kode pos penerima 12345
+mobile String(30) Y Nomor ponsel penerima 0821987654321
+phone String(30) N Nomor landline penerima 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi penerima DKI Jakarta
+city String(32) Y Kota/Kabupaten penerima Jakarta Utara
+area String(32) Y Kecamatan penerima Penjaringan
+town String(32) N Kelurahan penerima Pluit
+address String(150) Y Alamat lengkap penerima Jl. ABC No. 123
+Return Information (transferInfo)
+Attribute Name Data Type Required Description Example
+name String(32) Y Nama penerima retur Kucing Retur
+postCode String(32) N Kode pos retur 32345
+mobile String(30) Y Nomor ponsel retur 0821987654321
+phone String(30) N Nomor landline retur 0211234567
+countryCode String(20) Y IDN : Indonesia IDN
+prov String(32) Y Provinsi tujuan retur DKI Jakarta
+city String(32) Y Kota/Kabupaten tujuan retur Jakarta Utara
+area String(32) Y Kecamatan tujuan retur Penjaringan
+town String(32) N Kelurahan tujuan retur Pluit
+address String(150) Y Alamat lengkap tujuan retur Jl. ABC No. 123
+14
+===== PAGE 17 =====
+3.4.3 Cancel Order
+Interface Cancel Order digunakan untuk membatalkan pesanan pengiriman yang telah dibuat namun
+belum di pick-up oleh outlet.
+Sandbox: {BASE_URL}/order/cancelOrder?uuid={UUID}
+Production: {BASE_URL}/order/cancelOrder
+Dokumentasi: [Link]
+3.4.4 Order Status Return
+Webhook Order Status Return digunakan untuk menerima pembaruan status pick-up pesanan pengir-
+iman. Status-status pesanan akan dikirimkan secara otomatis ke alamat interface yang disediakan
+oleh client.
+Sandbox: Provided by client
+Production: Provided by client
+Dokumentasi: [Link]
+3.4.5 Waybill Template Inquiry
+Interface Waybill Template Inquiry digunakan untuk mendapatkan template lembar resi format J&T
+Cargo.
+Sandbox: {BASE_URL}/order/printOrder?uuid={UUID}
+Production: {BASE_URL}/order/printOrder
+Dokumentasi: [Link]
+3.4.6 Freight Aging Inquiry
+Interface Freight Aging Inquiry digunakan untuk mendapatkan estimasi biaya pengiriman dan estimasi
+waktu pengiriman (SLA) dari satu lokasi kirim sampai ke lokasi tujuan.
+Sandbox: {BASE_URL}/order/agingCost/get?uuid={UUID}
+Production: {BASE_URL}/order/agingCost/get
+Dokumentasi: [Link]
+3.4.7 10-Character Code Inquiry (TLC Inquiry)
+Interface 10-Character Code Inquiry digunakan untuk mendapatkan TLC (Kode destinasi) dari suatu
+kombinasi provinsi-kota-kecamatan-kelurahan.
+Sandbox: {BASE_URL}/order/cancelOrder?uuid={UUID}
+Production: {BASE_URL}/order/cancelOrder
+15
+===== PAGE 18 =====
+Dokumentasi: [Link]
+3.4.8 Province, City, District Inquiry
+Interface Province, City, District Inquiry dapat digunakan untuk mendapatkan informasi daftar nama
+alamat yang terdaftar di sistem J&T Cargo.
+Sandbox: {BASE_URL}/order/getAddress?uuid={UUID}
+Production: {BASE_URL}/order/getAddress
+Dokumentasi: [Link]
+3.4.9 Get Batch BillCode
+Interface Get Batch BillCode dapat digunakan untuk melakukan prebooking nomor waybill pengiriman
+sebelum membuat pesanan pengiriman.
+Sandbox: {BASE_URL}/order/getBatchBillCode?uuid={UUID}
+Production: {BASE_URL}/order/getBatchBillCode
+Dokumentasi: [Link]
+3.5 Logistics Trajectory Interface
+Logistics Trajectory interface adalah kumpulan interface yang digunakan terkait alur dan pelacakan
+pengiriman.
+3.5.1 Logistics Track Query
+Interface Logistics Track Query digunakan untuk melacak status pengiriman paket saat tersebut.
+Sandbox: {BASE_URL}/logistics/trace?uuid={UUID}
+Production: {BASE_URL}/logistics/trace
+Dokumentasi: [Link]
+3.5.2 Logistics Track Subscription
+Tidak digunakan
+3.5.3 Logistics Trajectory Return
+Webhook Logistics Trajectory Return dapat digunakan untuk menerima pembaruan status pelacakan
+pengiriman paket. Status-status pengiriman akan dikirimkan secara otomatis ke alamat interface yang
+disediakan oleh client.
+Sandbox: Provided by client
+Production: Provided by client
+16
+===== PAGE 19 =====
+Dokumentasi: [Link]
+17
+===== PAGE 20 =====
+4 FAQ
+1. Bagaimana cara debugging di sandbox?
+Silakan gunakan sandbox endpoint (test url) dan hit interface tersebut sebanyak 3 kali berturut
+dan sukses. Apabila sudah berhasil, silakan masuk ke menu Console > Sandbox Management
+dan interface terkait akan berstatus coordinated.
+2. Saya sudah hit 3 kali/lebih dari 3 kali dan sukses, tapi masih belum berstatus coordinated!
+Silakan pastikan untuk sandbox endpoint (test url) yang digunakan memiliki UUID pada url nya.
+3. UUID dapat dari mana?
+UUID hanya akan muncul jika anda sudah login, dan dapat ditemukan pada halaman dokumen-
+tasi interface yang akan digunakan.
+4. Apakah satu akun open platform bisa menggunakan banyak kode pelanggan (customer
+code)?
+Bisa. Cukup mengganti kode pelanggan pada parameterCUSTOMER CODE dan generate DIGEST
+menggunakan password pelanggan (plaintext pwd) terkait ke kode pelanggan yang digunakan.
+5. Kenapa resi yang dibuat jumlah kolinya XX padahal harusnya YY?
+Untuk parameter totalQuantity saat create order adalah jumlah koli, bukan jumlah barang di
+dalam koli.
+6. Kenapa paket jadi multikoli padahal hanya 1 koli?
+Untuk parameter totalQuantity saat create order adalah jumlah koli, bukan jumlah barang di
+dalam koli.
+18

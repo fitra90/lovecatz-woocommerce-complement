@@ -94,23 +94,76 @@
         applyNext();
     }
 
-    function updateCouponSelection(changedInput) {
-        var modal = $('#lwc-coupon-modal');
-        var availableInputs = modal.find('.lwc-coupon-option-input:not(:disabled)');
-
-        if (changedInput && changedInput.checked) {
-            var changedOption = $(changedInput).closest('.lwc-checkout-coupon-option');
-            if ('1' === changedOption.attr('data-individual-use')) {
-                availableInputs.not(changedInput).prop('checked', false);
-            } else {
-                modal.find('.lwc-checkout-coupon-option[data-individual-use="1"] .lwc-coupon-option-input:not(:disabled)').prop('checked', false);
+    function getCouponById(couponId) {
+        var coupons = lwcPromoDashboard.coupons || [];
+        for (var i = 0; i < coupons.length; i += 1) {
+            if (String(coupons[i].id) === String(couponId)) {
+                return coupons[i];
             }
         }
+        return null;
+    }
+
+    function couponsAreCompatible(first, second) {
+        if (!first || !second || !first.allowCombination || !second.allowCombination) {
+            return false;
+        }
+
+        var firstIds = first.combinationCouponIds;
+        var secondIds = second.combinationCouponIds;
+        var firstAllows = firstIds === null || firstIds.map(String).indexOf(String(second.id)) !== -1;
+        var secondAllows = secondIds === null || secondIds.map(String).indexOf(String(first.id)) !== -1;
+        return firstAllows && secondAllows;
+    }
+
+    function updateCouponSelection(changedInput) {
+        var modal = $('#lwc-coupon-modal');
+        var inputs = modal.find('.lwc-coupon-option-input');
+
+        if (changedInput && changedInput.checked) {
+			var changedCoupon = getCouponById($(changedInput).closest('.lwc-checkout-coupon-option').attr('data-coupon-id'));
+			var conflictsWithApplied = false;
+			inputs.filter(':checked').not(changedInput).each(function () {
+				var other = getCouponById($(this).closest('.lwc-checkout-coupon-option').attr('data-coupon-id'));
+				if (!couponsAreCompatible(changedCoupon, other)) {
+					if ('1' === $(this).attr('data-locked')) {
+						conflictsWithApplied = true;
+					} else {
+						$(this).prop('checked', false);
+					}
+				}
+			});
+			if (conflictsWithApplied) {
+				$(changedInput).prop('checked', false);
+			}
+        }
+
+		inputs.filter('[data-locked="0"]').prop('disabled', false).each(function () {
+			$(this).closest('.lwc-checkout-coupon-option').removeClass('is-incompatible').find('em').text('Pilih');
+		});
+
+		var selectedCoupons = (lwcPromoDashboard.appliedCouponRules || []).slice();
+		var newlySelectedCoupons = inputs.filter('[data-locked="0"]:checked').map(function () {
+			return getCouponById($(this).closest('.lwc-checkout-coupon-option').attr('data-coupon-id'));
+		}).get();
+		selectedCoupons = selectedCoupons.concat(newlySelectedCoupons);
+		inputs.filter('[data-locked="0"]:not(:checked)').each(function () {
+			var input = $(this);
+			var candidate = getCouponById(input.closest('.lwc-checkout-coupon-option').attr('data-coupon-id'));
+			var incompatible = selectedCoupons.some(function (selected) {
+				return !couponsAreCompatible(candidate, selected);
+			});
+			if (incompatible) {
+				input.prop('disabled', true);
+				input.closest('.lwc-checkout-coupon-option').addClass('is-incompatible').find('em').text('Tidak dapat digabung');
+			}
+		});
 
         modal.find('.lwc-checkout-coupon-option').each(function () {
             $(this).toggleClass('is-selected', $(this).find('.lwc-coupon-option-input').prop('checked'));
         });
 
+		var availableInputs = inputs.filter('[data-locked="0"]:not(:disabled)');
         var count = availableInputs.filter(':checked').length;
         modal.find('.lwc-add-selected-coupons').prop('disabled', count === 0);
         modal.find('.lwc-coupon-modal__selection').text(
@@ -191,22 +244,22 @@
         $('#lwc-coupon-modal').remove();
         $('html, body').removeClass('lwc-coupon-modal-open');
 
-        var hasAppliedIndividualCoupon = coupons.some(function (coupon) {
-            return !!(!coupon.expired && coupon.applied && coupon.individualUse);
-        });
-        var hasAppliedCoupon = coupons.some(function (coupon) {
-            return !!(!coupon.expired && coupon.applied);
-        });
+		var appliedCoupons = lwcPromoDashboard.appliedCouponRules || coupons.filter(function (coupon) {
+			return !!(!coupon.expired && coupon.applied);
+		});
         var modalItems = $.map(coupons, function (coupon) {
             var image = $('<span>').text(coupon.image || '').html();
             var code = $('<span>').text(coupon.code).html();
             var description = $('<span>').text(coupon.description).html();
 			var expired = !!coupon.expired;
 			var applied = !expired && !!coupon.applied;
-			var incompatible = !expired && !applied && (hasAppliedIndividualCoupon || (coupon.individualUse && hasAppliedCoupon));
+			var incompatible = !expired && !applied && appliedCoupons.some(function (appliedCoupon) {
+				return !couponsAreCompatible(coupon, appliedCoupon);
+			});
 			var optionState = expired ? ' is-expired' : (applied ? ' is-selected is-applied' : (incompatible ? ' is-incompatible' : ''));
-            return '<label class="lwc-checkout-coupon-option' + optionState + '" data-individual-use="' + (coupon.individualUse ? '1' : '0') + '">' +
-				'<input type="checkbox" class="lwc-coupon-option-input" value="' + code + '"' + (applied ? ' checked' : '') + ((expired || applied || incompatible) ? ' disabled' : '') + ' />' +
+			var locked = expired || applied;
+			return '<label class="lwc-checkout-coupon-option' + optionState + '" data-coupon-id="' + String(coupon.id) + '">' +
+				'<input type="checkbox" class="lwc-coupon-option-input" data-locked="' + (locked ? '1' : '0') + '" value="' + code + '"' + (applied ? ' checked' : '') + ((locked || incompatible) ? ' disabled' : '') + ' />' +
                 '<img src="' + image + '" alt="" /><span class="lwc-checkout-coupon-option__content"><strong>' + code + '</strong><span>' + description + '</span></span>' +
 				'<span class="lwc-coupon-option-check" aria-hidden="true"></span><em>' + (expired ? 'Expired' : (applied ? 'Ditambahkan' : (incompatible ? 'Tidak dapat digabung' : 'Pilih'))) + '</em></label>';
         }).join('');

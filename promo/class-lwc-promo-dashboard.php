@@ -76,8 +76,32 @@ class LWC_Promo_Dashboard {
 				'isGuest'             => ! is_user_logged_in(),
 				'hasAccountPromos'    => $this->has_account_only_checkout_promos(),
 				'coupons'             => $this->get_checkout_coupon_data(),
+				'appliedCouponRules'  => $this->get_applied_coupon_rules(),
 			)
 		);
+	}
+
+	/** Combination rules for every applied coupon, including coupons outside this plugin. */
+	private function get_applied_coupon_rules() {
+		$rules = array();
+		if ( ! WC()->cart ) {
+			return $rules;
+		}
+
+		foreach ( WC()->cart->get_applied_coupons() as $code ) {
+			$coupon = new WC_Coupon( $code );
+			if ( ! $coupon->get_id() ) {
+				continue;
+			}
+			$rules[] = array(
+				'id'                   => $coupon->get_id(),
+				'code'                 => $coupon->get_code(),
+				'allowCombination'     => class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::allows_combination( $coupon ) : ! $coupon->get_individual_use(),
+				'combinationCouponIds' => class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::get_combination_coupon_ids( $coupon ) : null,
+			);
+		}
+
+		return $rules;
 	}
 
 	/**
@@ -249,12 +273,14 @@ class LWC_Promo_Dashboard {
 			$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : LWC_PLUGIN_URL . 'assets/2026_VOUCHER-REORDER_FINAL.webp';
 
 			$coupons[] = array(
+				'id'            => $coupon->get_id(),
 				'code'          => $coupon->get_code(),
 				'description'   => $description,
 				'image'         => $image_url,
 				'applied'       => ! $expired && WC()->cart && WC()->cart->has_discount( $coupon->get_code() ),
 				'expired'       => $expired,
-				'individualUse' => $coupon->get_individual_use(),
+				'allowCombination' => class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::allows_combination( $coupon ) : ! $coupon->get_individual_use(),
+				'combinationCouponIds' => class_exists( 'LWC_Promo_Discounts' ) ? LWC_Promo_Discounts::get_combination_coupon_ids( $coupon ) : null,
 			);
 		}
 

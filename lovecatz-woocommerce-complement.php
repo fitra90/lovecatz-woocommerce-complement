@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.70
+ * Version:     1.0.81
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.70' );
+define( 'LWC_VERSION', '1.0.81' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -131,15 +131,21 @@ function lwc_init() {
 	add_filter( 'option_lwc_fedex_tracking_production_api_secret', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_key', 'lwc_decrypt_secret' );
 	add_filter( 'option_lwc_jt_api_secret', 'lwc_decrypt_secret' );
-	foreach ( array( 'express', 'cargo' ) as $lwc_jt_provider ) {
-		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_key", 'lwc_decrypt_secret' );
-		add_filter( "option_lwc_jt_{$lwc_jt_provider}_api_secret", 'lwc_decrypt_secret' );
-		foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
-			add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_api_key", 'lwc_decrypt_secret' );
-			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key', 'api_secret' ) as $lwc_jt_secret_field ) {
-				add_filter( "option_lwc_jt_{$lwc_jt_provider}_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
-			}
+	// J&T Express credentials and J&T Cargo credentials use independent option sets.
+	add_filter( 'option_lwc_jt_express_api_key', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_jt_express_api_secret', 'lwc_decrypt_secret' );
+	foreach ( array( 'sandbox', 'production' ) as $lwc_jt_environment ) {
+		foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) as $lwc_jt_secret_field ) {
+			add_filter( "option_lwc_jt_express_{$lwc_jt_environment}_{$lwc_jt_secret_field}", 'lwc_decrypt_secret' );
 		}
+	}
+	add_filter( 'option_lwc_jt_cargo_api_key', 'lwc_decrypt_secret' );
+	add_filter( 'option_lwc_jt_cargo_api_secret', 'lwc_decrypt_secret' );
+	foreach ( array( 'sandbox', 'production' ) as $lwc_jtc_environment ) {
+		add_filter( "option_lwc_jt_cargo_{$lwc_jtc_environment}_api_key", 'lwc_decrypt_secret' );
+		add_filter( "option_lwc_jt_cargo_{$lwc_jtc_environment}_api_secret", 'lwc_decrypt_secret' );
+		add_filter( "option_lwc_jt_cargo_{$lwc_jtc_environment}_private_key", 'lwc_decrypt_secret' );
+		add_filter( "option_lwc_jt_cargo_{$lwc_jtc_environment}_customer_password", 'lwc_decrypt_secret' );
 	}
 	add_filter( 'option_lwc_rayspeed_api_key', 'lwc_decrypt_secret' );
 
@@ -148,17 +154,23 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-admin-settings.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-account.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php';
 	require_once LWC_PLUGIN_DIR . 'includes/checkout/class-lwc-indonesia-regions.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-express-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-text.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-field-map.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-response-view.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-route-mapper.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-courier-registry.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-list-shipping.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-shipping-switcher.php';
-	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-base.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
-	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-cargo.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-shipping-jtc.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-label.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-order-admin.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-shipping-fedex.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/rayspeed/class-lwc-rayspeed-api.php';
@@ -177,11 +189,18 @@ function lwc_init() {
 	( new LWC_Order_List_Shipping() )->init();
 	( new LWC_Order_Shipping_Switcher() )->init();
 	LWC_Indonesia_Regions::init();
+	if ( class_exists( 'LWC_JTC_Label' ) ) {
+		LWC_JTC_Label::init();
+	}
 }
 add_action( 'plugins_loaded', 'lwc_init', 20 );
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'lwc_plugin_action_links' );
 add_action( 'wp_ajax_lwc_check_fedex_connection', 'lwc_check_fedex_connection' );
 add_action( 'wp_ajax_lwc_check_jt_connection', 'lwc_check_jt_connection' );
+add_action( 'wp_ajax_lwc_check_jtc_connection', 'lwc_check_jtc_connection' );
+add_action( 'wp_ajax_lwc_jtc_sandbox_request', 'lwc_jtc_sandbox_request' );
+add_action( 'wp_ajax_lwc_jtc_print_label', array( 'LWC_JTC_Label', 'handle_print_request' ) );
+add_action( 'wp_ajax_lwc_jtc_track_order', 'lwc_jtc_track_order' );
 add_action( 'wp_ajax_lwc_fedex_get_rate_quote', 'lwc_fedex_get_rate_quote' );
 add_action( 'wp_ajax_lwc_fedex_create_shipment', 'lwc_fedex_create_shipment' );
 add_action( 'wp_ajax_lwc_fedex_download_label', 'lwc_fedex_download_label' );
@@ -190,6 +209,7 @@ add_action( 'wp_ajax_lwc_fedex_checkout_debug', 'lwc_fedex_checkout_debug_respon
 add_action( 'wp_ajax_lwc_fedex_checkout_debug_quote', 'lwc_fedex_checkout_debug_quote' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_fedex_checkout_debug' );
 add_action( 'wp_enqueue_scripts', 'lwc_enqueue_shipping_accordion' );
+add_filter( 'woocommerce_package_rates', 'lwc_hide_internal_jt_cargo_rates', 997, 2 );
 add_filter( 'woocommerce_package_rates', 'lwc_filter_jt_express_service_area', 998, 2 );
 add_filter( 'woocommerce_package_rates', 'lwc_sort_checkout_shipping_rates', 999, 2 );
 add_action( 'woocommerce_after_checkout_validation', 'lwc_validate_jt_checkout_contact', 10, 2 );
@@ -199,6 +219,27 @@ register_activation_hook( __FILE__, 'lwc_activate' );
 register_deactivation_hook( __FILE__, 'lwc_deactivate' );
 register_uninstall_hook( __FILE__, 'lwc_uninstall' );
 add_action( 'init', 'lwc_maybe_flush_rewrite_rules' );
+
+/**
+ * Keep the unfinished J&T Cargo provider out of every customer/admin quote.
+ *
+ * This also removes stale rates left by an older zone configuration or cached
+ * session. J&T Express is unaffected because it is a separate provider.
+ *
+ * @param array $rates   Calculated WooCommerce rates.
+ * @param array $package Shipping package (unused).
+ * @return array
+ */
+function lwc_hide_internal_jt_cargo_rates( $rates, $package = array() ) {
+	foreach ( (array) $rates as $rate_id => $rate ) {
+		$method_id = is_object( $rate ) && method_exists( $rate, 'get_method_id' ) ? (string) $rate->get_method_id() : '';
+		if ( 'lwc_jt_cargo' === $method_id || 0 === strpos( (string) $rate_id, 'lwc_jt_cargo:' ) ) {
+			unset( $rates[ $rate_id ] );
+		}
+	}
+
+	return $rates;
+}
 
 /**
  * Store a credential-free diagnostic event in the current checkout session.
@@ -832,7 +873,6 @@ function lwc_fedex_download_label() {
  */
 function lwc_register_shipping_methods( $methods ) {
 	$methods['lwc_jt_express'] = 'LWC_Shipping_JT_Express';
-	$methods['lwc_jt_cargo'] = 'LWC_Shipping_JT_Cargo';
 	// Legacy alias: pre-split J&T zone instances keep working as Express.
 	$methods['lwc_jt'] = 'LWC_Shipping_JT_Express';
 	$methods['lwc_shipping_fedex'] = 'LWC_Shipping_FedEx';
@@ -840,6 +880,143 @@ function lwc_register_shipping_methods( $methods ) {
 	$methods['lwc_rayspeed'] = 'LWC_Shipping_RaySpeed';
 
 	return $methods;
+}
+
+/** Check J&T Cargo API reachability without creating or changing a shipment. */
+function lwc_check_jtc_connection() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ), 403 );
+	}
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+	$environment = isset( $_POST['environment'] ) && 'production' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'production' : 'sandbox';
+	$uuid = isset( $_POST['uuid'] ) ? sanitize_text_field( wp_unslash( $_POST['uuid'] ) ) : '';
+	$result = LWC_JTC_API::check_health( array( 'environment' => $environment, 'uuid' => $uuid ) );
+	wp_send_json_success( $result );
+}
+
+/** Proxy one explicitly selected, whitelisted J&T Cargo Sandbox test request. */
+function lwc_jtc_sandbox_request() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ), 403 );
+	}
+	check_ajax_referer( 'lwc_fedex_connection_check', 'nonce' );
+	$interface = isset( $_POST['interface'] ) ? sanitize_key( wp_unslash( $_POST['interface'] ) ) : '';
+	$method    = isset( $_POST['method'] ) ? sanitize_key( wp_unslash( $_POST['method'] ) ) : 'post';
+	$format    = isset( $_POST['format'] ) ? sanitize_key( wp_unslash( $_POST['format'] ) ) : 'json';
+	$payload   = isset( $_POST['payload'] ) ? wp_unslash( $_POST['payload'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated as JSON by the API client.
+	$headers   = isset( $_POST['headers'] ) ? wp_unslash( $_POST['headers'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated as JSON and sanitized by the API client.
+	$result    = LWC_JTC_API::sandbox_request( $interface, strtoupper( $method ), $format, $payload, $headers );
+	if ( is_wp_error( $result ) ) {
+		$is_local_validation = 0 === strpos( (string) $result->get_error_code(), 'lwc_jtc_' );
+		$progress = $is_local_validation ? LWC_JTC_Account::get_sandbox_test_progress() : LWC_JTC_Account::record_sandbox_test_result( $interface, 0 );
+		wp_send_json_error( array( 'message' => $result->get_error_message(), 'progress' => lwc_jtc_format_sandbox_progress( $progress ) ), 400 );
+	}
+	$progress = LWC_JTC_Account::record_sandbox_test_result( $interface, $result['http_status'], $result['business_success'], $result['business_code'] );
+	$result['progress'] = lwc_jtc_format_sandbox_progress( $progress );
+
+	// Structured, dynamic rendering of whatever the server returned. The raw
+	// payload stays untouched; only the presentation layer reads it.
+	if ( class_exists( 'LWC_JTC_Response_View' ) ) {
+		$labels = LWC_JTC_API::get_interface_labels();
+		$label  = isset( $labels[ $interface ] ) ? $labels[ $interface ] : $interface;
+		$result['view_html'] = LWC_JTC_Response_View::render_response(
+			$interface,
+			$result,
+			array(
+				'heading' => sprintf(
+					/* translators: %s: interface name. */
+					__( 'Tampilan terstruktur — %s', 'lovecatz-wc' ),
+					$label
+				),
+			)
+		);
+	}
+
+	wp_send_json_success( $result );
+}
+
+/** Fetch the live tracking history for one J&T Cargo order and render it. */
+function lwc_jtc_track_order() {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'lovecatz-wc' ) ), 403 );
+	}
+	check_ajax_referer( 'lwc_jtc_track_order', 'nonce' );
+
+	$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
+	$order    = $order_id ? wc_get_order( $order_id ) : null;
+	if ( ! $order instanceof WC_Order ) {
+		wp_send_json_error( array( 'message' => __( 'Order not found.', 'lovecatz-wc' ) ), 404 );
+	}
+	if ( ! LWC_JTC_Label::order_uses_cargo( $order ) ) {
+		wp_send_json_error( array( 'message' => __( 'This order is not shipped with J&T Cargo.', 'lovecatz-wc' ) ), 400 );
+	}
+
+	$awb = (string) $order->get_meta( '_lwc_jt_cargo_awb', true );
+	if ( '' === $awb ) {
+		wp_send_json_error( array( 'message' => __( 'J&T Cargo AWB is not assigned yet.', 'lovecatz-wc' ) ), 400 );
+	}
+
+	$result = LWC_JTC_API::request( 'shipment_track', array( 'billCode' => $awb ) );
+
+	// Store the payload verbatim so the label and later views reuse it.
+	if ( ! is_wp_error( $result ) ) {
+		LWC_JTC_Label::store_response( $order, 'shipment_track', $result );
+	}
+
+	$view_args = array( 'heading' => __( 'Riwayat pengiriman J&T Cargo', 'lovecatz-wc' ) );
+	$html      = class_exists( 'LWC_JTC_Response_View' )
+		? LWC_JTC_Response_View::render_response( 'shipment_track', $result, $view_args )
+		: '';
+
+	if ( is_wp_error( $result ) ) {
+		wp_send_json_error( array( 'message' => $result->get_error_message(), 'view_html' => $html ), 400 );
+	}
+
+	// ?render=html serves a standalone page (used by the order-list button).
+	if ( isset( $_REQUEST['render'] ) && 'html' === sanitize_key( wp_unslash( $_REQUEST['render'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified above.
+		nocache_headers();
+		header( 'Content-Type: text/html; charset=UTF-8' );
+		header( 'X-Robots-Tag: noindex, nofollow' );
+		echo '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>';
+		echo esc_html__( 'Riwayat pengiriman J&T Cargo', 'lovecatz-wc' );
+		echo '</title><style>body{margin:0;padding:20px;background:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2327}</style></head><body>';
+		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- template escapes.
+		echo '<p><button type="button" onclick="window.print()">' . esc_html__( 'Cetak', 'lovecatz-wc' ) . '</button></p>';
+		echo '</body></html>';
+		exit;
+	}
+
+	wp_send_json_success( array( 'view_html' => $html ) );
+}
+
+/** Build the public, credential-free progress payload used by the Sandbox UI. */
+function lwc_jtc_format_sandbox_progress( $progress ) {
+	$interfaces = array();
+	$completed  = 0;
+	$total_hits = 0;
+	foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) {
+		$item = isset( $progress['interfaces'][ $name ] ) && is_array( $progress['interfaces'][ $name ] ) ? $progress['interfaces'][ $name ] : array();
+		$successes = min( 3, isset( $item['successes'] ) ? absint( $item['successes'] ) : 0 );
+		$total_hits += $successes;
+		if ( 3 === $successes ) {
+			++$completed;
+		}
+		$interfaces[ $name ] = array(
+			'attempts' => isset( $item['attempts'] ) ? absint( $item['attempts'] ) : 0,
+			'successes' => $successes,
+			'last_http' => isset( $item['last_http'] ) ? absint( $item['last_http'] ) : 0,
+			'last_business_code' => isset( $item['last_business_code'] ) ? sanitize_text_field( $item['last_business_code'] ) : '',
+			'last_tested_at' => isset( $item['last_tested_at'] ) ? sanitize_text_field( $item['last_tested_at'] ) : '',
+		);
+	}
+	return array(
+		'interfaces' => $interfaces,
+		'completed_endpoints' => $completed,
+		'total_endpoints' => count( $interfaces ),
+		'successful_hits' => $total_hits,
+		'required_hits' => count( $interfaces ) * 3,
+		'local_complete' => count( $interfaces ) === $completed,
+	);
 }
 
 /**
@@ -927,7 +1104,7 @@ function lwc_check_jt_connection() {
 		if ( $record ) {
 			$services[ $service ] = array( 'status' => $record['status'], 'label' => $record['message'] );
 		} elseif ( 'order' === $service && '' !== $recent_awb ) {
-			$saved_credentials = LWC_JT_Account::get_credentials( 'express', $environment );
+			$saved_credentials = LWC_JT_Account::get_credentials( $environment );
 			$matches_saved = ! array_filter( $required, function ( $field ) use ( $credentials, $saved_credentials ) {
 				return ! isset( $saved_credentials[ $field ] ) || (string) $saved_credentials[ $field ] !== (string) $credentials[ $field ];
 			} );
@@ -1038,7 +1215,7 @@ function lwc_enqueue_shipping_accordion() {
 
 /** Remove cached or zone-provided J&T Express rates outside the configured coverage. */
 function lwc_filter_jt_express_service_area( $rates, $package ) {
-	if ( 'java' !== get_option( 'lwc_jt_express_service_area', 'indonesia' ) || ! class_exists( 'LWC_Shipping_JT_Base' ) || LWC_Shipping_JT_Base::is_java_destination( $package ) ) {
+	if ( 'java' !== get_option( 'lwc_jt_express_service_area', 'indonesia' ) || ! class_exists( 'LWC_Shipping_JT_Express' ) || LWC_Shipping_JT_Express::is_java_destination( $package ) ) {
 		return $rates;
 	}
 
@@ -1222,6 +1399,9 @@ function lwc_install() {
 	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php' ) ) {
 		require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-account.php';
 	}
+	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-account.php' ) ) {
+		require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-account.php';
+	}
 	if ( file_exists( LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php' ) ) {
 		require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-request-validator.php';
 	}
@@ -1234,10 +1414,11 @@ function lwc_install() {
 	}
 
 	if ( class_exists( 'LWC_JT_Account' ) ) {
-		foreach ( LWC_JT_Account::get_providers() as $provider ) {
-			LWC_JT_Account::create_table( $provider );
-		}
+		LWC_JT_Account::create_table();
 		LWC_JT_Account::migrate_legacy_credentials();
+	}
+	if ( class_exists( 'LWC_JTC_Account' ) ) {
+		LWC_JTC_Account::create_table();
 	}
 	if ( class_exists( 'LWC_Indonesia_Regions' ) ) {
 		LWC_Indonesia_Regions::install();
@@ -1334,5 +1515,4 @@ function lwc_woocommerce_missing_notice() {
 	</div>
 	<?php
 }
-
 

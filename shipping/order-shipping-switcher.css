@@ -16,6 +16,84 @@
 	margin-top: 10px;
 }
 
+.lwc-order-shipping-switcher .lwc-manual-cost-field {
+	margin: 8px 0 0;
+}
+
+.lwc-order-shipping-switcher .lwc-manual-cost-field label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.lwc-order-shipping-switcher .lwc-manual-cost-field .description {
+	display: block;
+	margin-top: 4px;
+}
+
+.lwc-order-shipping-switcher .lwc-shipping-rate-quote {
+	margin: 10px 0;
+	padding: 9px 10px;
+	border-left: 4px solid #00a32a;
+	background: #edfaef;
+}
+
+.lwc-order-shipping-switcher .lwc-shipping-rate-quote__value {
+	display: block;
+	margin-top: 3px;
+	font-weight: 600;
+}
+
+.lwc-order-shipping-switcher .lwc-shipping-rate-quote .description {
+	margin: 5px 0 0;
+}
+
+.lwc-order-shipping-switcher select optgroup {
+	font-weight: 600;
+}
+
+.lwc-order-shipping-switcher select optgroup option {
+	font-weight: normal;
+}
+
+.lwc-order-shipping-switcher .lwc-destination-message {
+	margin: 0 0 8px;
+	padding: 6px 8px;
+	border-left: 4px solid #dba617;
+	background: #fcf9e8;
+	font-size: 12px;
+}
+
+.lwc-order-shipping-switcher .lwc-destination-message.is-error {
+	border-left-color: #dba617;
+}
+
+.lwc-order-shipping-switcher .lwc-currency-symbol {
+	display: inline-block;
+	margin-right: 4px;
+	font-weight: 600;
+}
+
+.lwc-shipping-next-step {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.lwc-shipping-next-step__summary {
+	margin: 0 0 8px;
+}
+
+.lwc-shipping-next-step .lwc-shipping-action .dashicons {
+	line-height: 1.4;
+	margin-right: 4px;
+	vertical-align: middle;
+}
+
+.lwc-shipping-next-step p:last-child {
+	margin-bottom: 0;
+}
+
 .lwc-shipping-switch-status {
 	margin-top: 8px;
 	word-break: break-word;

@@ -174,6 +174,7 @@ class LWC_Admin_Settings {
 		if ( ! in_array( $provider, array( 'jt_express', 'jt_cargo', 'fedex', 'rayspeed' ), true ) ) {
 			$provider = 'fedex';
 		}
+		$jtc_view = isset( $_GET['jtc_view'] ) && 'sandbox' === sanitize_key( wp_unslash( $_GET['jtc_view'] ) ) ? 'sandbox' : 'account';
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'LoveCatz WooCommerce Complement Settings', 'lovecatz-wc' ); ?></h1>
@@ -218,16 +219,23 @@ class LWC_Admin_Settings {
 					<?php endforeach; ?>
 				</nav>
 
-				<?php if ( in_array( $provider, array( 'jt_express', 'jt_cargo' ), true ) ) : ?>
-					<?php $jt_provider = 'jt_cargo' === $provider ? 'cargo' : 'express'; ?>
-					<div class="notice notice-info inline"><p><?php echo esc_html( 'express' === $jt_provider ? __( 'J&T Express is available only for domestic shipments within Indonesia.', 'lovecatz-wc' ) : __( 'J&T Cargo is an independent domestic provider. Its credentials and future API workflow are not shared with J&T Express.', 'lovecatz-wc' ) ); ?></p></div>
+			<?php if ( 'jt_express' === $provider ) : ?>
+					<div class="notice notice-info inline"><p><?php esc_html_e( 'J&T Express is available only for domestic shipments within Indonesia.', 'lovecatz-wc' ); ?></p></div>
 					<form method="post" action="options.php">
-						<?php
-						settings_fields( "lwc_shipping_jt_{$jt_provider}_options" );
-						do_settings_sections( "lwc_shipping_jt_{$jt_provider}_options" );
-						submit_button();
-						?>
+						<?php settings_fields( 'lwc_shipping_jt_express_options' ); do_settings_sections( 'lwc_shipping_jt_express_options' ); submit_button(); ?>
 					</form>
+			<?php elseif ( 'jt_cargo' === $provider ) : ?>
+					<nav class="nav-tab-wrapper lwc-jtc-tabs" aria-label="<?php esc_attr_e( 'J&T Cargo sections', 'lovecatz-wc' ); ?>">
+						<a class="nav-tab <?php echo 'account' === $jtc_view ? 'nav-tab-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'page' => 'lovecatz-wc', 'tab' => 'shipping', 'provider' => 'jt_cargo', 'jtc_view' => 'account' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Account', 'lovecatz-wc' ); ?></a>
+						<a class="nav-tab <?php echo 'sandbox' === $jtc_view ? 'nav-tab-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'page' => 'lovecatz-wc', 'tab' => 'shipping', 'provider' => 'jt_cargo', 'jtc_view' => 'sandbox' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Sandbox Test', 'lovecatz-wc' ); ?></a>
+					</nav>
+					<?php if ( 'sandbox' === $jtc_view ) : ?>
+						<?php $this->render_jtc_sandbox_console(); ?>
+					<?php else : ?>
+						<form method="post" action="options.php">
+							<?php settings_fields( 'lwc_shipping_jtc_options' ); do_settings_sections( 'lwc_shipping_jtc_options' ); submit_button(); ?>
+						</form>
+					<?php endif; ?>
 				<?php elseif ( 'fedex' === $provider ) : ?>
 					<div class="notice notice-info inline">
 						<p><?php esc_html_e( 'FedEx will be available for international shipments where the destination country is outside Indonesia.', 'lovecatz-wc' ); ?></p>
@@ -284,49 +292,54 @@ class LWC_Admin_Settings {
 	public function register_settings() {
 		LWC_Logger::log( 'Registering admin settings.', 'info' );
 
-		// Shipping provider settings: J&T Express and J&T Cargo are separate
-		// API providers with their own credentials.
-		foreach ( array( 'express', 'cargo' ) as $jt_provider ) {
-			$group = "lwc_shipping_jt_{$jt_provider}_options";
-			$section = "lwc_shipping_jt_{$jt_provider}_section";
-
-			register_setting( $group, "lwc_jt_{$jt_provider}_environment", array( 'sanitize_callback' => array( $this, 'sanitize_jt_environment' ) ) );
-			foreach ( array( 'sandbox', 'production' ) as $jt_environment ) {
-				$prefix = "lwc_jt_{$jt_provider}_{$jt_environment}";
-				$text_fields = 'express' === $jt_provider ? array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'print_company_id', 'cancel_username' ) : array( 'username' );
-				$secret_fields = 'express' === $jt_provider ? array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) : array( 'api_key', 'api_secret' );
-				foreach ( $text_fields as $field ) {
-					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
-				}
-				foreach ( $secret_fields as $field ) {
-					register_setting( $group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
-				}
+		// J&T Express owns its settings and credential contract.
+		$jt_group = 'lwc_shipping_jt_express_options';
+		$jt_section = 'lwc_shipping_jt_express_section';
+		register_setting( $jt_group, 'lwc_jt_express_environment', array( 'sanitize_callback' => array( $this, 'sanitize_jt_environment' ) ) );
+		register_setting( $jt_group, 'lwc_jt_express_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( $jt_group, 'lwc_jt_express_service_area', array( 'default' => 'indonesia', 'sanitize_callback' => array( $this, 'sanitize_jt_service_area' ) ) );
+		foreach ( array( 'sandbox', 'production' ) as $environment ) {
+			$prefix = "lwc_jt_express_{$environment}";
+			foreach ( array( 'order_username', 'tariff_customer_name', 'tracking_company_id', 'print_company_id', 'cancel_username' ) as $field ) {
+				register_setting( $jt_group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
 			}
-			if ( 'express' === $jt_provider ) {
-				register_setting( $group, 'lwc_jt_express_enabled', array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
-				register_setting( $group, 'lwc_jt_express_service_area', array( 'default' => 'indonesia', 'sanitize_callback' => array( $this, 'sanitize_jt_service_area' ) ) );
-			}
-
-			add_settings_section(
-				$section,
-				sprintf(
-					/* translators: %s: provider name */
-					__( '%s Settings', 'lovecatz-wc' ),
-					'express' === $jt_provider ? __( 'J&T Express', 'lovecatz-wc' ) : __( 'J&T Cargo', 'lovecatz-wc' )
-				),
-				array( $this, 'render_jt_section_intro' ),
-				$group
-			);
-
-			add_settings_field( "lwc_jt_{$jt_provider}_environment", __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jt_environment_field' ), $group, $section, array( 'provider' => $jt_provider ) );
-			if ( 'express' === $jt_provider ) {
-				add_settings_field( 'lwc_jt_express_enabled', __( 'Enable J&T Express', 'lovecatz-wc' ), array( $this, 'render_jt_express_enabled_field' ), $group, $section );
-				add_settings_field( 'lwc_jt_express_service_area', __( 'Service coverage', 'lovecatz-wc' ), array( $this, 'render_jt_express_service_area_field' ), $group, $section );
-			}
-			foreach ( array( 'sandbox' => __( 'Sandbox Credentials', 'lovecatz-wc' ), 'production' => __( 'Production Credentials', 'lovecatz-wc' ) ) as $jt_environment => $label ) {
-				add_settings_field( "lwc_jt_{$jt_provider}_{$jt_environment}_credentials", $label, array( $this, 'render_jt_credentials_field' ), $group, $section, array( 'provider' => $jt_provider, 'environment' => $jt_environment ) );
+			foreach ( array( 'order_key', 'order_api_key', 'tariff_check_key', 'tracking_password', 'print_key', 'cancel_key', 'cancel_api_key' ) as $field ) {
+				register_setting( $jt_group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 			}
 		}
+		add_settings_section( $jt_section, __( 'J&T Express Settings', 'lovecatz-wc' ), array( $this, 'render_jt_section_intro' ), $jt_group );
+		add_settings_field( 'lwc_jt_express_environment', __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jt_environment_field' ), $jt_group, $jt_section );
+		add_settings_field( 'lwc_jt_express_enabled', __( 'Enable J&T Express', 'lovecatz-wc' ), array( $this, 'render_jt_express_enabled_field' ), $jt_group, $jt_section );
+		add_settings_field( 'lwc_jt_express_service_area', __( 'Service coverage', 'lovecatz-wc' ), array( $this, 'render_jt_express_service_area_field' ), $jt_group, $jt_section );
+		add_settings_field( 'lwc_jt_express_sandbox_credentials', __( 'Sandbox Credentials', 'lovecatz-wc' ), array( $this, 'render_jt_credentials_field' ), $jt_group, $jt_section, array( 'environment' => 'sandbox' ) );
+		add_settings_field( 'lwc_jt_express_production_credentials', __( 'Production Credentials', 'lovecatz-wc' ), array( $this, 'render_jt_credentials_field' ), $jt_group, $jt_section, array( 'environment' => 'production' ) );
+
+		// J&T Cargo is a standalone provider with a separate form and account class.
+		$jtc_group = 'lwc_shipping_jtc_options';
+		$jtc_section = 'lwc_shipping_jtc_section';
+		register_setting( $jtc_group, 'lwc_jt_cargo_environment', array( 'sanitize_callback' => array( $this, 'sanitize_jtc_environment' ) ) );
+		foreach ( array( 'sandbox', 'production' ) as $environment ) {
+			$prefix = "lwc_jt_cargo_{$environment}";
+			foreach ( array( 'customer_code', 'uuid', 'api_account' ) as $field ) {
+				register_setting( $jtc_group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'sanitize_text_field' ) );
+			}
+			foreach ( array( 'private_key', 'customer_password' ) as $field ) {
+				register_setting( $jtc_group, "{$prefix}_{$field}", array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
+			}
+		}
+		add_settings_section( $jtc_section, __( 'J&T Cargo Settings', 'lovecatz-wc' ), array( $this, 'render_jtc_section_intro' ), $jtc_group );
+		add_settings_field( 'lwc_jt_cargo_environment', __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jtc_environment_field' ), $jtc_group, $jtc_section );
+		add_settings_field( 'lwc_jt_cargo_sandbox_credentials', __( 'Sandbox Credentials', 'lovecatz-wc' ), array( $this, 'render_jtc_credentials_field' ), $jtc_group, $jtc_section, array( 'environment' => 'sandbox' ) );
+		add_settings_field( 'lwc_jt_cargo_production_credentials', __( 'Production Credentials', 'lovecatz-wc' ), array( $this, 'render_jtc_credentials_field' ), $jtc_group, $jtc_section, array( 'environment' => 'production' ) );
+
+		// Label copy that has no server source. Empty means the element is
+		// hidden on the label — the plugin never prints a guessed value.
+		foreach ( array( 'lwc_jtc_label_hotline' => 'lwc_jtc_label_hotline', 'lwc_jtc_label_contact' => 'lwc_jtc_label_contact', 'lwc_jtc_label_terms' => 'lwc_jtc_label_terms' ) as $option => $id ) {
+			register_setting( $jtc_group, $option, array( 'default' => '', 'sanitize_callback' => 'sanitize_text_field' ) );
+		}
+		add_settings_field( 'lwc_jtc_label_hotline', __( 'Label Hotline (optional)', 'lovecatz-wc' ), array( $this, 'render_text_option' ), $jtc_group, $jtc_section, array( 'option' => 'lwc_jtc_label_hotline', 'placeholder' => '021-8066-1888' ) );
+		add_settings_field( 'lwc_jtc_label_contact', __( 'Label Contact Line (optional)', 'lovecatz-wc' ), array( $this, 'render_text_option' ), $jtc_group, $jtc_section, array( 'option' => 'lwc_jtc_label_contact', 'placeholder' => 'WhatsApp: 08xx' ) );
+		add_settings_field( 'lwc_jtc_label_terms', __( 'Label Signature Terms (optional)', 'lovecatz-wc' ), array( $this, 'render_text_option' ), $jtc_group, $jtc_section, array( 'option' => 'lwc_jtc_label_terms', 'placeholder' => '' ) );
 
 		register_setting(
 			'lwc_shipping_fedex_options',
@@ -608,24 +621,26 @@ class LWC_Admin_Settings {
 		);
 	}
 
-	/** Render a short J&T settings introduction. */
-	public function render_jt_section_intro( $section = array() ) {
-		$section_id = isset( $section['id'] ) ? (string) $section['id'] : '';
-		$provider   = false !== strpos( $section_id, 'cargo' ) ? 'cargo' : 'express';
-		if ( 'express' === $provider ) {
-			$environment       = $this->get_jt_environment( 'express' );
-			$environment_label = 'production' === $environment ? __( 'Production', 'lovecatz-wc' ) : __( 'Sandbox', 'lovecatz-wc' );
-			echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
-			echo '<div class="lwc-provider-status-list lwc-jt-connection-status" aria-live="polite">';
-			echo '<div class="lwc-provider-status lwc-jt-summary-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jt-active-environment-label">' . esc_html( $environment_label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
-			foreach ( array( 'order' => __( 'Order', 'lovecatz-wc' ), 'tariff' => __( 'Tariff', 'lovecatz-wc' ), 'track' => __( 'Track', 'lovecatz-wc' ), 'cancellation' => __( 'Cancellation', 'lovecatz-wc' ), 'print' => __( 'Print', 'lovecatz-wc' ) ) as $service => $label ) {
-				echo '<div class="lwc-provider-status lwc-jt-service-status" data-service="' . esc_attr( $service ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Waiting for check…', 'lovecatz-wc' ) . '</span></div>';
-			}
-			echo '<p><button type="button" class="button" id="lwc-jt-check-services">' . esc_html__( 'Check active API services', 'lovecatz-wc' ) . '</button></p>';
-			echo '</div>';
-		} else {
-			echo '<p>' . esc_html__( 'Select the J&T Cargo API environment and enter its independent credentials.', 'lovecatz-wc' ) . '</p>';
+	/** Render the J&T Express settings introduction and service status. */
+	public function render_jt_section_intro() {
+		$environment       = $this->get_jt_environment();
+		$environment_label = 'production' === $environment ? __( 'Production', 'lovecatz-wc' ) : __( 'Sandbox', 'lovecatz-wc' );
+		echo '<p>' . esc_html__( 'Activate J&T Express, select the API environment, and enter the credentials supplied by J&T. Area mapping is handled internally.', 'lovecatz-wc' ) . '</p>';
+		echo '<div class="lwc-provider-status-list lwc-jt-connection-status" aria-live="polite">';
+		echo '<div class="lwc-provider-status lwc-jt-summary-status" data-environment="' . esc_attr( $environment ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jt-active-environment-label">' . esc_html( $environment_label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking saved credentials…', 'lovecatz-wc' ) . '</span></div>';
+		foreach ( array( 'order' => __( 'Order', 'lovecatz-wc' ), 'tariff' => __( 'Tariff', 'lovecatz-wc' ), 'track' => __( 'Track', 'lovecatz-wc' ), 'cancellation' => __( 'Cancellation', 'lovecatz-wc' ), 'print' => __( 'Print', 'lovecatz-wc' ) ) as $service => $label ) {
+			echo '<div class="lwc-provider-status lwc-jt-service-status" data-service="' . esc_attr( $service ) . '" data-status="checking"><span class="lwc-provider-status-dot"></span><strong>' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Waiting for check…', 'lovecatz-wc' ) . '</span></div>';
 		}
+		echo '<p><button type="button" class="button" id="lwc-jt-check-services">' . esc_html__( 'Check active API services', 'lovecatz-wc' ) . '</button></p></div>';
+	}
+
+	/** Render the completely separate J&T Cargo settings introduction. */
+	public function render_jtc_section_intro() {
+		$environment = $this->get_jtc_environment();
+		$label = 'production' === $environment ? __( 'Production', 'lovecatz-wc' ) : __( 'Sandbox', 'lovecatz-wc' );
+		echo '<div class="lwc-provider-status-list lwc-jtc-connection-status" aria-live="polite">';
+		echo '<div id="lwc-jtc-health-status" class="lwc-provider-status" data-status="checking"><span class="lwc-provider-status-dot"></span><strong class="lwc-jtc-environment-label">' . esc_html( $label ) . ':</strong> <span class="lwc-provider-status-label">' . esc_html__( 'Checking API…', 'lovecatz-wc' ) . '</span></div>';
+		echo '<p><button type="button" class="button" id="lwc-jtc-check-health">' . esc_html__( 'Check API', 'lovecatz-wc' ) . '</button></p></div>';
 	}
 
 	/**
@@ -750,23 +765,20 @@ class LWC_Admin_Settings {
 		echo '<p class="description">' . esc_html__( 'All rates, labels, and shipment requests use the selected account.', 'lovecatz-wc' ) . '</p>';
 	}
 
-	/** Render the active API environment for one J&T provider. */
-	public function render_jt_environment_field( $args = array() ) {
-		$provider = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
-		$value    = $this->get_jt_environment( $provider );
-		$name     = "lwc_jt_{$provider}_environment";
-		echo '<select id="' . esc_attr( $name ) . '" name="' . esc_attr( $name ) . '" class="lwc-jt-environment-field">';
+	/** Render the J&T Express environment selector. */
+	public function render_jt_environment_field() {
+		$value = $this->get_jt_environment();
+		echo '<select id="lwc_jt_express_environment" name="lwc_jt_express_environment" class="lwc-jt-environment-field">';
 		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
 		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option>';
 		echo '</select>';
 	}
 
-	/** Render a complete, environment-specific J&T credential set. */
+	/** Render a complete J&T Express credential set. */
 	public function render_jt_credentials_field( $args = array() ) {
-		$provider    = isset( $args['provider'] ) && 'cargo' === $args['provider'] ? 'cargo' : 'express';
 		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
-		$prefix      = "lwc_jt_{$provider}_{$environment}";
-		$groups = 'express' === $provider ? array(
+		$prefix      = "lwc_jt_express_{$environment}";
+		$groups = array(
 			__( 'Order', 'lovecatz-wc' ) => array(
 				'order_username' => array( __( 'Username', 'lovecatz-wc' ), 'text' ),
 				'order_api_key'  => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
@@ -789,13 +801,9 @@ class LWC_Admin_Settings {
 				'print_key'        => array( __( 'Key', 'lovecatz-wc' ), 'password' ),
 				'print_company_id' => array( __( 'E-company ID', 'lovecatz-wc' ), 'text' ),
 			),
-		) : array( '' => array(
-			'username'   => array( __( 'Username / Account ID', 'lovecatz-wc' ), 'text' ),
-			'api_key'    => array( __( 'API Key', 'lovecatz-wc' ), 'password' ),
-			'api_secret' => array( __( 'API Secret', 'lovecatz-wc' ), 'password' ),
-		) );
+		);
 
-		echo '<div class="lwc-jt-credential-group" data-provider="' . esc_attr( $provider ) . '" data-environment="' . esc_attr( $environment ) . '">';
+		echo '<div class="lwc-jt-credential-group" data-provider="express" data-environment="' . esc_attr( $environment ) . '">';
 		foreach ( $groups as $group_label => $fields ) {
 			if ( '' !== $group_label ) {
 				echo '<fieldset class="lwc-jt-credential-service"><legend>' . esc_html( $group_label ) . '</legend>';
@@ -809,10 +817,145 @@ class LWC_Admin_Settings {
 				echo '</fieldset>';
 			}
 		}
-		if ( 'express' === $provider ) {
-			echo '<p class="description">' . esc_html__( 'Official J&T Indonesia API URLs are selected automatically for this environment. Only enter the credentials supplied for the matching account.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Official J&T Express API URLs are selected automatically for this environment.', 'lovecatz-wc' ) . '</p>';
+		echo '</div>';
+	}
+
+	/** Render the independent J&T Cargo environment selector. */
+	public function render_jtc_environment_field() {
+		$value = $this->get_jtc_environment();
+		echo '<select id="lwc_jt_cargo_environment" name="lwc_jt_cargo_environment" class="lwc-jtc-environment-field">';
+		echo '<option value="sandbox"' . selected( $value, 'sandbox', false ) . '>' . esc_html__( 'Sandbox (testing)', 'lovecatz-wc' ) . '</option>';
+		echo '<option value="production"' . selected( $value, 'production', false ) . '>' . esc_html__( 'Production (live)', 'lovecatz-wc' ) . '</option></select>';
+	}
+
+	/**
+	 * Render a free-text option used for label copy that has no server source.
+	 *
+	 * Leaving the field empty hides the matching element on the label instead
+	 * of printing a value the carrier never sent.
+	 */
+	public function render_text_option( $args = array() ) {
+		$option      = isset( $args['option'] ) ? (string) $args['option'] : '';
+		$placeholder = isset( $args['placeholder'] ) ? (string) $args['placeholder'] : '';
+		if ( '' === $option ) {
+			return;
+		}
+		printf(
+			'<input type="text" class="regular-text" name="%1$s" value="%2$s" placeholder="%3$s" autocomplete="off">',
+			esc_attr( $option ),
+			esc_attr( (string) get_option( $option, '' ) ),
+			esc_attr( $placeholder )
+		);
+		echo '<p class="description">' . esc_html__( 'Kosongkan untuk menyembunyikan elemen ini pada label.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render Cargo credentials without sharing J&T Express form definitions. */
+	public function render_jtc_credentials_field( $args = array() ) {
+		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
+		$prefix = "lwc_jt_cargo_{$environment}";
+		$credentials = class_exists( 'LWC_JTC_Account' ) ? LWC_JTC_Account::get_credentials( $environment ) : array();
+		$groups = array(
+			__( 'Account', 'lovecatz-wc' ) => array(
+				'customer_code' => array( __( 'Customer Code', 'lovecatz-wc' ), 'text' ),
+				'uuid' => array( __( 'Interface UUID', 'lovecatz-wc' ), 'text' ),
+				'api_account' => array( __( 'API Account', 'lovecatz-wc' ), 'text' ),
+			),
+			__( 'Authentication', 'lovecatz-wc' ) => array(
+				'private_key' => array( __( 'Private Key', 'lovecatz-wc' ), 'password' ),
+				'customer_password' => array( __( 'Customer Password', 'lovecatz-wc' ), 'password' ),
+			),
+		);
+		echo '<div class="lwc-jtc-credential-group" data-environment="' . esc_attr( $environment ) . '">';
+		foreach ( $groups as $group_label => $fields ) {
+			echo '<fieldset class="lwc-jtc-credential-service"><legend>' . esc_html( $group_label ) . '</legend>';
+			foreach ( $fields as $field => $definition ) {
+				$name = "{$prefix}_{$field}";
+				$default = ( 'sandbox' === $environment && 'uuid' === $field && class_exists( 'LWC_JTC_API' ) ) ? LWC_JTC_API::SANDBOX_DEFAULT_UUID : '';
+				$value = isset( $credentials[ $field ] ) ? $credentials[ $field ] : get_option( $name, $default );
+				echo '<p><label>' . esc_html( $definition[0] ) . '<br><input type="' . esc_attr( $definition[1] ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $value ) . '" class="regular-text lwc-jtc-credential-field" data-credential="' . esc_attr( $field ) . '" autocomplete="off"></label></p>';
+			}
+			echo '</fieldset>';
 		}
 		echo '</div>';
+	}
+
+	/** Render a whitelisted console for all J&T Cargo Sandbox interfaces. */
+	public function render_jtc_sandbox_console() {
+		if ( ! class_exists( 'LWC_JTC_API' ) || ! class_exists( 'LWC_JTC_Account' ) ) {
+			return;
+		}
+		$credentials = LWC_JTC_Account::get_credentials( 'sandbox' );
+		$endpoints   = LWC_JTC_API::get_endpoints( 'sandbox', $credentials['uuid'] );
+		$labels      = LWC_JTC_API::get_interface_labels();
+		$progress    = function_exists( 'lwc_jtc_format_sandbox_progress' ) ? lwc_jtc_format_sandbox_progress( LWC_JTC_Account::get_sandbox_test_progress() ) : array();
+		$completed   = isset( $progress['completed_endpoints'] ) ? (int) $progress['completed_endpoints'] : 0;
+		$total_hits  = isset( $progress['successful_hits'] ) ? (int) $progress['successful_hits'] : 0;
+		?>
+		<div class="lwc-jtc-sandbox-console">
+			<div class="lwc-provider-status-list lwc-jtc-test-summary">
+				<div id="lwc-jtc-local-progress" class="lwc-provider-status" data-status="<?php echo 20 === $completed ? 'connected' : 'partial'; ?>"><span class="lwc-provider-status-dot"></span><strong><?php esc_html_e( 'Local test:', 'lovecatz-wc' ); ?></strong> <span class="lwc-provider-status-label"><?php echo esc_html( sprintf( __( '%1$d/20 endpoints complete · %2$d/60 successful API hits', 'lovecatz-wc' ), $completed, $total_hits ) ); ?></span></div>
+				<div class="lwc-provider-status" data-status="partial"><span class="lwc-provider-status-dot"></span><strong><?php esc_html_e( 'Production approval:', 'lovecatz-wc' ); ?></strong> <span class="lwc-provider-status-label"><?php esc_html_e( 'Awaiting confirmation from J&T Cargo', 'lovecatz-wc' ); ?></span></div>
+			</div>
+			<div class="lwc-jtc-console-grid">
+				<div class="lwc-jtc-console-field lwc-jtc-console-endpoint">
+					<label for="lwc-jtc-test-interface"><?php esc_html_e( 'API Interface', 'lovecatz-wc' ); ?></label>
+					<select id="lwc-jtc-test-interface">
+						<?php foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) : ?>
+							<option value="<?php echo esc_attr( $name ); ?>" data-url="<?php echo esc_attr( isset( $endpoints[ $name ] ) ? $endpoints[ $name ] : '' ); ?>"><?php echo esc_html( isset( $labels[ $name ] ) ? $labels[ $name ] : $name ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+				<div class="lwc-jtc-console-field">
+					<label for="lwc-jtc-test-method"><?php esc_html_e( 'Method', 'lovecatz-wc' ); ?></label>
+					<select id="lwc-jtc-test-method"><option value="POST">POST</option><option value="GET">GET</option></select>
+				</div>
+				<div class="lwc-jtc-console-field"><label><?php esc_html_e( 'Authentication', 'lovecatz-wc' ); ?></label><input type="text" value="Open Platform signed bizContent" readonly></div>
+			</div>
+			<div class="lwc-jtc-console-field">
+				<label for="lwc-jtc-test-url"><?php esc_html_e( 'Sandbox URL', 'lovecatz-wc' ); ?></label>
+				<input id="lwc-jtc-test-url" type="text" class="large-text code" readonly>
+			</div>
+			<div class="lwc-jtc-console-editors">
+				<div class="lwc-jtc-console-field">
+					<label for="lwc-jtc-test-payload"><?php esc_html_e( 'Request Payload (JSON)', 'lovecatz-wc' ); ?></label>
+					<textarea id="lwc-jtc-test-payload" class="large-text code" rows="14" spellcheck="false">{}</textarea>
+				</div>
+				<div class="lwc-jtc-console-field">
+					<label for="lwc-jtc-test-headers"><?php esc_html_e( 'Custom Headers (JSON)', 'lovecatz-wc' ); ?></label>
+					<textarea id="lwc-jtc-test-headers" class="large-text code" rows="14" spellcheck="false">{}</textarea>
+				</div>
+			</div>
+			<p class="submit"><button type="button" class="button button-primary" id="lwc-jtc-send-test"><?php esc_html_e( 'Send Sandbox Request', 'lovecatz-wc' ); ?></button></p>
+			<div id="lwc-jtc-test-status" class="lwc-provider-status" data-status="idle" aria-live="polite"><span class="lwc-provider-status-dot"></span><span class="lwc-provider-status-label"><?php esc_html_e( 'Ready', 'lovecatz-wc' ); ?></span></div>
+			<div class="lwc-jtc-progress-wrap">
+				<h3><?php esc_html_e( 'Three-hit Progress', 'lovecatz-wc' ); ?></h3>
+				<table class="widefat striped lwc-jtc-progress-table">
+					<thead><tr><th><?php esc_html_e( 'API Interface', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Successful', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Attempts', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Last Result', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Last Test', 'lovecatz-wc' ); ?></th></tr></thead>
+					<tbody>
+					<?php foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) : ?>
+						<?php $item = isset( $progress['interfaces'][ $name ] ) ? $progress['interfaces'][ $name ] : array( 'successes' => 0, 'attempts' => 0, 'last_http' => 0, 'last_business_code' => '', 'last_tested_at' => '' ); ?>
+						<tr data-interface="<?php echo esc_attr( $name ); ?>" data-complete="<?php echo 3 === (int) $item['successes'] ? 'yes' : 'no'; ?>">
+							<td><?php echo esc_html( isset( $labels[ $name ] ) ? $labels[ $name ] : $name ); ?></td>
+							<td class="lwc-jtc-progress-success"><strong><?php echo esc_html( (int) $item['successes'] . '/3' ); ?></strong></td>
+							<td class="lwc-jtc-progress-attempts"><?php echo esc_html( (int) $item['attempts'] ); ?></td>
+							<td class="lwc-jtc-progress-http"><?php echo $item['last_http'] ? esc_html( 'HTTP ' . (int) $item['last_http'] . ( $item['last_business_code'] ? ' · API ' . $item['last_business_code'] : '' ) ) : '—'; ?></td>
+							<td class="lwc-jtc-progress-time"><?php echo $item['last_tested_at'] ? esc_html( $item['last_tested_at'] ) : '—'; ?></td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+			<div class="lwc-jtc-console-field lwc-jtc-structured-wrap">
+				<label><?php esc_html_e( 'Structured View (server-driven)', 'lovecatz-wc' ); ?></label>
+				<div id="lwc-jtc-test-view" class="lwc-jtc-structured-view"></div>
+			</div>
+			<div class="lwc-jtc-console-field lwc-jtc-response-wrap">
+				<label for="lwc-jtc-test-response"><?php esc_html_e( 'Response', 'lovecatz-wc' ); ?></label>
+				<pre id="lwc-jtc-test-response" tabindex="0"></pre>
+			</div>
+		</div>
+		<?php
 	}
 
 	public function render_jt_express_enabled_field() {
@@ -840,10 +983,20 @@ class LWC_Admin_Settings {
 		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
 	}
 
-	/** Resolve the current environment, including the legacy test-mode fallback. */
-	private function get_jt_environment( $provider ) {
-		$legacy = 'yes' === get_option( "lwc_jt_{$provider}_test_mode", 'no' ) ? 'sandbox' : 'production';
-		return 'production' === get_option( "lwc_jt_{$provider}_environment", $legacy ) ? 'production' : 'sandbox';
+	/** Resolve the J&T Express environment. */
+	private function get_jt_environment() {
+		$legacy = 'yes' === get_option( 'lwc_jt_express_test_mode', 'no' ) ? 'sandbox' : 'production';
+		return 'production' === get_option( 'lwc_jt_express_environment', $legacy ) ? 'production' : 'sandbox';
+	}
+
+	public function sanitize_jtc_environment( $value ) {
+		return 'production' === sanitize_key( $value ) ? 'production' : 'sandbox';
+	}
+
+	/** Resolve the independent J&T Cargo environment. */
+	private function get_jtc_environment() {
+		$legacy = 'yes' === get_option( 'lwc_jt_cargo_test_mode', 'no' ) ? 'sandbox' : 'production';
+		return 'production' === get_option( 'lwc_jt_cargo_environment', $legacy ) ? 'production' : 'sandbox';
 	}
 
 	public function render_fedex_credentials_field( $args = array() ) {

@@ -57,7 +57,7 @@ class LWC_JT_Express_API {
 
 	/** Create an order and AWB in the selected J&T environment. */
 	public function create_order( $order, $credentials = array() ) {
-		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials( 'express' ) : $credentials;
+		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials() : $credentials;
 		$environment = $this->get_environment( $credentials );
 		$endpoints   = self::get_endpoints( $environment );
 		$required    = array( 'order_username', 'order_api_key', 'order_key' );
@@ -105,7 +105,7 @@ class LWC_JT_Express_API {
 		if ( '' === $awb ) {
 			return new WP_Error( 'lwc_jt_missing_awb', __( 'An AWB is required for tracking.', 'lovecatz-wc' ) );
 		}
-		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials( 'express' ) : $credentials;
+		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials() : $credentials;
 		$environment = $this->get_environment( $credentials );
 		$endpoints   = self::get_endpoints( $environment );
 		if ( ! $this->has_credentials( $credentials, array( 'tracking_company_id', 'tracking_password' ) ) || empty( $endpoints['track'] ) ) {
@@ -174,7 +174,7 @@ class LWC_JT_Express_API {
 
 	/** Request a short-lived J&T label URL for one AWB. */
 	public function get_print_url( $awb, $credentials = array() ) {
-		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials( 'express' ) : $credentials;
+		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials() : $credentials;
 		$environment = $this->get_environment( $credentials );
 		$endpoints   = self::get_endpoints( $environment );
 		$awb         = trim( sanitize_text_field( (string) $awb ) );
@@ -242,7 +242,7 @@ class LWC_JT_Express_API {
 		if ( '' === trim( (string) $order_id ) || '' === trim( (string) $remark ) ) {
 			return new WP_Error( 'lwc_jt_invalid_cancellation', __( 'An order ID and reason are required for cancellation.', 'lovecatz-wc' ) );
 		}
-		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials( 'express' ) : $credentials;
+		$credentials = empty( $credentials ) ? LWC_JT_Account::get_active_credentials() : $credentials;
 		$environment = $this->get_environment( $credentials );
 		$endpoints   = self::get_endpoints( $environment );
 		if ( ! $this->has_credentials( $credentials, array( 'cancel_key', 'cancel_username', 'cancel_api_key' ) ) || empty( $endpoints['cancel'] ) ) {
@@ -337,7 +337,7 @@ class LWC_JT_Express_API {
 			return $validation;
 		}
 		if ( empty( $credentials ) ) {
-			$credentials = LWC_JT_Account::get_active_credentials( 'express' );
+			$credentials = LWC_JT_Account::get_active_credentials();
 		}
 		$environment = isset( $credentials['environment'] ) && 'production' === $credentials['environment'] ? 'production' : 'sandbox';
 		$endpoints   = self::get_endpoints( $environment );

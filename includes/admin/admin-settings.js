@@ -5,6 +5,8 @@
     var fedexCheckSequence = 0;
     var jtCheckTimer;
     var jtCheckSequence = 0;
+    var jtcCheckTimer;
+    var jtcCheckSequence = 0;
     var rayspeedCheckTimer;
 
     function setProviderStatus(statusEl, status, label) {
@@ -252,6 +254,29 @@
         toggleEligibleUsers();
     }
 
+    function initPromoCombination() {
+        var toggle = $('#lwc_promo_allow_combination');
+        var choices = $('#lwc_promo_combination_coupons');
+
+        function updateVisibility() {
+            choices.prop('hidden', !toggle.prop('checked'));
+        }
+
+        toggle.on('change', function () {
+            if (toggle.prop('checked') && !choices.find('input[name="combination_coupon_ids[]"]:checked').length) {
+                choices.find('input[name="combination_coupon_ids[]"]:not(:disabled)').prop('checked', true);
+            }
+            updateVisibility();
+        });
+        choices.on('click', '.lwc-promo-combination-all', function () {
+            choices.find('input[name="combination_coupon_ids[]"]:not(:disabled)').prop('checked', true);
+        });
+        choices.on('click', '.lwc-promo-combination-none', function () {
+            choices.find('input[name="combination_coupon_ids[]"]').prop('checked', false);
+        });
+        updateVisibility();
+    }
+
     function initPreorderScope() {
         var allProducts = $('#lwc_preorder_all_products');
         var selectedProducts = $('#lwc-preorder-selected-products');
@@ -368,6 +393,153 @@
         }, 300);
     }
 
+    function updateJtcHealthStatus() {
+        var statusEl = $('#lwc-jtc-health-status');
+        if (!statusEl.length) {
+            return;
+        }
+
+        var environment = $('#lwc_jt_cargo_environment').val() === 'production' ? 'production' : 'sandbox';
+        var group = $('.lwc-jtc-credential-group[data-environment="' + environment + '"]');
+        var uuid = (group.find('[data-credential="uuid"]').val() || '').trim();
+        var sequence = ++jtcCheckSequence;
+
+        $('.lwc-jtc-environment-label').text(environment === 'production' ? 'Production:' : 'Sandbox:');
+        setProviderStatus(statusEl, 'checking', (window.lwcShippingSettings && lwcShippingSettings.checking) || 'Checking API...');
+        clearTimeout(jtcCheckTimer);
+        jtcCheckTimer = setTimeout(function () {
+            $.ajax({
+                url: window.lwcShippingSettings.ajax_url,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'lwc_check_jtc_connection',
+                    nonce: window.lwcShippingSettings.nonce,
+                    environment: environment,
+                    uuid: uuid
+                }
+            }).done(function (response) {
+                if (sequence !== jtcCheckSequence) {
+                    return;
+                }
+                var data = response && response.data ? response.data : {};
+                setProviderStatus(statusEl, response.success && data.status ? data.status : 'request_failed', data.label || data.message || lwcShippingSettings.requestFailed);
+            }).fail(function () {
+                if (sequence === jtcCheckSequence) {
+                    setProviderStatus(statusEl, 'request_failed', lwcShippingSettings.requestFailed || 'Connection request failed.');
+                }
+            });
+        }, 400);
+    }
+
+    function initJtcSandboxConsole() {
+        var interfaceSelect = $('#lwc-jtc-test-interface');
+        var methodSelect = $('#lwc-jtc-test-method');
+        var payloadInput = $('#lwc-jtc-test-payload');
+        var headersInput = $('#lwc-jtc-test-headers');
+        var responseOutput = $('#lwc-jtc-test-response');
+        var viewOutput = $('#lwc-jtc-test-view');
+        var statusEl = $('#lwc-jtc-test-status');
+        var sendButton = $('#lwc-jtc-send-test');
+
+        function updateProgress(progress) {
+            if (!progress || !progress.interfaces) {
+                return;
+            }
+            $.each(progress.interfaces, function (name, item) {
+                var row = $('.lwc-jtc-progress-table tr[data-interface="' + name + '"]');
+                row.attr('data-complete', parseInt(item.successes, 10) === 3 ? 'yes' : 'no');
+                row.find('.lwc-jtc-progress-success strong').text((parseInt(item.successes, 10) || 0) + '/3');
+                row.find('.lwc-jtc-progress-attempts').text(parseInt(item.attempts, 10) || 0);
+                var lastHttp = parseInt(item.last_http, 10) || 0;
+                var lastResult = lastHttp ? 'HTTP ' + lastHttp : '—';
+                if (lastHttp && item.last_business_code) {
+                    lastResult += ' · API ' + item.last_business_code;
+                }
+                row.find('.lwc-jtc-progress-http').text(lastResult);
+                row.find('.lwc-jtc-progress-time').text(item.last_tested_at || '—');
+            });
+            setProviderStatus(
+                $('#lwc-jtc-local-progress'),
+                progress.local_complete ? 'connected' : 'partial',
+                progress.completed_endpoints + '/' + progress.total_endpoints + ' endpoints complete · ' + progress.successful_hits + '/' + progress.required_hits + ' successful API hits'
+            );
+        }
+
+        function updateEndpoint() {
+            $('#lwc-jtc-test-url').val(interfaceSelect.find(':selected').data('url') || '');
+        }
+
+        function parseEditor(editor, label) {
+            var value = (editor.val() || '').trim();
+            if (!value) {
+                return {};
+            }
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                throw new Error(label + ': ' + error.message);
+            }
+        }
+
+        interfaceSelect.on('change', updateEndpoint);
+        methodSelect.on('change', updateEndpoint);
+        updateEndpoint();
+
+        sendButton.on('click', function () {
+            try {
+                parseEditor(payloadInput, 'Payload JSON');
+                parseEditor(headersInput, 'Headers JSON');
+            } catch (error) {
+                setProviderStatus(statusEl, 'request_failed', error.message);
+                responseOutput.text('');
+                viewOutput.empty();
+                return;
+            }
+
+            sendButton.prop('disabled', true);
+            setProviderStatus(statusEl, 'checking', 'Sending Sandbox request...');
+            responseOutput.text('');
+            $.ajax({
+                url: window.lwcShippingSettings.ajax_url,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'lwc_jtc_sandbox_request',
+                    nonce: window.lwcShippingSettings.nonce,
+                    interface: interfaceSelect.val(),
+                    method: methodSelect.val(),
+					format: 'form',
+                    payload: payloadInput.val(),
+                    headers: headersInput.val()
+                }
+            }).done(function (response) {
+                var data = response && response.data ? response.data : {};
+                updateProgress(data.progress);
+                if (!response.success) {
+                    setProviderStatus(statusEl, 'request_failed', data.message || 'Sandbox request failed.');
+                    responseOutput.text(JSON.stringify(data, null, 2));
+                    viewOutput.html(data.view_html || '');
+                    return;
+                }
+                var code = parseInt(data.http_status, 10) || 0;
+				var status = data.business_success ? 'connected' : (code >= 500 || !code ? 'request_failed' : 'partial');
+				var businessLabel = data.business_code ? ' · API ' + data.business_code : '';
+				setProviderStatus(statusEl, status, 'HTTP ' + code + businessLabel + ' · ' + data.elapsed_ms + ' ms');
+                responseOutput.text(JSON.stringify(data, null, 2));
+                viewOutput.html(data.view_html || '');
+            }).fail(function (xhr) {
+                var data = xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
+                updateProgress(data.progress);
+                setProviderStatus(statusEl, 'request_failed', data.message || 'Sandbox request failed.');
+                responseOutput.text(JSON.stringify(data, null, 2));
+                viewOutput.html(data.view_html || '');
+            }).always(function () {
+                sendButton.prop('disabled', false);
+            });
+        });
+    }
+
     $(document).ready(function () {
         if ($('#lwc_menu_icon_class').length) {
             initDashiconSelectors();
@@ -393,6 +565,16 @@
 			updateJtConnectionStatus(true);
 		}
 
+		if ($('.lwc-jtc-connection-status').length) {
+			$('.lwc-jtc-credential-field[data-credential="uuid"], #lwc_jt_cargo_environment').on('input change', updateJtcHealthStatus);
+			$('#lwc-jtc-check-health').on('click', updateJtcHealthStatus);
+			updateJtcHealthStatus();
+		}
+
+		if ($('.lwc-jtc-sandbox-console').length) {
+			initJtcSandboxConsole();
+		}
+
         if ($('.lwc-promo-image-select').length) {
             initPromoImageUploader();
         }
@@ -403,6 +585,10 @@
 
         if ($('#lwc_promo_all_users').length) {
             initPromoEligibility();
+        }
+
+        if ($('#lwc_promo_allow_combination').length) {
+            initPromoCombination();
         }
 
         if ($('#lwc_preorder_all_products').length) {

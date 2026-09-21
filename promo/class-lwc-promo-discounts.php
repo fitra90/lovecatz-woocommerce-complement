@@ -27,6 +27,84 @@ class LWC_Promo_Discounts {
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'apply_selected_shipping_discount' ), 20 );
 		add_action( 'woocommerce_checkout_create_order_fee_item', array( $this, 'mark_shipping_discount_order_item' ), 10, 4 );
 		add_filter( 'gettext', array( $this, 'rename_admin_shipping_discount_total' ), 20, 3 );
+		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate_coupon_combination' ), 20, 3 );
+		add_filter( 'woocommerce_coupon_error', array( $this, 'combination_error_message' ), 20, 3 );
+	}
+
+	/** Whether a coupon is configured to support combinations. */
+	public static function allows_combination( $coupon ) {
+		if ( ! $coupon instanceof WC_Coupon ) {
+			return false;
+		}
+
+		if ( metadata_exists( 'post', $coupon->get_id(), '_lwc_promo_allow_combination' ) ) {
+			return 'yes' === get_post_meta( $coupon->get_id(), '_lwc_promo_allow_combination', true );
+		}
+
+		return ! $coupon->get_individual_use();
+	}
+
+	/** Return null for all coupons, or the explicitly allowed coupon IDs. */
+	public static function get_combination_coupon_ids( $coupon ) {
+		if ( ! $coupon instanceof WC_Coupon || ! metadata_exists( 'post', $coupon->get_id(), '_lwc_promo_combination_coupon_ids' ) ) {
+			return null;
+		}
+
+		$stored = get_post_meta( $coupon->get_id(), '_lwc_promo_combination_coupon_ids', true );
+		return 'all' === $stored ? null : array_values( array_unique( array_filter( array_map( 'absint', (array) $stored ) ) ) );
+	}
+
+	/** Check the pair in both directions so application order cannot bypass a rule. */
+	public static function coupons_can_combine( $first, $second ) {
+		if ( ! self::allows_combination( $first ) || ! self::allows_combination( $second ) ) {
+			return false;
+		}
+
+		$first_ids  = self::get_combination_coupon_ids( $first );
+		$second_ids = self::get_combination_coupon_ids( $second );
+		return ( null === $first_ids || in_array( $second->get_id(), $first_ids, true ) )
+			&& ( null === $second_ids || in_array( $first->get_id(), $second_ids, true ) );
+	}
+
+	/** Reject a whitelist mismatch against coupons already applied to the cart/order. */
+	public function validate_coupon_combination( $valid, $coupon, $discounts ) {
+		if ( ! $valid || ! $coupon instanceof WC_Coupon || ! self::allows_combination( $coupon ) ) {
+			return $valid;
+		}
+
+		return $this->has_combination_conflict( $coupon, $discounts ) ? false : $valid;
+	}
+
+	/** Give the customer an actionable message for a combination whitelist failure. */
+	public function combination_error_message( $message, $error_code, $coupon ) {
+		if ( WC_Coupon::E_WC_COUPON_INVALID_FILTERED !== (int) $error_code || ! $coupon instanceof WC_Coupon || ! WC()->cart ) {
+			return $message;
+		}
+
+		$discounts = class_exists( 'WC_Discounts' ) ? new WC_Discounts( WC()->cart ) : null;
+		if ( $discounts && $this->has_combination_conflict( $coupon, $discounts ) ) {
+			return sprintf( __( 'Coupon "%s" cannot be combined with one or more coupons already applied.', 'lovecatz-wc' ), $coupon->get_code() );
+		}
+
+		return $message;
+	}
+
+	/** Determine whether an applied coupon conflicts with a candidate coupon. */
+	private function has_combination_conflict( $coupon, $discounts ) {
+		if ( ! $discounts instanceof WC_Discounts || ! method_exists( $discounts, 'get_object' ) ) {
+			return false;
+		}
+
+		$object = $discounts->get_object();
+		$codes  = $object instanceof WC_Cart ? $object->get_applied_coupons() : ( $object instanceof WC_Order ? $object->get_coupon_codes() : array() );
+		foreach ( $codes as $code ) {
+			$applied = new WC_Coupon( $code );
+			if ( $applied->get_id() && $applied->get_id() !== $coupon->get_id() && self::allows_combination( $applied ) && ! self::coupons_can_combine( $coupon, $applied ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/** Rebuild cap factors whenever WooCommerce starts a new totals calculation. */
