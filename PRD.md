@@ -70,17 +70,18 @@ The sidebar menu expands into one submenu entry per main tab (Setting, Products,
 
 ## Promo coupons
 
-Promos use native `WC_Coupon` records so WooCommerce remains responsible for ordinary validation and usage tracking. The manager supports percentage and fixed-cart discounts, expiry, total/per-user limits, individual use, selected users, percentage maximum caps, and active/disabled images. Mutations require `manage_woocommerce` and nonces.
+Promos use native `WC_Coupon` records so WooCommerce remains responsible for ordinary validation and usage tracking. The manager supports percentage and fixed-cart discounts, expiry, total/per-user limits, individual use, selected users, separate IDR/USD maximum caps, and active/disabled images. Mutations require `manage_woocommerce` and nonces.
 
 Metadata:
 
 - `_lwc_promo_created` — customer-dashboard marker;
 - `_lwc_promo_eligible_user_ids`;
-- `_lwc_promo_maximum_discount`;
+- `_lwc_promo_maximum_discount` — IDR cap (legacy key retained for compatibility);
+- `_lwc_promo_maximum_discount_usd` — USD cap;
 - `_lwc_promo_active_image_id`;
 - `_lwc_promo_disabled_image_id`.
 
-Selected users are also saved as WooCommerce email restrictions. The percentage cap is enforced through `woocommerce_coupon_get_discount_amount`.
+Selected users are also saved as WooCommerce email restrictions. Percentage caps are enforced through `woocommerce_coupon_get_discount_amount` using the cap that matches the checkout currency; one currency never falls back to the other.
 
 Customer surfaces are `/my-account/coupon/`, the **Coupon** account-menu item, `[lwc_promo_dashboard]`, cart/checkout promo cards, and Checkout Block selection. The dashboard requires login, queries marked LoveCatz promos, evaluates eligibility/expiry/usage, and renders active or disabled cards. WooCommerce performs final application validation. The checkout coupon modal is portalled directly under `<body>` with a viewport-level overlay so payment buttons and third-party iframes cannot paint above it. Missing artwork uses `assets/2026_VOUCHER-REORDER_FINAL.webp`.
 

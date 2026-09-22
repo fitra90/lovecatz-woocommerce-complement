@@ -46,7 +46,8 @@ class LWC_Promo_Admin {
 					<label><span><?php esc_html_e( 'Discount type', 'lovecatz-wc' ); ?></span><select name="discount_type" id="lwc_promo_discount_type"><option value="percent" <?php selected( $values['type'], 'percent' ); ?>><?php esc_html_e( 'Percentage discount', 'lovecatz-wc' ); ?></option><option value="fixed_cart" <?php selected( $values['type'], 'fixed_cart' ); ?>><?php esc_html_e( 'Fixed cart discount', 'lovecatz-wc' ); ?></option><option value="lwc_free_shipping" <?php selected( $values['type'], 'lwc_free_shipping' ); ?>><?php esc_html_e( 'Free shipping', 'lovecatz-wc' ); ?></option></select></label>
 					<label class="lwc-percent-only"><span><?php esc_html_e( 'Discount percentage', 'lovecatz-wc' ); ?></span><input type="number" name="percentage_amount" min="1" max="100" step="1" value="<?php echo esc_attr( $values['percentage_amount'] ); ?>" /></label>
 					<label class="lwc-fixed-only"><span><?php esc_html_e( 'Discount amount', 'lovecatz-wc' ); ?></span><input type="number" name="fixed_amount" min="1" step="1" value="<?php echo esc_attr( $values['fixed_amount'] ); ?>" /></label>
-					<label class="lwc-maximum-only"><span><?php esc_html_e( 'Maximum discount', 'lovecatz-wc' ); ?></span><input type="number" name="maximum_discount" min="1" step="1" value="<?php echo esc_attr( $values['maximum_discount'] ); ?>" /><small><?php esc_html_e( 'Optional. This caps the total product discount for percentage promos, or the covered shipping cost for free-shipping promos. Leave empty for no cap.', 'lovecatz-wc' ); ?></small></label>
+					<label class="lwc-maximum-only"><span><?php esc_html_e( 'Maximum discount (IDR)', 'lovecatz-wc' ); ?></span><input type="number" name="maximum_discount_idr" min="1" step="1" value="<?php echo esc_attr( $values['maximum_discount_idr'] ); ?>" /><small><?php esc_html_e( 'Applied to IDR transactions. Leave empty for no cap.', 'lovecatz-wc' ); ?></small></label>
+					<label class="lwc-maximum-only"><span><?php esc_html_e( 'Maximum discount (USD)', 'lovecatz-wc' ); ?></span><input type="number" name="maximum_discount_usd" min="0.01" step="0.01" value="<?php echo esc_attr( $values['maximum_discount_usd'] ); ?>" /><small><?php esc_html_e( 'Applied to USD transactions. Leave empty for no cap.', 'lovecatz-wc' ); ?></small></label>
 					<label><span><?php esc_html_e( 'Expiry date', 'lovecatz-wc' ); ?></span><input type="date" name="expiry_date" value="<?php echo esc_attr( $values['expiry_date'] ); ?>" /></label>
 					<div class="lwc-promo-eligibility-field">
 						<span class="lwc-promo-field-label"><?php esc_html_e( 'Eligible users', 'lovecatz-wc' ); ?></span>
@@ -136,7 +137,6 @@ class LWC_Promo_Admin {
 		$active         = isset( $_POST['coupon_active'] );
 		$usage_limit    = isset( $_POST['usage_limit'] ) ? max( 0, (int) wp_unslash( $_POST['usage_limit'] ) ) : 0;
 		$per_user_limit = isset( $_POST['usage_limit_per_user'] ) ? max( 0, (int) wp_unslash( $_POST['usage_limit_per_user'] ) ) : 0;
-		$maximum        = isset( $_POST['maximum_discount'] ) ? max( 0, (int) wp_unslash( $_POST['maximum_discount'] ) ) : 0;
 		$allow_combination = isset( $_POST['allow_combination'] );
 		$combination_options = $this->get_combination_coupon_options( $id );
 		$available_combination_ids = array_values( array_column( array_filter( $combination_options, function( $option ) { return $option['allows_combination']; } ), 'id' ) );
@@ -161,7 +161,7 @@ class LWC_Promo_Admin {
 
 			update_post_meta( $id, '_lwc_promo_created', '1' );
 			update_post_meta( $id, '_lwc_promo_eligible_user_ids', $user_ids );
-			update_post_meta( $id, '_lwc_promo_maximum_discount', in_array( $type, array( 'percent', 'lwc_free_shipping' ), true ) && $maximum > 0 ? $maximum : '' );
+			$this->save_maximum_discounts( $id, $type );
 			update_post_meta( $id, '_lwc_promo_active_image_id', isset( $_POST['active_image_id'] ) ? absint( $_POST['active_image_id'] ) : 0 );
 			update_post_meta( $id, '_lwc_promo_disabled_image_id', isset( $_POST['disabled_image_id'] ) ? absint( $_POST['disabled_image_id'] ) : 0 );
 			update_post_meta( $id, '_lwc_promo_allow_combination', $allow_combination ? 'yes' : 'no' );
@@ -265,7 +265,8 @@ class LWC_Promo_Admin {
 			'type'                => $type,
 			'percentage_amount'   => 'percent' === $type ? $amount : '',
 			'fixed_amount'        => 'fixed_cart' === $type ? $amount : '',
-			'maximum_discount'    => $id ? get_post_meta( $id, '_lwc_promo_maximum_discount', true ) : '',
+			'maximum_discount_idr' => $id ? get_post_meta( $id, LWC_Promo_Discounts::META_MAXIMUM, true ) : '',
+			'maximum_discount_usd' => $id ? get_post_meta( $id, LWC_Promo_Discounts::META_MAXIMUM_USD, true ) : '',
 			'expiry_date'         => $coupon && $coupon->get_date_expires() ? $coupon->get_date_expires()->date( 'Y-m-d' ) : '',
 			'eligible_user_ids'   => $eligible_user_ids,
 			'all_users'           => empty( $eligible_user_ids ),
@@ -277,6 +278,39 @@ class LWC_Promo_Admin {
 			'active_image_id'     => $id ? absint( get_post_meta( $id, '_lwc_promo_active_image_id', true ) ) : 0,
 			'disabled_image_id'   => $id ? absint( get_post_meta( $id, '_lwc_promo_disabled_image_id', true ) ) : 0,
 		);
+	}
+
+	/**
+	 * Read a non-negative money value from POST.
+	 *
+	 * @param string $key POST field name.
+	 * @return float
+	 */
+	private function post_amount( $key ) {
+		if ( ! isset( $_POST[ $key ] ) ) {
+			return 0.0;
+		}
+
+		return max( 0, (float) wc_format_decimal( wp_unslash( $_POST[ $key ] ) ) );
+	}
+
+	/**
+	 * Persist the caps the shop owner typed for a promo type.
+	 *
+	 * The matching POST fields are the only source of a cap value. An empty
+	 * field stores an empty cap rather than converting or falling back to the
+	 * value entered for the other currency.
+	 *
+	 * @param int    $coupon_id Coupon post ID.
+	 * @param string $type      Coupon discount type.
+	 */
+	private function save_maximum_discounts( $coupon_id, $type ) {
+		$applies = in_array( $type, array( 'percent', 'lwc_free_shipping' ), true );
+		$idr     = $applies ? $this->post_amount( 'maximum_discount_idr' ) : 0.0;
+		$usd     = $applies ? $this->post_amount( 'maximum_discount_usd' ) : 0.0;
+
+		update_post_meta( $coupon_id, LWC_Promo_Discounts::META_MAXIMUM, $idr > 0 ? $idr : '' );
+		update_post_meta( $coupon_id, LWC_Promo_Discounts::META_MAXIMUM_USD, $usd > 0 ? $usd : '' );
 	}
 
 	/** Return every non-trashed coupon that may be selected as a combination partner. */
@@ -401,6 +435,31 @@ class LWC_Promo_Admin {
 		}
 		echo '</tbody></table>';
 	}
-	private function format_coupon_discount( $coupon ) { $maximum = (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true ); if ( 'lwc_free_shipping' === $coupon->get_discount_type() ) { return $maximum > 0 ? sprintf( __( 'Free shipping up to %s', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $maximum ) ) ) : __( 'Free shipping', 'lovecatz-wc' ); } $discount = $coupon->get_amount() . ( 'percent' === $coupon->get_discount_type() ? '%' : '' ); if ( 'percent' === $coupon->get_discount_type() && $maximum > 0 ) { $discount .= ' · ' . sprintf( __( 'Maximum %s', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $maximum ) ) ); } return $discount; }
+	/** Describe a coupon's discount, including each configured currency cap. */
+	private function format_coupon_discount( $coupon ) {
+		$idr  = LWC_Promo_Discounts::get_maximum_discount( $coupon, LWC_Promo_Discounts::CURRENCY_IDR );
+		$usd  = LWC_Promo_Discounts::get_maximum_discount( $coupon, LWC_Promo_Discounts::CURRENCY_USD );
+		$caps = array();
+		if ( $idr > 0 ) {
+			$caps[] = LWC_Promo_Discounts::format_money( $idr, LWC_Promo_Discounts::CURRENCY_IDR );
+		}
+		if ( $usd > 0 ) {
+			$caps[] = LWC_Promo_Discounts::format_money( $usd, LWC_Promo_Discounts::CURRENCY_USD );
+		}
+		$cap_text = implode( ' / ', $caps );
+
+		if ( 'lwc_free_shipping' === $coupon->get_discount_type() ) {
+			return '' !== $cap_text
+				? sprintf( __( 'Free shipping up to %s', 'lovecatz-wc' ), $cap_text )
+				: __( 'Free shipping', 'lovecatz-wc' );
+		}
+
+		$discount = $coupon->get_amount() . ( 'percent' === $coupon->get_discount_type() ? '%' : '' );
+		if ( 'percent' === $coupon->get_discount_type() && '' !== $cap_text ) {
+			$discount .= ' · ' . sprintf( __( 'Maximum %s', 'lovecatz-wc' ), $cap_text );
+		}
+
+		return $discount;
+	}
 	private function render_image_preview( $image_id ) { $url = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : ''; echo '<span class="lwc-promo-image-preview">' . ( $url ? '<img src="' . esc_url( $url ) . '" alt="" />' : '' ) . '</span>'; }
 }

@@ -30,6 +30,17 @@
 - J&T Cargo's `calculate_shipping()` is intentionally empty — internal courier, emits no rates.
 - JNE's tariff API needs credentials ("Kredensial Tidak Valid - Authorization header required" from CLI), so JNE behaviour has to be read from code, not exercised offline.
 
+## Promo caps are currency-aware and type-scoped (added 2026-09-22)
+- Store base = `get_option('woocommerce_currency')` = **IDR**, `lwc_currency_rates` = `USD=15000` (1 USD = 15,000 IDR), `woocommerce_price_num_decimals` = 0.
+- One cap pair per promo type, **never shared**: percentage → `_lwc_promo_maximum_discount` / `_lwc_promo_maximum_discount_usd`; shipping → `_lwc_promo_shipping_maximum_discount` / `_lwc_promo_shipping_maximum_discount_usd`. Sharing one key made one type inherit the other's value.
+- **Always read a cap through `LWC_Promo_Discounts::get_maximum_discount( $coupon, $currency )`**, never `get_post_meta()` directly. The key is resolved from `$coupon->get_discount_type()` via `maximum_discount_keys( $type )` — the single source of truth, so the admin never hardcodes a cap meta key. An empty field means no cap; nothing is defaulted, converted, or inherited. Coupon 27 `diskon50` = 50%, Rp150,000, USD 9.
+- Cap persistence lives in `LWC_Promo_Admin::save_maximum_discounts( $coupon_id, $type )`, called by `save_coupon()`. POST fields: `maximum_discount_base`/`_usd` (percentage) and `maximum_discount_shipping_base`/`_usd` (shipping); visibility is driven by `initPromoDiscountType()` in `includes/admin/admin-settings.js` (`lwc-percent-only` / `lwc-free-shipping-only`).
+- `LWC_Promo_Discounts::format_money( $amount, $currency )` must be used instead of `wc_price()` when the string is escaped again downstream: `wc_price()` returns `&#36;` for USD and both the admin list (`esc_html`) and the checkout card (`.text().html()`) would print the entity verbatim.
+- The currency trap from the shipping switcher applies here in reverse: the cart really is in the shopper currency, so the cap must be the one for the shopper currency rather than the stored base-currency number.
+
 ## Conventions
 - PHP: tabs for indentation, WordPress coding style, `lwc_` prefix for options/meta, text domain `lovecatz-wc`.
 - Bump both the header `Version:` and `LWC_VERSION` together; `lwc_install()` re-runs when the version changes.
+- Prefer the smallest change that satisfies the request. This project's owner pushes back on broad refactors and rate-derived abstractions; simple dedicated fields beat generic machinery. Do not hardcode a cap amount or assume one from another source — every cap is user input.
+- `LWC_Promo_Admin::save_coupon()` ends in `redirect_with_notice()` → `exit`, so it **cannot** be driven from a CLI harness. Extract the logic you need to test into its own method instead of trying to call the handler.
+- CLI verification harnesses live in `tmp/` and boot via `define('WP_USE_THEMES', false)` + `require wp-load.php`. To test a non-base currency, force the converter's private cache: `ReflectionProperty( LWC_Currency_Converter::instance(), 'selected' )->setValue( $converter, 'USD' )` — no cookie or `?currency=` needed. Wrap DB fixtures in `START TRANSACTION` / `ROLLBACK`.

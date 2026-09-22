@@ -15,8 +15,88 @@ class LWC_Promo_Discounts {
 	/** Coupon type used for a discount against the currently selected shipping rate. */
 	const FREE_SHIPPING_TYPE = 'lwc_free_shipping';
 
+	/** Coupon meta key holding the IDR maximum discount. Kept for backward compatibility. */
+	const META_MAXIMUM = '_lwc_promo_maximum_discount';
+
+	/** Coupon meta key holding the USD maximum discount. */
+	const META_MAXIMUM_USD = '_lwc_promo_maximum_discount_usd';
+
+	const CURRENCY_IDR = 'IDR';
+	const CURRENCY_USD = 'USD';
+
 	/** Cached proportional cap factors for the current cart calculation. */
 	private $percentage_cap_factors = array();
+
+	/**
+	 * The currency the current cart is priced in.
+	 *
+	 * get_woocommerce_currency() is filtered by the currency converter, so it
+	 * reports the shopper currency rather than the stored base currency.
+	 *
+	 * @return string
+	 */
+	public static function active_currency() {
+		$currency = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '';
+		$currency = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $currency ) );
+
+		if ( '' !== $currency ) {
+			return $currency;
+		}
+
+		return strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) get_option( 'woocommerce_currency', '' ) ) );
+	}
+
+	/**
+	 * The maximum discount that applies to a currency, or 0 when there is no cap.
+	 *
+	 * The value is always whatever the shop owner typed into the matching field
+	 * for this promo type and currency. Nothing is defaulted, derived, or
+	 * converted: an empty field means the promo is genuinely uncapped in that
+	 * currency. Comparing a shopper-currency discount against another currency's
+	 * cap silently removed the ceiling, which is why the caller must resolve the
+	 * cap in the currency actually being charged.
+	 *
+	 * @param WC_Coupon $coupon   Coupon instance.
+	 * @param string    $currency Currency code; empty means the active currency.
+	 * @return float
+	 */
+	public static function get_maximum_discount( $coupon, $currency = '' ) {
+		if ( ! $coupon instanceof WC_Coupon || ! $coupon->get_id() ) {
+			return 0.0;
+		}
+
+		$currency = '' !== (string) $currency ? strtoupper( (string) $currency ) : self::active_currency();
+		if ( ! in_array( $currency, array( self::CURRENCY_IDR, self::CURRENCY_USD ), true ) ) {
+			return 0.0;
+		}
+
+		$key = self::CURRENCY_USD === $currency ? self::META_MAXIMUM_USD : self::META_MAXIMUM;
+
+		return max( 0, (float) get_post_meta( $coupon->get_id(), $key, true ) );
+	}
+
+	/**
+	 * Plain-text money string for a specific currency.
+	 *
+	 * wc_price() returns HTML entities for many symbols (WooCommerce stores USD
+	 * as "&#36;"). Both the admin coupon list and the checkout coupon card escape
+	 * the string again before output, so an undecoded entity would be shown
+	 * verbatim as "&#36;9" instead of "$9".
+	 *
+	 * @param float  $amount   Amount to format.
+	 * @param string $currency Currency code; empty means the active currency.
+	 * @return string
+	 */
+	public static function format_money( $amount, $currency = '' ) {
+		if ( ! function_exists( 'wc_price' ) ) {
+			return (string) $amount;
+		}
+
+		$args  = '' !== (string) $currency ? array( 'currency' => strtoupper( (string) $currency ) ) : array();
+		$price = wc_price( (float) $amount, $args );
+
+		return html_entity_decode( wp_strip_all_tags( $price ), ENT_QUOTES, 'UTF-8' );
+	}
 
 	/** Register coupon types and cart calculations on every request context. */
 	public function init() {
@@ -151,7 +231,11 @@ class LWC_Promo_Discounts {
 				continue;
 			}
 
-			$maximum  = max( 0, (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true ) );
+			// The cap comes from the shipping promo's own per-currency field, while
+			// the remaining shipping cost is already in the shopper currency.
+			// Resolving both in the same currency keeps the ceiling meaningful
+			// after a currency switch.
+			$maximum  = self::get_maximum_discount( $coupon );
 			$discount = $maximum > 0 ? min( $remaining_shipping, $maximum ) : $remaining_shipping;
 			if ( $discount <= 0 ) {
 				continue;
@@ -246,6 +330,11 @@ class LWC_Promo_Discounts {
 	/**
 	 * Cap a percentage discount by proportionally scaling its item discounts.
 	 *
+	 * The cart line subtotals and the discount are already in the shopper
+	 * currency, so the cap has to be resolved in that same currency. Reading the
+	 * stored base-currency number directly made the ceiling disappear for every
+	 * converted currency.
+	 *
 	 * @param float     $discount    Calculated discount amount.
 	 * @param float     $discounting Discounting amount.
 	 * @param array     $cart_item   Cart item.
@@ -259,12 +348,17 @@ class LWC_Promo_Discounts {
 			return $discount;
 		}
 
-		$maximum = (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true );
-		if ( $maximum <= 0 || ! WC()->cart ) {
+		if ( ! WC()->cart ) {
 			return $discount;
 		}
 
-		$cache_key = $coupon->get_id() ? (string) $coupon->get_id() : $coupon->get_code();
+		$currency = self::active_currency();
+		$maximum  = self::get_maximum_discount( $coupon, $currency );
+		if ( $maximum <= 0 ) {
+			return $discount;
+		}
+
+		$cache_key = ( $coupon->get_id() ? (string) $coupon->get_id() : $coupon->get_code() ) . '|' . $currency;
 		if ( ! isset( $this->percentage_cap_factors[ $cache_key ] ) ) {
 			$discountable_total = 0;
 			foreach ( WC()->cart->get_cart() as $item ) {

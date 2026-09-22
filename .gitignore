@@ -1,1 +1,4 @@
 *.zip
+/tmp/
+e1.txt
+e2.txt

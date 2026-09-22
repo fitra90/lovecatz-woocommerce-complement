@@ -250,18 +250,22 @@ class LWC_Promo_Dashboard {
 			}
 
 			$amount = $coupon->get_amount();
+			// Resolve the cap in the shopper currency so the card states the same
+			// ceiling the cart will actually enforce.
+			$maximum = class_exists( 'LWC_Promo_Discounts' )
+				? LWC_Promo_Discounts::get_maximum_discount( $coupon )
+				: (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true );
+
 			if ( class_exists( 'LWC_Promo_Discounts' ) && $coupon->is_type( LWC_Promo_Discounts::FREE_SHIPPING_TYPE ) ) {
-				$maximum = (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true );
 				$description = $maximum > 0
-					? sprintf( __( 'Free shipping up to %s', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $maximum ) ) )
+					? sprintf( __( 'Free shipping up to %s', 'lovecatz-wc' ), $this->format_money( $maximum ) )
 					: __( 'Free shipping', 'lovecatz-wc' );
 			} else {
 				$description = 'percent' === $coupon->get_discount_type()
 					? sprintf( __( '%s%% discount', 'lovecatz-wc' ), $amount )
-					: sprintf( __( '%s off', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $amount ) ) );
-				$maximum = (float) get_post_meta( $coupon->get_id(), '_lwc_promo_maximum_discount', true );
+					: sprintf( __( '%s off', 'lovecatz-wc' ), $this->format_money( $amount ) );
 				if ( 'percent' === $coupon->get_discount_type() && $maximum > 0 ) {
-					$description .= ' · ' . sprintf( __( 'Maximum %s', 'lovecatz-wc' ), wp_strip_all_tags( wc_price( $maximum ) ) );
+					$description .= ' · ' . sprintf( __( 'Maximum %s', 'lovecatz-wc' ), $this->format_money( $maximum ) );
 				}
 			}
 			$minimum = $coupon->get_minimum_amount();
@@ -285,6 +289,24 @@ class LWC_Promo_Dashboard {
 		}
 
 		return $coupons;
+	}
+
+	/**
+	 * Plain-text money string in the shopper currency.
+	 *
+	 * The checkout card escapes this description before injecting it, so the
+	 * currency entity wc_price() emits for symbols such as USD must be decoded
+	 * first or the customer would read "&#36;9" instead of "$9".
+	 *
+	 * @param float $amount Amount in the active currency.
+	 * @return string
+	 */
+	private function format_money( $amount ) {
+		if ( class_exists( 'LWC_Promo_Discounts' ) ) {
+			return LWC_Promo_Discounts::format_money( $amount );
+		}
+
+		return html_entity_decode( wp_strip_all_tags( wc_price( $amount ) ), ENT_QUOTES, 'UTF-8' );
 	}
 
 	/**
