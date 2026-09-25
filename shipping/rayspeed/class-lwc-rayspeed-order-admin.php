@@ -30,6 +30,7 @@ class LWC_RaySpeed_Order_Admin {
 		}
 		$awb = (string) $order->get_meta( '_lwc_rayspeed_awb' );
 		$tracking = $order->get_meta( '_lwc_rayspeed_tracking' );
+		$create_error = (string) $order->get_meta( '_lwc_rayspeed_create_error' );
 		?>
 		<div class="lwc-rayspeed-order" data-order-id="<?php echo esc_attr( $order->get_id() ); ?>">
 			<?php if ( 'ID' === strtoupper( (string) $order->get_shipping_country() ) ) : ?>
@@ -38,6 +39,9 @@ class LWC_RaySpeed_Order_Admin {
 				<p><strong><?php esc_html_e( 'Environment:', 'lovecatz-wc' ); ?></strong> <?php esc_html_e( 'Development Sandbox', 'lovecatz-wc' ); ?></p>
 				<p><button type="button" class="button button-primary" id="lwc-rayspeed-create-awb" <?php disabled( '' !== $awb ); ?>><?php esc_html_e( 'Create test AWB', 'lovecatz-wc' ); ?></button></p>
 				<p><strong><?php esc_html_e( 'AWB:', 'lovecatz-wc' ); ?></strong> <span id="lwc-rayspeed-awb"><?php echo esc_html( $awb ? $awb : '—' ); ?></span></p>
+				<?php if ( '' !== $create_error ) : ?>
+					<p class="lwc-rayspeed-error"><strong><?php esc_html_e( 'Automatic AWB creation failed:', 'lovecatz-wc' ); ?></strong> <?php echo esc_html( $create_error ); ?></p>
+				<?php endif; ?>
 				<p><button type="button" class="button" id="lwc-rayspeed-track" <?php disabled( '' === $awb ); ?>><?php esc_html_e( 'Refresh tracking', 'lovecatz-wc' ); ?></button></p>
 				<div id="lwc-rayspeed-status" aria-live="polite"></div>
 				<div id="lwc-rayspeed-tracking"><?php $this->render_tracking( is_array( $tracking ) ? $tracking : array() ); ?></div>
@@ -88,17 +92,45 @@ class LWC_RaySpeed_Order_Admin {
 
 	public function ajax_create_awb() {
 		$order = $this->get_ajax_order();
-		if ( $order->get_meta( '_lwc_rayspeed_awb' ) ) {
-			wp_send_json_error( array( 'message' => __( 'This order already has a RaySpeed AWB.', 'lovecatz-wc' ) ) );
+		$result = $this->auto_create_awb( $order );
+		if ( empty( $result['success'] ) ) {
+			wp_send_json_error( array( 'message' => $result['message'] ) );
 		}
+		wp_send_json_success( array( 'message' => $result['message'], 'awb' => $order->get_meta( '_lwc_rayspeed_awb' ) ) );
+	}
+
+	/**
+	 * Create the RaySpeed AWB without an admin request.
+	 *
+	 * Used by LWC_AWB_Automation when a RaySpeed order starts processing, so the
+	 * automatic path and the manual button behave identically. Failures are
+	 * stored on the order instead of interrupting the status transition.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @return array Result with success and message.
+	 */
+	public function auto_create_awb( $order ) {
+		if ( ! $order instanceof WC_Order ) {
+			return array( 'success' => false, 'message' => __( 'Order not found.', 'lovecatz-wc' ) );
+		}
+		if ( '' !== (string) $order->get_meta( '_lwc_rayspeed_awb' ) ) {
+			return array( 'success' => true, 'message' => __( 'This order already has a RaySpeed AWB.', 'lovecatz-wc' ) );
+		}
+
 		$result = ( new LWC_RaySpeed_API() )->create_awb( $order );
 		if ( empty( $result['success'] ) ) {
-			wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : __( 'RaySpeed AWB creation failed.', 'lovecatz-wc' ) ) );
+			$message = isset( $result['message'] ) ? $result['message'] : __( 'RaySpeed AWB creation failed.', 'lovecatz-wc' );
+			$order->update_meta_data( '_lwc_rayspeed_create_error', $message );
+			$order->save();
+			return array( 'success' => false, 'message' => $message );
 		}
+
 		$order->update_meta_data( '_lwc_rayspeed_awb', $result['airwaybill'] );
+		$order->delete_meta_data( '_lwc_rayspeed_create_error' );
 		$order->add_order_note( sprintf( __( 'RaySpeed test AWB created: %s', 'lovecatz-wc' ), $result['airwaybill'] ) );
 		$order->save();
-		wp_send_json_success( array( 'message' => __( 'RaySpeed test AWB created.', 'lovecatz-wc' ), 'awb' => $result['airwaybill'] ) );
+
+		return array( 'success' => true, 'message' => __( 'RaySpeed test AWB created.', 'lovecatz-wc' ) );
 	}
 
 	public function ajax_track() {

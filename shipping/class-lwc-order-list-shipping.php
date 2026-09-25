@@ -182,10 +182,17 @@ class LWC_Order_List_Shipping {
 		$tracking_script_path = LWC_PLUGIN_DIR . 'shipping/fedex/fedex-tracking.js';
 		wp_enqueue_script( 'lwc-fedex-tracking-time', LWC_PLUGIN_URL . 'shipping/fedex/fedex-tracking.js', array(), file_exists( $tracking_script_path ) ? (string) filemtime( $tracking_script_path ) : LWC_VERSION, true );
 		wp_enqueue_script( 'lwc-order-list-shipping', LWC_PLUGIN_URL . 'shipping/order-list-shipping.js', array( 'jquery', 'lwc-fedex-tracking-time' ), file_exists( $script_path ) ? (string) filemtime( $script_path ) : LWC_VERSION, true );
+		$today = new DateTimeImmutable( 'today', wp_timezone() );
+		$express_pickup_limit = $today->modify( '+1 day' );
+		while ( (int) $express_pickup_limit->format( 'N' ) > 5 ) {
+			$express_pickup_limit = $express_pickup_limit->modify( '+1 day' );
+		}
 		wp_localize_script( 'lwc-order-list-shipping', 'lwcOrderShipping', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonces'  => array( 'jt' => wp_create_nonce( 'lwc_jt_order' ), 'fedex' => wp_create_nonce( 'lwc_fedex_connection_check' ), 'rayspeed' => wp_create_nonce( 'lwc_rayspeed_order' ) ),
-			'today'   => current_time( 'Y-m-d' ),
+			'today'   => $today->format( 'Y-m-d' ),
+			'expressPickupMax' => $express_pickup_limit->format( 'Y-m-d' ),
+			'groundPickupMax'  => $today->modify( '+14 days' )->format( 'Y-m-d' ),
 			'i18n'    => array(
 				'working' => __( 'Processing…', 'lovecatz-wc' ),
 				'error' => __( 'The shipping request failed.', 'lovecatz-wc' ),

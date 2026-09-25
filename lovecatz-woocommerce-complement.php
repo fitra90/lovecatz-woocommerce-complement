@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.0.82
+ * Version:     1.0.88
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.0.82' );
+define( 'LWC_VERSION', '1.0.88' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -166,6 +166,7 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-courier-registry.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-awb-automation.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-list-shipping.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-order-shipping-switcher.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-shipping-jt-express.php';
@@ -588,6 +589,37 @@ function lwc_fedex_get_posted_package_override() {
 	return $override;
 }
 
+/**
+ * Validate the optional FedEx ship date in the site's timezone.
+ *
+ * FedEx Future Day labels are limited to ten calendar days ahead. An omitted
+ * value intentionally means today, preserving the quick AWB action.
+ *
+ * @return string|WP_Error Date in Y-m-d format or validation error.
+ */
+function lwc_fedex_get_posted_ship_date() {
+	$timezone = wp_timezone();
+	$today = new DateTimeImmutable( 'today', $timezone );
+	$value = isset( $_POST['ship_date'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['ship_date'] ) ) ) : '';
+	if ( '' === $value ) {
+		return $today->format( 'Y-m-d' );
+	}
+
+	$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value, $timezone );
+	$errors = DateTimeImmutable::getLastErrors();
+	if ( ! $date || ( is_array( $errors ) && ( ! empty( $errors['warning_count'] ) || ! empty( $errors['error_count'] ) ) ) || $date->format( 'Y-m-d' ) !== $value ) {
+		return new WP_Error( 'lwc_fedex_invalid_ship_date', __( 'Enter a valid scheduled ship date.', 'lovecatz-wc' ) );
+	}
+	if ( $date < $today ) {
+		return new WP_Error( 'lwc_fedex_past_ship_date', __( 'The scheduled ship date cannot be in the past.', 'lovecatz-wc' ) );
+	}
+	if ( $date > $today->modify( '+10 days' ) ) {
+		return new WP_Error( 'lwc_fedex_ship_date_too_far', __( 'FedEx Future Day labels can be scheduled no more than 10 days ahead.', 'lovecatz-wc' ) );
+	}
+
+	return $date->format( 'Y-m-d' );
+}
+
 /** Read a unique positive-ID array from the current admin request. */
 function lwc_fedex_get_posted_ids( $key ) {
 	if ( ! isset( $_POST[ $key ] ) || ! is_array( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
@@ -707,40 +739,23 @@ function lwc_fedex_create_shipment() {
 	$item_ids = lwc_fedex_get_posted_ids( 'item_ids' );
 	$extra_product_ids = lwc_fedex_get_posted_product_ids( 'extra_product_ids' );
 	$replaced_item_ids = lwc_fedex_get_posted_ids( 'replaced_item_ids' );
-	$service_type = isset( $_POST['service_type'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['service_type'] ) ) ) : '';
-	if ( ! in_array( $service_type, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true ) ) {
-		wp_send_json( array( 'success' => false, 'message' => __( 'Select FedEx International Priority or FedEx International Economy.', 'lovecatz-wc' ) ) );
-	}
 	$manifest_mode = isset( $_POST['manifest_mode'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['manifest_mode'] ) );
 
 	// A cancelled shipment releases its items, but an active AWB must never be
 	// duplicated. Empty item_ids are used by the order-list action and resolve to
 	// all line items that are not already covered by an active shipment.
+	$api = new LWC_FedEx_API();
 	$order_item_ids = array_map(
 		static function ( $item ) {
 			return (int) $item->get_id();
 		},
 		array_values( $order->get_items() )
 	);
-	$active_item_ids = array();
-	$has_unscoped_active_shipment = false;
-	$shipments = $order->get_meta( '_lwc_fedex_shipments' );
-	foreach ( is_array( $shipments ) ? $shipments : array() as $shipment ) {
-		if ( ! is_array( $shipment ) || 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
-			continue;
-		}
-		if ( ! empty( $shipment['replaced_item_ids'] ) && is_array( $shipment['replaced_item_ids'] ) ) {
-			$active_item_ids = array_merge( $active_item_ids, array_map( 'intval', $shipment['replaced_item_ids'] ) );
-		}
-		if ( empty( $shipment['item_ids'] ) || ! is_array( $shipment['item_ids'] ) ) {
-			if ( empty( $shipment['extra_product_ids'] ) ) {
-				$has_unscoped_active_shipment = true;
-			}
-			continue;
-		}
-		$active_item_ids = array_merge( $active_item_ids, array_map( 'intval', $shipment['item_ids'] ) );
-	}
-	$active_item_ids = array_values( array_unique( $active_item_ids ) );
+	// The order screen reads the same coverage, so the buttons it enables can
+	// always be fulfilled by this handler.
+	$coverage = $api->get_shipment_coverage( $order );
+	$active_item_ids = $coverage['active_item_ids'];
+	$has_unscoped_active_shipment = $coverage['has_unscoped_active'];
 
 	if ( $has_unscoped_active_shipment ) {
 		wp_send_json( array( 'success' => false, 'message' => __( 'An active FedEx AWB does not identify its items. Cancel that AWB before creating another one.', 'lovecatz-wc' ) ) );
@@ -780,9 +795,24 @@ function lwc_fedex_create_shipment() {
 	if ( is_wp_error( $package_override ) ) {
 		wp_send_json( array( 'success' => false, 'message' => $package_override->get_error_message() ) );
 	}
+	$ship_date = lwc_fedex_get_posted_ship_date();
+	if ( is_wp_error( $ship_date ) ) {
+		wp_send_json( array( 'success' => false, 'message' => $ship_date->get_error_message() ) );
+	}
+	$default_label_description = get_option( 'lwc_fedex_default_label_description', LWC_FedEx_API::DEFAULT_LABEL_COMMODITY_DESCRIPTION );
+	$label_description         = isset( $_POST['label_description'] ) ? sanitize_text_field( wp_unslash( $_POST['label_description'] ) ) : $default_label_description;
+	if ( '' === trim( $label_description ) ) {
+		$label_description = $default_label_description;
+	}
 
-	$api = new LWC_FedEx_API();
-	$result = $api->create_shipment( $order, 0, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $service_type );
+	// The checkout selection is authoritative. This also lets the compact
+	// order-list action create an AWB without having to post a manual service.
+	// Older orders without this metadata retain the established Economy default.
+	$service_type = $api->get_order_selected_service_type( $order );
+	if ( '' === $service_type ) {
+		$service_type = 'INTERNATIONAL_ECONOMY';
+	}
+	$result = $api->create_shipment( $order, 0, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $service_type, $ship_date, $label_description );
 
 	if ( ! empty( $result['success'] ) ) {
 		// The raw response embeds the base64 label; keep it out of the AJAX payload.
@@ -1490,7 +1520,10 @@ function lwc_uninstall() {
 
 	// 7. Generated AWB label PDFs in the uploads directory.
 	$upload_dir = wp_upload_dir();
-	$label_files = glob( wp_normalize_path( $upload_dir['basedir'] . '/fedex-label-*.pdf' ) );
+	$label_files = array_merge(
+		glob( wp_normalize_path( $upload_dir['basedir'] . '/fedex-label-*.pdf' ) ) ?: array(),
+		glob( wp_normalize_path( $upload_dir['basedir'] . '/??????_LABEL_FEDEX_*.pdf' ) ) ?: array()
+	);
 	if ( is_array( $label_files ) ) {
 		foreach ( $label_files as $label_file ) {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
@@ -1515,4 +1548,3 @@ function lwc_woocommerce_missing_notice() {
 	</div>
 	<?php
 }
-

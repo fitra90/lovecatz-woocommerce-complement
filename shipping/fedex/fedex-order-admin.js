@@ -46,7 +46,7 @@
             var dimensionKeys = ['length', 'width', 'height'];
             var suppliedDimensions = dimensionKeys.filter(function (key) { return packageValues[key] !== ''; });
             if (!manifest.itemIds.length && !manifest.extraProductIds.length) {
-                setStatus(cfg.i18n.no_items, 'error');
+                setStatus(cfg.manifest_blocked || cfg.replacement_blocked || cfg.i18n.no_items, 'error');
                 return false;
             }
             if (suppliedDimensions.length && (!hasCustomWeight || suppliedDimensions.length !== dimensionKeys.length)) {
@@ -64,7 +64,8 @@
             return {
                 order_id: cfg.order_id,
                 manifest_mode: '1',
-				service_type: $('#lwc_fedex_service_type').val(),
+				ship_date: $('#lwc_fedex_ship_date').val(),
+				label_description: $('#lwc_fedex_label_description').val(),
                 item_ids: manifest.itemIds,
                 extra_product_ids: manifest.extraProductIds,
                 replaced_item_ids: manifest.extraProductIds.length ? removedOrderItemIds : [],
@@ -76,6 +77,12 @@
         }
 
         function updateCreateButton() {
+            // A blocked manifest cannot be created server-side, so never let the
+            // button become clickable even if an item row is still selectable.
+            if (cfg.manifest_blocked || cfg.replacement_blocked) {
+                $('#lwc_fedex_create_label_btn').prop('disabled', true);
+                return;
+            }
             var manifest = getManifest();
             $('#lwc_fedex_create_label_btn').prop('disabled', !manifest.itemIds.length && !manifest.extraProductIds.length);
         }
@@ -277,6 +284,19 @@
             };
         }
 
+        function updatePickupDateLimit() {
+            var date = $('#lwc_fedex_pickup_date');
+            var carrier = $('#lwc_fedex_pickup_carrier').val();
+            var max = carrier === 'FDXG' ? date.data('ground-max') : date.data('express-max');
+            if (!max) {
+                return;
+            }
+            date.attr('max', max);
+            if (date.val() && date.val() > max) {
+                date.val(max);
+            }
+        }
+
         $('#lwc_fedex_check_pickup_btn').on('click', function () {
             var btn = $(this);
             var scheduleBtn = $('#lwc_fedex_schedule_pickup_btn');
@@ -302,8 +322,13 @@
         });
 
         $('.lwc-fedex-pickup-fields input, .lwc-fedex-pickup-fields select').on('change', function () {
+			if ($(this).is('#lwc_fedex_pickup_carrier')) {
+				updatePickupDateLimit();
+			}
             $('#lwc_fedex_schedule_pickup_btn').prop('disabled', true);
         });
+
+        updatePickupDateLimit();
 
         $('#lwc_fedex_schedule_pickup_btn').on('click', function () {
             if (!window.confirm(cfg.i18n.confirm_pickup)) {

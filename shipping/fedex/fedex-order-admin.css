@@ -4,20 +4,60 @@
 	gap: 6px;
 }
 
+.lwc-fedex-order-actions .lwc-fedex-actions-hint {
+	margin: 0;
+	font-weight: 400;
+}
+
+.lwc-fedex-blocked-actions {
+	margin: 7px 0 0;
+}
+
+.lwc-fedex-blocked-actions .button + .button {
+	margin-left: 5px;
+}
+
 .lwc-fedex-items {
 	margin: 8px 0;
 }
 
-.lwc-fedex-service-field {
+.lwc-fedex-service-selected {
+	margin: 8px 0;
+	padding: 7px 8px;
+	background: #f0f6fc;
+	border-left: 3px solid #2271b1;
+}
+
+.lwc-fedex-ship-date-field {
 	display: grid;
 	gap: 4px;
 	margin: 8px 0;
 	font-weight: 600;
 }
 
-.lwc-fedex-service-field select {
+.lwc-fedex-ship-date-field input {
 	width: 100%;
 	max-width: 100%;
+}
+
+.lwc-fedex-ship-date-field small {
+	font-weight: 400;
+}
+
+.lwc-fedex-label-description-field {
+	display: grid;
+	gap: 4px;
+	margin: 8px 0;
+	font-weight: 600;
+}
+
+.lwc-fedex-label-description-field input {
+	width: 100%;
+	max-width: 100%;
+}
+
+.lwc-fedex-label-description-field small {
+	font-weight: 400;
 }
 
 .lwc-fedex-package-fields {
@@ -87,6 +127,19 @@
 .lwc-fedex-item.is-shipped {
 	color: #646970;
 	text-decoration: line-through;
+}
+
+/* Locked because an AWB cannot be scoped, not because the item was shipped. */
+.lwc-fedex-item.is-locked {
+	color: #646970;
+}
+
+.lwc-fedex-blocked-notice {
+	margin: 8px 0;
+}
+
+.lwc-fedex-shipment-contents.is-unknown {
+	font-style: italic;
 }
 
 .lwc-fedex-add-item {

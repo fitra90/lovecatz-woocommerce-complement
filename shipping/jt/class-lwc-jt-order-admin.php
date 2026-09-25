@@ -7,7 +7,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LWC_JT_Order_Admin {
 	public function init() {
-		add_action( 'woocommerce_order_status_processing', array( $this, 'create_on_processing' ), 10, 2 );
+		// The automatic creation hook lives in LWC_AWB_Automation, which owns
+		// the per-courier policy (FedEx is manual only, J&T stays automatic).
 		add_action( 'add_meta_boxes', array( $this, 'register_metabox' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_ajax_lwc_jt_create_order', array( $this, 'ajax_create_order' ) );
@@ -18,6 +19,15 @@ class LWC_JT_Order_Admin {
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_insurance' ), 10 );
 	}
 
+	/**
+	 * Create the J&T order and AWB when the order starts processing.
+	 *
+	 * Called by LWC_AWB_Automation::maybe_create_awb(), which decides that J&T
+	 * orders are created automatically while FedEx orders are not.
+	 *
+	 * @param int           $order_id Order ID.
+	 * @param WC_Order|null $order    Order object.
+	 */
 	public function create_on_processing( $order_id, $order = null ) {
 		$order = $order instanceof WC_Order ? $order : wc_get_order( $order_id );
 		if ( $this->order_uses_jt( $order ) && ! $order->get_meta( '_lwc_jt_awb' ) ) {

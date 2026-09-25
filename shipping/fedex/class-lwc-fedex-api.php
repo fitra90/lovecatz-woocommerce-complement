@@ -11,6 +11,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LWC_FedEx_API {
 
+	/** Default commodity text shown in the FedEx label description fields. */
+	const DEFAULT_LABEL_COMMODITY_DESCRIPTION = 'AROMATHERAPY ESSENTIAL OILS PURE 100%';
+
 	/**
 	 * FedEx credentials.
 	 *
@@ -285,9 +288,11 @@ class LWC_FedEx_API {
 	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
 	 * @param int[]    $replaced_item_ids Original order lines fulfilled by catalog substitutions.
 	 * @param string   $service_type_override Explicit order-screen service selection.
+	 * @param string   $ship_date Scheduled local ship date in Y-m-d format.
+	 * @param string   $label_description Description for the single aggregated customs commodity.
 	 * @return array
 	 */
-	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type_override = '' ) {
+	public function create_shipment( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type_override = '', $ship_date = '', $label_description = '' ) {
 		$package_override = $this->normalize_package_override( $package_override );
 		if ( is_wp_error( $package_override ) ) {
 			return array( 'success' => false, 'message' => $package_override->get_error_message() );
@@ -315,7 +320,7 @@ class LWC_FedEx_API {
 			);
 		}
 
-		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids, $package_override, $extra_product_ids, $service_type_override );
+		$payload = $this->build_shipment_payload( $order, $fallback_max_package_weight_kg, $item_ids, $package_override, $extra_product_ids, $service_type_override, $ship_date, $label_description );
 		$response = $this->request( '/ship/v1/shipments', $payload, $token );
 		$body = $this->parse_response_body( $response );
 
@@ -343,7 +348,9 @@ class LWC_FedEx_API {
 		}
 
 		$actual_service_type = isset( $payload['requestedShipment']['serviceType'] ) ? (string) $payload['requestedShipment']['serviceType'] : '';
-		$label_path = $this->save_label_from_response( $order, $body, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $actual_service_type );
+		$actual_ship_date = isset( $payload['requestedShipment']['shipDatestamp'] ) ? (string) $payload['requestedShipment']['shipDatestamp'] : current_time( 'Y-m-d' );
+		$actual_label_description = $this->normalize_label_description( $label_description );
+		$label_path = $this->save_label_from_response( $order, $body, $item_ids, $package_override, $extra_product_ids, $replaced_item_ids, $actual_service_type, $actual_ship_date, $actual_label_description );
 		if ( false === $label_path ) {
 			return array(
 				'success'  => false,
@@ -1109,9 +1116,11 @@ class LWC_FedEx_API {
 	 * @param array    $package_override Actual weight and dimensions for one packed carton.
 	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
 	 * @param string   $service_type_override Explicit order-screen service selection.
+	 * @param string   $ship_date Scheduled local ship date in Y-m-d format.
+	 * @param string   $label_description Description for the single aggregated customs commodity.
 	 * @return array
 	 */
-	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $service_type_override = '' ) {
+	private function build_shipment_payload( $order, $fallback_max_package_weight_kg = 0, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $service_type_override = '', $ship_date = '', $label_description = '' ) {
 		$origin = $this->build_origin_address();
 		$destination = $this->build_destination_address_from_order( $order );
 		$context = $this->get_order_shipping_context( $order );
@@ -1128,6 +1137,9 @@ class LWC_FedEx_API {
 			: (float) $fallback_max_package_weight_kg;
 
 		$packages = $this->build_packages_from_order( $order, $max_package_weight_kg, $item_ids, $package_override, $extra_product_ids );
+		$today = current_time( 'Y-m-d' );
+		$ship_date = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $ship_date ) ? (string) $ship_date : $today;
+		$is_future_day = $ship_date > $today;
 
 		$payload = array(
 			'accountNumber' => array(
@@ -1145,7 +1157,7 @@ class LWC_FedEx_API {
 						'address' => $destination,
 					),
 				),
-				'shipDatestamp' => current_time( 'Y-m-d' ),
+				'shipDatestamp' => $ship_date,
 				'pickupType' => 'USE_SCHEDULED_PICKUP',
 				'serviceType' => $service_type,
 				'packagingType' => 'YOUR_PACKAGING',
@@ -1164,6 +1176,14 @@ class LWC_FedEx_API {
 			),
 		);
 
+		if ( $is_future_day ) {
+			$payload['requestedShipment']['pickupDetail'] = array(
+				'requestType'          => 'FUTURE_DAY',
+				'readyPickupDateTime'  => $ship_date . 'T09:00:00',
+				'latestPickupDateTime' => $ship_date . 'T17:00:00',
+			);
+		}
+
 		if ( class_exists( 'WC_Countries' ) ) {
 			$base_country = WC()->countries ? WC()->countries->get_base_country() : '';
 		} else {
@@ -1172,7 +1192,7 @@ class LWC_FedEx_API {
 		}
 
 		if ( '' !== $destination['countryCode'] && 0 !== strcasecmp( $destination['countryCode'], (string) $base_country ) ) {
-			$payload['requestedShipment']['customsClearanceDetail'] = $this->build_customs_detail( $order, $item_ids, $extra_product_ids, $package_override );
+			$payload['requestedShipment']['customsClearanceDetail'] = $this->build_customs_detail( $order, $item_ids, $extra_product_ids, $package_override, $label_description );
 		}
 
 		return $payload;
@@ -1220,11 +1240,13 @@ class LWC_FedEx_API {
 	 * @param int[]    $item_ids Restrict commodities to these order item IDs.
 	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
 	 * @param array    $package_override Actual one-carton weight and optional dimensions.
+	 * @param string   $label_description Description for the single aggregated customs commodity.
 	 * @return array
 	 */
-	private function build_customs_detail( $order, $item_ids = array(), $extra_product_ids = array(), $package_override = array() ) {
+	private function build_customs_detail( $order, $item_ids = array(), $extra_product_ids = array(), $package_override = array(), $label_description = '' ) {
 		$currency = $order->get_currency();
 		$base_country = $this->get_base_country();
+		$label_description = $this->normalize_label_description( $label_description );
 		$commodities = array();
 		$total = 0.0;
 		$restrict_order_items = ! empty( $item_ids ) || ! empty( $extra_product_ids );
@@ -1241,7 +1263,7 @@ class LWC_FedEx_API {
 			$total += $line_total;
 
 			$commodity = array(
-				'description' => wp_strip_all_tags( $item->get_name() ),
+				'description' => $label_description,
 				'countryOfManufacture' => apply_filters(
 					'lwc_fedex_commodity_country_of_manufacture',
 					$base_country,
@@ -1283,7 +1305,7 @@ class LWC_FedEx_API {
 			$total += $line_total;
 			$product_weight = $product->get_weight() ? (float) wc_get_weight( $product->get_weight(), 'kg' ) : 0.5;
 			$commodities[] = array(
-				'description' => wp_strip_all_tags( $product->get_name() ),
+				'description' => $label_description,
 				'countryOfManufacture' => apply_filters(
 					'lwc_fedex_commodity_country_of_manufacture',
 					$base_country,
@@ -1310,7 +1332,7 @@ class LWC_FedEx_API {
 		if ( empty( $commodities ) ) {
 			$total = (float) $order->get_total();
 			$commodities[] = array(
-				'description' => __( 'Merchandise', 'lovecatz-wc' ),
+				'description' => $label_description,
 				'countryOfManufacture' => $base_country,
 				'quantity' => 1,
 				'quantityUnits' => 'PCS',
@@ -1328,6 +1350,41 @@ class LWC_FedEx_API {
 				),
 			);
 		}
+
+		/*
+		 * FedEx renders one DESC field for each customs commodity. This shipment
+		 * uses a single declared goods category, so aggregate the selected order
+		 * lines into one commodity rather than repeating the same label text.
+		 * The package line item still contains the measured/carton dimensions and
+		 * total shipment weight used by FedEx for rating and transport.
+		 */
+		$total_quantity = 0.0;
+		$total_weight   = 0.0;
+		foreach ( $commodities as $commodity ) {
+			$total_quantity += (float) $commodity['quantity'];
+			$total_weight   += (float) $commodity['weight']['value'];
+		}
+		$total_quantity = max( 1, $total_quantity );
+		$commodities = array(
+			array(
+				'description'          => $label_description,
+				'countryOfManufacture' => $base_country,
+				'quantity'             => $total_quantity,
+				'quantityUnits'        => 'PCS',
+				'unitPrice'            => array(
+					'amount'   => LWC_Currency_Converter::round_for_currency( $total / $total_quantity, $currency ),
+					'currency' => $currency,
+				),
+				'customsValue'         => array(
+					'amount'   => LWC_Currency_Converter::round_for_currency( $total, $currency ),
+					'currency' => $currency,
+				),
+				'weight'               => array(
+					'units' => 'KG',
+					'value' => max( 0.01, round( $total_weight, 2 ) ),
+				),
+			),
+		);
 
 		if ( ! empty( $package_override['weight'] ) ) {
 			$commodities = $this->apply_custom_total_to_commodity_weights( $commodities, (float) $package_override['weight'] );
@@ -1450,6 +1507,22 @@ class LWC_FedEx_API {
 		}
 
 		return $this->split_into_packages( $entries, $max_package_weight_kg );
+	}
+
+	/** Normalize user-entered commodity text and use the requested default. */
+	private function normalize_label_description( $description ) {
+		$description = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $description ) ) );
+		if ( '' === $description ) {
+			$description = self::DEFAULT_LABEL_COMMODITY_DESCRIPTION;
+		}
+		if ( function_exists( 'remove_accents' ) ) {
+			$description = remove_accents( $description );
+		}
+		$description = trim( preg_replace( '/[^\x20-\x7E]/', '', $description ) );
+		if ( '' === $description ) {
+			$description = self::DEFAULT_LABEL_COMMODITY_DESCRIPTION;
+		}
+		return substr( $description, 0, 100 );
 	}
 
 	/**
@@ -1756,6 +1829,153 @@ class LWC_FedEx_API {
 	}
 
 	/**
+	 * Return the service explicitly selected by the customer at checkout.
+	 *
+	 * Only the two Express international services exposed by this integration
+	 * can be used for a label created from an order. An empty value means the
+	 * order predates the per-service checkout metadata.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @return string
+	 */
+	public function get_order_selected_service_type( $order ) {
+		$context = $this->get_order_shipping_context( $order );
+		$service_type = isset( $context['service_type'] ) ? strtoupper( (string) $context['service_type'] ) : '';
+
+		return in_array( $service_type, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true ) ? $service_type : '';
+	}
+
+	/**
+	 * Summarise which order lines are already committed to a FedEx AWB.
+	 *
+	 * The order screen and the create-shipment handler must agree on this, so
+	 * both read the coverage from here instead of re-implementing the rule.
+	 * Otherwise the screen can offer a selection that the create request then
+	 * rejects, which leaves the merchant unable to print a label.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @return array {
+	 *     @type int[] $active_item_ids     Order line IDs covered by a non-cancelled AWB.
+	 *     @type int[] $active_indices      Zero-based indices of the non-cancelled AWBs.
+	 *     @type int[] $unscoped_indices    Zero-based indices of the non-cancelled AWBs
+	 *                                      that record no order line. Add 1 for the
+	 *                                      number shown in the order screen list.
+	 *     @type bool  $has_unscoped_active A non-cancelled AWB cannot be scoped.
+	 *     @type bool  $has_cancelled       At least one AWB was cancelled.
+	 * }
+	 */
+	public function get_shipment_coverage( $order ) {
+		$coverage = array(
+			'active_item_ids'     => array(),
+			'active_indices'      => array(),
+			'unscoped_indices'    => array(),
+			'has_unscoped_active' => false,
+			'has_cancelled'       => false,
+		);
+
+		$shipments = $order instanceof WC_Order ? $order->get_meta( '_lwc_fedex_shipments' ) : array();
+		foreach ( is_array( $shipments ) ? $shipments : array() as $index => $shipment ) {
+			if ( ! is_array( $shipment ) ) {
+				continue;
+			}
+			if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
+				$coverage['has_cancelled'] = true;
+				continue;
+			}
+
+			// Catalog substitutions fulfil the order lines they replaced, so
+			// those lines stay covered even when item_ids is populated.
+			if ( ! empty( $shipment['replaced_item_ids'] ) && is_array( $shipment['replaced_item_ids'] ) ) {
+				$coverage['active_item_ids'] = array_merge( $coverage['active_item_ids'], array_map( 'intval', $shipment['replaced_item_ids'] ) );
+			}
+
+			$coverage['active_indices'][] = (int) $index;
+
+			if ( empty( $shipment['item_ids'] ) || ! is_array( $shipment['item_ids'] ) ) {
+				// AWBs created before per-item manifests were stored cannot be
+				// scoped, so their order lines are unknown rather than free. A
+				// catalog-only AWB never covers order lines, so it is harmless.
+				if ( empty( $shipment['extra_product_ids'] ) ) {
+					$coverage['has_unscoped_active'] = true;
+					$coverage['unscoped_indices'][]  = (int) $index;
+				}
+				continue;
+			}
+
+			$coverage['active_item_ids'] = array_merge( $coverage['active_item_ids'], array_map( 'intval', $shipment['item_ids'] ) );
+		}
+
+		$coverage['active_item_ids'] = array_values( array_unique( $coverage['active_item_ids'] ) );
+
+		return $coverage;
+	}
+
+	/**
+	 * Resolve the item lines recorded for one FedEx AWB.
+	 *
+	 * Newer shipments store a manifest snapshot. Older ones only recorded the
+	 * order line IDs, so the lines are rebuilt from the order and the catalog;
+	 * that keeps the label record readable instead of a generic placeholder.
+	 *
+	 * @param WC_Order $order    Order object.
+	 * @param array    $shipment One entry of _lwc_fedex_shipments.
+	 * @return array[] Each entry has source, id, name, and quantity.
+	 */
+	public function get_shipment_manifest_lines( $order, $shipment ) {
+		$lines = array();
+		if ( ! is_array( $shipment ) ) {
+			return $lines;
+		}
+
+		if ( ! empty( $shipment['contents'] ) && is_array( $shipment['contents'] ) ) {
+			foreach ( $shipment['contents'] as $line ) {
+				if ( ! is_array( $line ) || ! isset( $line['name'] ) ) {
+					continue;
+				}
+				$lines[] = array(
+					'source'   => isset( $line['source'] ) ? (string) $line['source'] : 'order',
+					'id'       => isset( $line['id'] ) ? (int) $line['id'] : 0,
+					'name'     => (string) $line['name'],
+					'quantity' => isset( $line['quantity'] ) ? max( 1, (float) $line['quantity'] ) : 1,
+				);
+			}
+
+			return $lines;
+		}
+
+		$item_ids = isset( $shipment['item_ids'] ) && is_array( $shipment['item_ids'] ) ? array_map( 'intval', $shipment['item_ids'] ) : array();
+		if ( $order instanceof WC_Order && ! empty( $item_ids ) ) {
+			foreach ( $order->get_items() as $item ) {
+				if ( ! in_array( (int) $item->get_id(), $item_ids, true ) ) {
+					continue;
+				}
+				$lines[] = array(
+					'source'   => 'order',
+					'id'       => (int) $item->get_id(),
+					'name'     => wp_strip_all_tags( $item->get_name() ),
+					'quantity' => max( 1, (float) $item->get_quantity() ),
+				);
+			}
+		}
+
+		$extra_product_ids = isset( $shipment['extra_product_ids'] ) && is_array( $shipment['extra_product_ids'] ) ? $shipment['extra_product_ids'] : array();
+		foreach ( array_count_values( array_filter( array_map( 'absint', $extra_product_ids ) ) ) as $product_id => $quantity ) {
+			$product = wc_get_product( $product_id );
+			if ( ! $product ) {
+				continue;
+			}
+			$lines[] = array(
+				'source'   => 'catalog',
+				'id'       => (int) $product_id,
+				'name'     => wp_strip_all_tags( $product->get_name() ),
+				'quantity' => max( 1, (int) $quantity ),
+			);
+		}
+
+		return $lines;
+	}
+
+	/**
 	 * Get the store base country code.
 	 *
 	 * @return string
@@ -2014,9 +2234,11 @@ class LWC_FedEx_API {
 	 * @param int[] $extra_product_ids Catalog products added only to the FedEx manifest.
 	 * @param int[] $replaced_item_ids Original order lines fulfilled by catalog substitutions.
 	 * @param string $service_type Actual service used for the shipment.
+	 * @param string $ship_date Scheduled ship date used for the shipment.
+	 * @param string $label_description Description for the aggregated customs commodity.
 	 * @return string|false
 	 */
-	private function save_label_from_response( $order, $body, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type = '' ) {
+	private function save_label_from_response( $order, $body, $item_ids = array(), $package_override = array(), $extra_product_ids = array(), $replaced_item_ids = array(), $service_type = '', $ship_date = '', $label_description = '' ) {
 		$label_data = '';
 		$tracking_number = '';
 
@@ -2065,7 +2287,7 @@ class LWC_FedEx_API {
 		}
 
 		$upload_dir = wp_upload_dir();
-		$filename = 'fedex-label-' . $order->get_id() . '-' . wp_generate_uuid4() . '.pdf';
+		$filename = $this->build_label_filename( $order, $upload_dir['basedir'] );
 		$filepath = $upload_dir['basedir'] . '/' . $filename;
 
 		$file_saved = file_put_contents( $filepath, $data );
@@ -2096,6 +2318,8 @@ class LWC_FedEx_API {
 			'replaced_item_ids' => array_values( array_map( 'intval', (array) $replaced_item_ids ) ),
 			'extra_product_ids' => array_values( array_map( 'intval', (array) $extra_product_ids ) ),
 			'service_type' => strtoupper( trim( (string) $service_type ) ),
+			'ship_date' => $ship_date,
+			'label_description' => $label_description,
 			'contents' => $this->build_manifest_snapshot( $order, $item_ids, $extra_product_ids ),
 			'package' => ! empty( $package_override ) ? $package_override : array(),
 			'created_at' => current_time( 'mysql' ),
@@ -2106,6 +2330,48 @@ class LWC_FedEx_API {
 		$order->save();
 
 		return $filename;
+	}
+
+	/**
+	 * Build a readable, collision-safe filename for a FedEx label PDF.
+	 *
+	 * @param WC_Order $order Order receiving the label.
+	 * @param string   $directory Uploads directory where the PDF will be saved.
+	 * @return string
+	 */
+	private function build_label_filename( $order, $directory ) {
+		$customer_name = trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() );
+		if ( '' === $customer_name ) {
+			$customer_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+		}
+		if ( '' === $customer_name ) {
+			$customer_name = 'Customer';
+		}
+
+		$customer_name = wp_strip_all_tags( $customer_name );
+		// Preserve spaces in the human-readable name while removing every
+		// character Windows and web servers prohibit in a file name.
+		$customer_name = trim( preg_replace( '/[<>:"\/\\\\|?*\x00-\x1F]+/u', ' ', $customer_name ) );
+		$customer_name = trim( preg_replace( '/\s+/u', ' ', $customer_name ), ". " );
+		if ( '' === $customer_name ) {
+			$customer_name = 'Customer';
+		}
+
+		$filename = current_time( 'Ym' ) . '_LABEL_FEDEX_' . $customer_name . '.pdf';
+		if ( ! file_exists( trailingslashit( $directory ) . $filename ) ) {
+			return $filename;
+		}
+
+		// A replacement/partial shipment for the same customer in the same month
+		// must never overwrite the already issued AWB label.
+		$pathinfo = pathinfo( $filename );
+		$index = 2;
+		do {
+			$candidate = $pathinfo['filename'] . ' (' . $index . ').pdf';
+			++$index;
+		} while ( file_exists( trailingslashit( $directory ) . $candidate ) );
+
+		return $candidate;
 	}
 
 	/** Build an immutable, display-safe snapshot of the contents sent to FedEx. */

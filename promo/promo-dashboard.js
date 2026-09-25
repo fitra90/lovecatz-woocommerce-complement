@@ -139,7 +139,7 @@
         }
 
 		inputs.filter('[data-locked="0"]').prop('disabled', false).each(function () {
-			$(this).closest('.lwc-checkout-coupon-option').removeClass('is-incompatible').find('em').text('Pilih');
+			$(this).closest('.lwc-checkout-coupon-option').removeClass('is-incompatible').find('.lwc-coupon-option-status').text('');
 		});
 
 		var selectedCoupons = (lwcPromoDashboard.appliedCouponRules || []).slice();
@@ -155,7 +155,7 @@
 			});
 			if (incompatible) {
 				input.prop('disabled', true);
-				input.closest('.lwc-checkout-coupon-option').addClass('is-incompatible').find('em').text('Tidak dapat digabung');
+				input.closest('.lwc-checkout-coupon-option').addClass('is-incompatible').find('.lwc-coupon-option-status').text('Tidak dapat digabung');
 			}
 		});
 
@@ -261,7 +261,7 @@
 			return '<label class="lwc-checkout-coupon-option' + optionState + '" data-coupon-id="' + String(coupon.id) + '">' +
 				'<input type="checkbox" class="lwc-coupon-option-input" data-locked="' + (locked ? '1' : '0') + '" value="' + code + '"' + (applied ? ' checked' : '') + ((locked || incompatible) ? ' disabled' : '') + ' />' +
                 '<img src="' + image + '" alt="" /><span class="lwc-checkout-coupon-option__content"><strong>' + code + '</strong><span>' + description + '</span></span>' +
-				'<span class="lwc-coupon-option-check" aria-hidden="true"></span><em>' + (expired ? 'Expired' : (applied ? 'Ditambahkan' : (incompatible ? 'Tidak dapat digabung' : 'Pilih'))) + '</em></label>';
+				'<span class="lwc-coupon-option-check" aria-hidden="true"></span><em class="lwc-coupon-option-status">' + (expired ? 'Expired' : (applied ? 'Ditambahkan' : (incompatible ? 'Tidak dapat digabung' : ''))) + '</em></label>';
         }).join('');
 
         var emptyMessage = coupons.length ? '' :

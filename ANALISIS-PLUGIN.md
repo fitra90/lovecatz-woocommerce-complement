@@ -105,7 +105,7 @@ Semua bermula di `lovecatz-woocommerce-complement.php` pada hook `plugins_loaded
 - **Konverter bawaan** (`class-lwc-currency-converter.php`): kurs manual `USD=16500` (1 USD = 16.500 IDR, konversi **membagi**). Shopper pindah via `?currency=USD` (cookie 30 hari) atau shortcode `[lwc_currency_switcher]`. Mengoverride `woocommerce_currency`, simbol, desimal, harga produk, dan semua ongkir.
   - **Auto mundur** bila CURCY/WOOCS/Aelia/WPML/YayCurrency terdeteksi (filter `lwc_currency_external_converter_active`).
   - Deteksi negara via geolocate IP: ID → IDR, selain itu → USD.
-  - Kurs **dibekukan** di order (`_lwc_currency_rate`, `_lwc_currency_base_total`) agar laporan historis tidak berubah; WooCommerce Analytics dinormalisasi ke mata uang dasar.
+- Kurs **dibekukan** di order (`_lwc_currency_rate`, `_lwc_currency_base_total`) agar referensi nilai dasar tetap tersedia tanpa mengubah nominal laporan WooCommerce. Analytics menyimpan nominal asli sesuai mata uang order sehingga customer history USD tidak salah membaca nilai IDR sebagai USD.
 - **Biaya penanganan internasional** (`payment/`): fee persen atau tetap, trigger USD dan/atau negara tujuan luar ID, mode OR/AND. **Hanya aktif bila WooCommerce PayPal Payments resmi aktif dan gateway `ppcp-gateway` enabled.** Tidak pernah membaca metode pembayaran yang dipilih shopper.
 
 ### 3.6 Membership (`includes/admin/class-lwc-admin-settings.php`)

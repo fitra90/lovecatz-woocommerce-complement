@@ -1,0 +1,79 @@
+/**
+ * Order Number admin metabox styles.
+ *
+ * @package LoveCatzWC
+ */
+
+.lwc-ona-row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.lwc-ona-row label {
+	min-width: 90px;
+	font-weight: 600;
+	color: #555;
+	font-size: 12px;
+}
+
+.lwc-ona-mono {
+	font-family: monospace;
+	font-size: 13px;
+	color: #333;
+}
+
+.lwc-ona-no-id {
+	color: #999;
+}
+
+.lwc-ona-custom-id {
+	color: #2271b1;
+	font-weight: 600;
+}
+
+.lwc-ona-correction-row {
+	align-items: flex-start;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.lwc-ona-correction-row label {
+	min-width: unset;
+}
+
+.lwc-ona-correction-row input {
+	width: 100%;
+	font-family: monospace;
+	font-size: 13px;
+}
+
+.lwc-ona-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.lwc-ona-status {
+	font-size: 12px;
+	min-height: 18px;
+}
+
+.lwc-ona-success {
+	color: #00a32a;
+}
+
+.lwc-ona-error {
+	color: #d63638;
+}
+
+.lwc-ona-notice {
+	background: #f0f6fc;
+	border-left: 3px solid #2271b1;
+	padding: 8px 10px;
+	font-size: 12px;
+	color: #555;
+	margin-top: 6px;
+}

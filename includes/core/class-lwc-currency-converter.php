@@ -30,6 +30,10 @@ class LWC_Currency_Converter {
 	const META_BASE_CURRENCY = '_lwc_currency_base';
 	const META_ORDER_RATE    = '_lwc_currency_rate';
 	const META_BASE_TOTAL    = '_lwc_currency_base_total';
+	const OPT_REPORTING_REPAIR_VERSION = 'lwc_currency_reporting_repair_version';
+	const OPT_REPORTING_REPAIR_PAGE    = 'lwc_currency_reporting_repair_page';
+	const REPORTING_REPAIR_VERSION     = 'order-currency-v1';
+	const REPORTING_REPAIR_ACTION      = 'lwc_repair_currency_reporting';
 
 	/**
 	 * Shared instance.
@@ -58,6 +62,13 @@ class LWC_Currency_Converter {
 	 * @var bool|null
 	 */
 	private $external = null;
+
+	/**
+	 * Whether the current WooCommerce REST request is a Desty export request.
+	 *
+	 * @var bool|null
+	 */
+	private $desty_rest_request = null;
 
 	/**
 	 * Currencies with no decimal places.
@@ -116,6 +127,9 @@ class LWC_Currency_Converter {
 		add_action( 'init', array( $this, 'capture_currency_switch' ), 1 );
 		add_shortcode( 'lwc_currency_switcher', array( $this, 'render_currency_switcher' ) );
 		add_action( 'woocommerce_admin_order_totals_after_total', array( $this, 'render_admin_base_total' ) );
+		add_action( 'admin_init', array( $this, 'maybe_schedule_reporting_repair' ) );
+		add_action( self::REPORTING_REPAIR_ACTION, array( $this, 'repair_reporting_batch' ) );
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'convert_desty_rest_order_to_base_currency' ), 20, 3 );
 
 		// Keep cart totals consistent when the shopper switches currency.
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'maybe_recalculate_cart' ) );
@@ -128,8 +142,6 @@ class LWC_Currency_Converter {
 		// a future rate change, otherwise historical revenue would move over time.
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'snapshot_order_currency' ), 20, 2 );
 		add_action( 'woocommerce_store_api_checkout_update_order_meta', array( $this, 'snapshot_store_api_order_currency' ), 20, 1 );
-		add_filter( 'woocommerce_analytics_update_order_stats_data', array( $this, 'normalize_order_stats' ), 20, 2 );
-
 		add_filter( 'woocommerce_currency', array( $this, 'override_currency' ), 99 );
 		add_filter( 'woocommerce_currency_symbol', array( $this, 'filter_currency_symbol' ), 10, 2 );
 		add_filter( 'option_woocommerce_price_num_decimals', array( $this, 'filter_price_decimals_option' ) );
@@ -562,6 +574,166 @@ class LWC_Currency_Converter {
 	}
 
 	/**
+	 * Convert a WooCommerce REST order response to the frozen base currency for
+	 * Desty Omnichannel. Desty connects through the WooCommerce REST API; it
+	 * must receive IDR values when an order was paid in USD, while the stored
+	 * order and PayPal transaction remain untouched in USD.
+	 *
+	 * The request is identified by the REST API key description containing
+	 * "Desty", matching Desty's own setup guidance to name the key "Desty API".
+	 * Other integrations continue receiving WooCommerce's original response.
+	 *
+	 * @param WP_REST_Response $response REST response.
+	 * @param WC_Order         $order    Source order.
+	 * @param WP_REST_Request  $request  REST request.
+	 * @return WP_REST_Response
+	 */
+	public function convert_desty_rest_order_to_base_currency( $response, $order, $request ) {
+		if ( ! $response instanceof WP_REST_Response || ! $order instanceof WC_Order || ! $this->is_desty_rest_request( $order, $request ) ) {
+			return $response;
+		}
+
+		$currency = strtoupper( (string) $order->get_currency() );
+
+		// The rate frozen at checkout is authoritative: an order must always be
+		// exported with the rate it was paid with. Orders created before this
+		// snapshot existed fall back to the currently configured rate, so a
+		// third party still receives IDR instead of a foreign currency.
+		$base = strtoupper( (string) $order->get_meta( self::META_BASE_CURRENCY, true ) );
+		$rate = (float) $order->get_meta( self::META_ORDER_RATE, true );
+
+		if ( '' === $base ) {
+			$base = $this->get_base_currency();
+		}
+
+		if ( $rate <= 0 ) {
+			// Only this plugin's own rate table can be trusted for the fallback.
+			// With an external converter active the rate lives elsewhere.
+			$rate = $this->owns_currency_conversion() ? $this->get_rate_for( $currency ) : 0.0;
+		}
+
+		if ( 'IDR' !== $base || $currency === $base || $rate <= 0 ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+		if ( ! is_array( $data ) ) {
+			return $response;
+		}
+
+		$this->convert_rest_money_fields( $data, array( 'discount_total', 'discount_tax', 'shipping_total', 'shipping_tax', 'cart_tax', 'total', 'total_tax' ), $rate );
+		foreach ( array( 'line_items', 'shipping_lines', 'fee_lines', 'coupon_lines', 'tax_lines', 'refunds' ) as $collection ) {
+			if ( empty( $data[ $collection ] ) || ! is_array( $data[ $collection ] ) ) {
+				continue;
+			}
+
+			foreach ( $data[ $collection ] as &$item ) {
+				if ( is_array( $item ) ) {
+					$this->convert_rest_money_fields( $item, array( 'price', 'subtotal', 'subtotal_tax', 'total', 'total_tax', 'discount', 'discount_tax', 'tax_total', 'shipping_tax_total' ), $rate );
+					$this->convert_rest_item_taxes( $item, $rate );
+				}
+			}
+			unset( $item );
+		}
+
+		$data['currency'] = $base;
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Convert specified REST response values from an order currency to IDR.
+	 *
+	 * @param array $data REST response data, passed by reference.
+	 * @param array $keys Monetary field names.
+	 * @param float $rate Frozen base-units-per-order-currency rate.
+	 * @return void
+	 */
+	private function convert_rest_money_fields( &$data, $keys, $rate ) {
+		foreach ( $keys as $key ) {
+			if ( ! isset( $data[ $key ] ) || ! is_numeric( $data[ $key ] ) ) {
+				continue;
+			}
+
+			// number_format() keeps large IDR values out of scientific notation,
+			// which a plain float-to-string cast would produce.
+			$data[ $key ] = number_format( (float) self::round_for_currency( (float) $data[ $key ] * $rate, 'IDR' ), 0, '.', '' );
+		}
+	}
+
+	/**
+	 * Convert the per-rate tax breakdown carried by every order item.
+	 *
+	 * @param array $data REST item data, passed by reference.
+	 * @param float $rate Frozen base-units-per-order-currency rate.
+	 * @return void
+	 */
+	private function convert_rest_item_taxes( &$data, $rate ) {
+		if ( empty( $data['taxes'] ) || ! is_array( $data['taxes'] ) ) {
+			return;
+		}
+
+		foreach ( $data['taxes'] as &$tax ) {
+			if ( is_array( $tax ) ) {
+				$this->convert_rest_money_fields( $tax, array( 'total', 'subtotal' ), $rate );
+			}
+		}
+		unset( $tax );
+	}
+
+	/**
+	 * Check whether the current request uses a WooCommerce REST key named for
+	 * Desty. An integration can opt in with the filter when its key has a
+	 * different description.
+	 *
+	 * @param WC_Order        $order   Source order.
+	 * @param WP_REST_Request $request REST request.
+	 * @return bool
+	 */
+	private function is_desty_rest_request( $order, $request ) {
+		if ( null !== $this->desty_rest_request ) {
+			return $this->desty_rest_request;
+		}
+
+		$enabled      = false;
+		$consumer_key = $this->get_rest_consumer_key();
+		if ( '' !== $consumer_key && function_exists( 'wc_api_hash' ) ) {
+			global $wpdb;
+			$table       = $wpdb->prefix . 'woocommerce_api_keys';
+			$description = $wpdb->get_var( $wpdb->prepare( "SELECT description FROM {$table} WHERE consumer_key = %s", wc_api_hash( $consumer_key ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$enabled     = is_string( $description ) && false !== stripos( $description, 'desty' );
+		}
+
+		$this->desty_rest_request = (bool) apply_filters( 'lwc_currency_convert_rest_order_to_idr', $enabled, $order, $request );
+
+		return $this->desty_rest_request;
+	}
+
+	/** Retrieve the public consumer key presented by the current REST request. */
+	private function get_rest_consumer_key() {
+		if ( ! empty( $_GET['consumer_key'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_text_field( wp_unslash( $_GET['consumer_key'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		if ( ! empty( $_GET['oauth_consumer_key'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_text_field( wp_unslash( $_GET['oauth_consumer_key'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		if ( ! empty( $_SERVER['PHP_AUTH_USER'] ) ) {
+			return sanitize_text_field( wp_unslash( $_SERVER['PHP_AUTH_USER'] ) );
+		}
+
+		$authorization = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? (string) wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) : '';
+		if ( 0 === stripos( $authorization, 'basic ' ) ) {
+			$credentials = base64_decode( substr( $authorization, 6 ), true );
+			if ( is_string( $credentials ) && false !== strpos( $credentials, ':' ) ) {
+				return sanitize_text_field( substr( $credentials, 0, strpos( $credentials, ':' ) ) );
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Store an immutable conversion snapshot on an order.
 	 *
 	 * @param WC_Order $order Order object.
@@ -588,35 +760,94 @@ class LWC_Currency_Converter {
 	}
 
 	/**
-	 * Normalize WooCommerce Analytics revenue into the store base currency.
+	 * Queue a one-time, background repair for reports written by releases that
+	 * converted the analytics lookup table to the base currency. WooCommerce's
+	 * Customer history card formats that table with the current order currency;
+	 * storing IDR there for a USD order therefore produced values such as
+	 * "$960,000" instead of "$64".
 	 *
-	 * @param array    $order_data Lookup-table row being generated.
-	 * @param WC_Order $order      Source order.
-	 * @return array
+	 * There is deliberately no settings screen: this is a data compatibility
+	 * repair and it runs only for orders that have this converter's immutable
+	 * currency snapshot.
+	 *
+	 * @return void
 	 */
-	public function normalize_order_stats( $order_data, $order ) {
-		if ( ! $order instanceof WC_Order ) {
-			return $order_data;
+	public function maybe_schedule_reporting_repair() {
+		if ( self::REPORTING_REPAIR_VERSION === get_option( self::OPT_REPORTING_REPAIR_VERSION, '' ) || ! function_exists( 'wc_get_orders' ) ) {
+			return;
 		}
 
-		$rate = (float) $order->get_meta( self::META_ORDER_RATE, true );
-		if ( $rate <= 0 ) {
-			$currency = strtoupper( (string) $order->get_currency() );
-			$rate     = $currency === $this->get_base_currency() ? 1.0 : $this->get_rate_for( $currency );
-		}
-
-		if ( $rate <= 0 || 1.0 === $rate ) {
-			return $order_data;
-		}
-
-		$base = $this->get_base_currency();
-		foreach ( array( 'total_sales', 'tax_total', 'shipping_total', 'net_total' ) as $field ) {
-			if ( isset( $order_data[ $field ] ) && is_numeric( $order_data[ $field ] ) ) {
-				$order_data[ $field ] = self::round_for_currency( (float) $order_data[ $field ] * $rate, $base );
+		if ( function_exists( 'as_next_scheduled_action' ) && function_exists( 'as_enqueue_async_action' ) ) {
+			if ( false === as_next_scheduled_action( self::REPORTING_REPAIR_ACTION, array(), 'lovecatz-wc' ) ) {
+				as_enqueue_async_action( self::REPORTING_REPAIR_ACTION, array(), 'lovecatz-wc' );
 			}
+			return;
 		}
 
-		return $order_data;
+		if ( ! wp_next_scheduled( self::REPORTING_REPAIR_ACTION ) ) {
+			wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::REPORTING_REPAIR_ACTION );
+		}
+	}
+
+	/**
+	 * Rebuild one small page of affected order-stat rows from their original
+	 * order totals. The WooCommerce data store updates the same lookup table
+	 * used by Customer history, Orders analytics, and Customers analytics.
+	 *
+	 * @return void
+	 */
+	public function repair_reporting_batch() {
+		if ( ! function_exists( 'wc_get_orders' ) || ! class_exists( '\\Automattic\\WooCommerce\\Admin\\API\\Reports\\Orders\\Stats\\DataStore' ) ) {
+			return;
+		}
+
+		$page   = max( 1, (int) get_option( self::OPT_REPORTING_REPAIR_PAGE, 1 ) );
+		$result = wc_get_orders(
+			array(
+				'limit'      => 25,
+				'paginate'   => true,
+				'paged'      => $page,
+				'orderby'    => 'ID',
+				'order'      => 'ASC',
+				'return'     => 'ids',
+				'meta_query' => array(
+					array(
+						'key'     => self::META_BASE_CURRENCY,
+						'compare' => 'EXISTS',
+					),
+				),
+			)
+		);
+
+		$orders = is_object( $result ) && isset( $result->orders ) ? $result->orders : array();
+		foreach ( $orders as $order_id ) {
+			$order = wc_get_order( $order_id );
+			if ( ! $order || strtoupper( (string) $order->get_currency() ) === strtoupper( (string) $order->get_meta( self::META_BASE_CURRENCY, true ) ) ) {
+				continue;
+			}
+
+			\Automattic\WooCommerce\Admin\API\Reports\Orders\Stats\DataStore::sync_order( $order_id );
+		}
+
+		$has_more = is_object( $result ) && isset( $result->max_num_pages ) && $page < (int) $result->max_num_pages;
+		if ( $has_more ) {
+			update_option( self::OPT_REPORTING_REPAIR_PAGE, $page + 1, false );
+			$this->queue_reporting_repair_batch();
+			return;
+		}
+
+		delete_option( self::OPT_REPORTING_REPAIR_PAGE );
+		update_option( self::OPT_REPORTING_REPAIR_VERSION, self::REPORTING_REPAIR_VERSION, false );
+	}
+
+	/** Queue the next reporting repair batch without presenting any UI. */
+	private function queue_reporting_repair_batch() {
+		if ( function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( self::REPORTING_REPAIR_ACTION, array(), 'lovecatz-wc' );
+			return;
+		}
+
+		wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::REPORTING_REPAIR_ACTION );
 	}
 
 	/**

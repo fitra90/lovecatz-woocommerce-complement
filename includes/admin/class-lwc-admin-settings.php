@@ -80,6 +80,7 @@ class LWC_Admin_Settings {
 		return array(
 			'settings'      => __( 'Setting', 'lovecatz-wc' ),
 			'products'      => __( 'Products', 'lovecatz-wc' ),
+			'order'         => __( 'Order', 'lovecatz-wc' ),
 			'store-members' => __( 'Members', 'lovecatz-wc' ),
 			'review'        => __( 'Review', 'lovecatz-wc' ),
 			'shipping'      => __( 'Shipping', 'lovecatz-wc' ),
@@ -161,7 +162,7 @@ class LWC_Admin_Settings {
 		if ( 'couriers' === $active_tab ) {
 			$active_tab = 'shipping';
 		}
-		if ( ! in_array( $active_tab, array( 'settings', 'products', 'shipping', 'promo', 'payment', 'currency', 'store-members', 'review' ), true ) ) {
+		if ( ! in_array( $active_tab, array( 'settings', 'products', 'order', 'shipping', 'promo', 'payment', 'currency', 'store-members', 'review' ), true ) ) {
 			$active_tab = 'settings';
 		}
 
@@ -183,6 +184,7 @@ class LWC_Admin_Settings {
 			<h2 class="nav-tab-wrapper">
 				<a href="?page=lovecatz-wc&tab=settings" class="nav-tab <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setting', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=products" class="nav-tab <?php echo 'products' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Products', 'lovecatz-wc' ); ?></a>
+				<a href="?page=lovecatz-wc&tab=order" class="nav-tab <?php echo 'order' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Order', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=store-members" class="nav-tab <?php echo 'store-members' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Members', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=review" class="nav-tab <?php echo 'review' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Review', 'lovecatz-wc' ); ?></a>
 				<a href="?page=lovecatz-wc&tab=shipping" class="nav-tab <?php echo 'shipping' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Shipping', 'lovecatz-wc' ); ?></a>
@@ -258,6 +260,10 @@ class LWC_Admin_Settings {
 			<?php elseif ( 'products' === $active_tab ) : ?>
 				<form method="post" action="options.php">
 					<?php settings_fields( 'lwc_products_options' ); do_settings_sections( 'lwc_products_options' ); submit_button(); ?>
+				</form>
+			<?php elseif ( 'order' === $active_tab ) : ?>
+				<form method="post" action="options.php">
+					<?php settings_fields( 'lwc_order_options' ); do_settings_sections( 'lwc_order_options' ); submit_button(); ?>
 				</form>
 			<?php elseif ( 'review' === $active_tab ) : ?>
 				<form method="post" action="options.php">
@@ -404,6 +410,14 @@ class LWC_Admin_Settings {
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_tracking_production_api_secret', array( 'sanitize_callback' => 'lwc_encrypt_secret' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'lwc_shipping_fedex_options', 'lwc_fedex_shipper_phone', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting(
+			'lwc_shipping_fedex_options',
+			'lwc_fedex_default_label_description',
+			array(
+				'default'           => 'AROMATHERAPY ESSENTIAL OILS PURE 100%',
+				'sanitize_callback' => array( $this, 'sanitize_fedex_label_description' ),
+			)
+		);
 
 		add_settings_section(
 			'lwc_shipping_fedex_section',
@@ -468,6 +482,14 @@ class LWC_Admin_Settings {
 			'lwc_fedex_shipper_phone',
 			__( 'Shipper Phone', 'lovecatz-wc' ),
 			array( $this, 'render_fedex_shipper_phone_field' ),
+			'lwc_shipping_fedex_options',
+			'lwc_shipping_fedex_section'
+		);
+
+		add_settings_field(
+			'lwc_fedex_default_label_description',
+			__( 'Default label description', 'lovecatz-wc' ),
+			array( $this, 'render_fedex_default_label_description_field' ),
 			'lwc_shipping_fedex_options',
 			'lwc_shipping_fedex_section'
 		);
@@ -619,6 +641,272 @@ class LWC_Admin_Settings {
 			'lwc_products_options',
 			'lwc_products_section_preorder'
 		);
+
+		// Custom order ID (Order tab): one format and one counter per scope.
+		$this->register_order_number_settings();
+	}
+
+	/**
+	 * Register the Custom Order ID settings shown on the Order tab.
+	 *
+	 * The layout mirrors the generated ID: prefix, date, scope label, running
+	 * number, suffix — joined by the separator and configured once per scope.
+	 */
+	private function register_order_number_settings() {
+		if ( ! class_exists( 'LWC_Order_Number' ) ) {
+			return;
+		}
+
+		$group   = 'lwc_order_options';
+		$scopes  = $this->order_number_scopes();
+		$number  = LWC_Order_Number::instance();
+
+		register_setting( $group, LWC_Order_Number::OPT_ENABLED, array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_order_number_enabled' ) ) );
+		register_setting( $group, LWC_Order_Number::OPT_RESET_DAILY, array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+		register_setting( $group, LWC_Order_Number::OPT_SEPARATOR, array( 'default' => '_', 'sanitize_callback' => array( $this, 'sanitize_order_separator' ) ) );
+
+		foreach ( array_keys( $scopes ) as $scope ) {
+			foreach ( array( 'prefix', 'label', 'suffix' ) as $field ) {
+				register_setting( $group, $number->option_name( $scope, $field ), array( 'sanitize_callback' => 'sanitize_text_field' ) );
+			}
+			register_setting( $group, $number->option_name( $scope, 'date_format' ), array( 'sanitize_callback' => array( $this, 'sanitize_order_date_format' ) ) );
+			register_setting( $group, $number->option_name( $scope, 'padding' ), array( 'sanitize_callback' => array( $this, 'sanitize_order_padding' ) ) );
+			register_setting( $group, $number->option_name( $scope, 'start' ), array( 'sanitize_callback' => array( $this, 'sanitize_order_start' ) ) );
+		}
+
+		add_settings_section(
+			'lwc_order_section_general',
+			__( 'Custom Order ID', 'lovecatz-wc' ),
+			array( $this, 'render_order_section_intro' ),
+			$group
+		);
+		add_settings_field(
+			LWC_Order_Number::OPT_ENABLED,
+			__( 'Enable custom order ID', 'lovecatz-wc' ),
+			array( $this, 'render_order_enabled_field' ),
+			$group,
+			'lwc_order_section_general'
+		);
+		add_settings_field(
+			LWC_Order_Number::OPT_RESET_DAILY,
+			__( 'Running number', 'lovecatz-wc' ),
+			array( $this, 'render_order_reset_daily_field' ),
+			$group,
+			'lwc_order_section_general'
+		);
+		add_settings_field(
+			LWC_Order_Number::OPT_SEPARATOR,
+			__( 'Separator', 'lovecatz-wc' ),
+			array( $this, 'render_order_separator_field' ),
+			$group,
+			'lwc_order_section_general'
+		);
+
+		foreach ( $scopes as $scope => $label ) {
+			$section = "lwc_order_section_{$scope}";
+
+			add_settings_section(
+				$section,
+				$label,
+				array( $this, 'render_order_scope_intro' ),
+				$group,
+				array( 'scope' => $scope )
+			);
+
+			add_settings_field(
+				$number->option_name( $scope, 'prefix' ),
+				__( 'Prefix', 'lovecatz-wc' ),
+				array( $this, 'render_order_text_field' ),
+				$group,
+				$section,
+				array(
+					'option'  => $number->option_name( $scope, 'prefix' ),
+					'default' => $number->get_scope_setting( $scope, 'prefix' ),
+				)
+			);
+			add_settings_field(
+				$number->option_name( $scope, 'date_format' ),
+				__( 'Date format', 'lovecatz-wc' ),
+				array( $this, 'render_order_text_field' ),
+				$group,
+				$section,
+				array(
+					'option'      => $number->option_name( $scope, 'date_format' ),
+					'default'     => $number->get_scope_setting( $scope, 'date_format' ),
+					'class'       => 'small-text',
+					'description' => __( 'PHP date format, e.g. Ymd for 20260923 or d-m-Y for 23-09-2026. Leave empty to omit the date.', 'lovecatz-wc' ),
+				)
+			);
+			add_settings_field(
+				$number->option_name( $scope, 'label' ),
+				__( 'Scope label', 'lovecatz-wc' ),
+				array( $this, 'render_order_text_field' ),
+				$group,
+				$section,
+				array(
+					'option'  => $number->option_name( $scope, 'label' ),
+					'default' => $number->get_scope_setting( $scope, 'label' ),
+				)
+			);
+			add_settings_field(
+				$number->option_name( $scope, 'suffix' ),
+				__( 'Suffix', 'lovecatz-wc' ),
+				array( $this, 'render_order_text_field' ),
+				$group,
+				$section,
+				array(
+					'option'      => $number->option_name( $scope, 'suffix' ),
+					'default'     => $number->get_scope_setting( $scope, 'suffix' ),
+					'description' => __( 'Appended after the running number. Leave empty for no suffix.', 'lovecatz-wc' ),
+				)
+			);
+			add_settings_field(
+				$number->option_name( $scope, 'padding' ),
+				__( 'Number length', 'lovecatz-wc' ),
+				array( $this, 'render_order_number_field' ),
+				$group,
+				$section,
+				array(
+					'option'      => $number->option_name( $scope, 'padding' ),
+					'default'     => $number->get_scope_setting( $scope, 'padding' ),
+					'min'         => 0,
+					'max'         => 10,
+					'description' => __( 'Zero-pads the running number. 4 gives 0001; 0 disables padding.', 'lovecatz-wc' ),
+				)
+			);
+			add_settings_field(
+				$number->option_name( $scope, 'start' ),
+				__( 'Start number', 'lovecatz-wc' ),
+				array( $this, 'render_order_number_field' ),
+				$group,
+				$section,
+				array(
+					'option'      => $number->option_name( $scope, 'start' ),
+					'default'     => $number->get_scope_setting( $scope, 'start' ),
+					'min'         => 1,
+					'max'         => 999999,
+					'description' => __( 'First number issued by this scope. Raising it also raises the next number; lowering it never reuses numbers.', 'lovecatz-wc' ),
+				)
+			);
+		}
+	}
+
+	/** Scopes shown on the Order tab: Indonesia is local, the rest is global. */
+	private function order_number_scopes() {
+		return array(
+			LWC_Order_Number::SCOPE_LOCAL  => __( 'Local — shipping to Indonesia', 'lovecatz-wc' ),
+			LWC_Order_Number::SCOPE_GLOBAL => __( 'Global — shipping outside Indonesia', 'lovecatz-wc' ),
+		);
+	}
+
+	/** Explain how the custom order ID is assembled. */
+	public function render_order_section_intro() {
+		echo '<p>' . esc_html__( 'Replace the numeric WooCommerce order number with a readable ID built from a prefix, a date, a scope label, an automatic running number, and an optional suffix.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'An ID is assigned when the order is created, from the shipping country: Indonesia uses the Local format, every other country uses the Global format. Orders created before this feature was enabled keep their original number.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the master switch for custom order IDs. */
+	public function render_order_enabled_field() {
+		$current = get_option( LWC_Order_Number::OPT_ENABLED, 'no' );
+		echo '<input type="hidden" name="' . esc_attr( LWC_Order_Number::OPT_ENABLED ) . '" value="no" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_Order_Number::OPT_ENABLED ) . '" value="yes" ' . checked( $current, 'yes', false ) . ' /> ' . esc_html__( 'Generate a custom order ID for every new order.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render whether the running number restarts each day. */
+	public function render_order_reset_daily_field() {
+		$current = get_option( LWC_Order_Number::OPT_RESET_DAILY, 'no' );
+		echo '<input type="hidden" name="' . esc_attr( LWC_Order_Number::OPT_RESET_DAILY ) . '" value="no" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_Order_Number::OPT_RESET_DAILY ) . '" value="yes" ' . checked( $current, 'yes', false ) . ' /> ' . esc_html__( 'Restart the running number every day.', 'lovecatz-wc' ) . '</label>';
+		echo '<p class="description">' . esc_html__( 'Each scope keeps its own counter, so Local and Global never share numbers.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the separator used between the parts of the ID. */
+	public function render_order_separator_field() {
+		echo '<input type="text" name="' . esc_attr( LWC_Order_Number::OPT_SEPARATOR ) . '" value="' . esc_attr( get_option( LWC_Order_Number::OPT_SEPARATOR, '_' ) ) . '" class="small-text" maxlength="3" />';
+		echo '<p class="description">' . esc_html__( 'Placed between the prefix, date, scope label, running number, and suffix.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the scope heading and a preview of the next ID. */
+	public function render_order_scope_intro( $section = array() ) {
+		// WordPress merges add_settings_section() args into the section array.
+		$scope = isset( $section['scope'] ) ? $section['scope'] : '';
+
+		if ( ! $scope || ! class_exists( 'LWC_Order_Number' ) ) {
+			return;
+		}
+
+		$number = LWC_Order_Number::instance();
+
+		echo '<p>' . esc_html__( 'Used when the shipping country matches this scope.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description"><strong>' . esc_html__( 'Next order ID:', 'lovecatz-wc' ) . '</strong> <code>' . esc_html( $number->preview( $scope ) ) . '</code></p>';
+	}
+
+	/** Render a single-line custom order ID setting. */
+	public function render_order_text_field( $args = array() ) {
+		$option      = isset( $args['option'] ) ? $args['option'] : '';
+		$default     = isset( $args['default'] ) ? $args['default'] : '';
+		$class       = isset( $args['class'] ) ? $args['class'] : 'regular-text';
+		$description = isset( $args['description'] ) ? $args['description'] : '';
+		$value       = get_option( $option, $default );
+
+		echo '<input type="text" name="' . esc_attr( $option ) . '" value="' . esc_attr( $value ) . '" class="' . esc_attr( $class ) . '" />';
+
+		if ( $description ) {
+			echo '<p class="description">' . esc_html( $description ) . '</p>';
+		}
+	}
+
+	/** Render a numeric custom order ID setting. */
+	public function render_order_number_field( $args = array() ) {
+		$option      = isset( $args['option'] ) ? $args['option'] : '';
+		$default     = isset( $args['default'] ) ? $args['default'] : 0;
+		$min         = isset( $args['min'] ) ? (int) $args['min'] : 0;
+		$max         = isset( $args['max'] ) ? (int) $args['max'] : 999999;
+		$description = isset( $args['description'] ) ? $args['description'] : '';
+		$value       = get_option( $option, $default );
+
+		echo '<input type="number" name="' . esc_attr( $option ) . '" value="' . esc_attr( $value ) . '" min="' . esc_attr( $min ) . '" max="' . esc_attr( $max ) . '" step="1" class="small-text" />';
+
+		if ( $description ) {
+			echo '<p class="description">' . esc_html( $description ) . '</p>';
+		}
+	}
+
+	/** Sanitize the master enable switch and stamp the first activation time. */
+	public function sanitize_order_number_enabled( $value ) {
+		$new = 'yes' === $value ? 'yes' : 'no';
+		$old = (string) get_option( LWC_Order_Number::OPT_ENABLED, 'no' );
+
+		if ( 'yes' === $new && 'yes' !== $old && ! get_option( LWC_Order_Number::OPT_ENABLED_AT ) ) {
+			update_option( LWC_Order_Number::OPT_ENABLED_AT, time() );
+		}
+
+		return $new;
+	}
+
+	/** Keep the separator short and non-empty. */
+	public function sanitize_order_separator( $value ) {
+		$separator = sanitize_text_field( (string) $value );
+		$separator = substr( $separator, 0, 3 );
+
+		return '' === $separator ? '_' : $separator;
+	}
+
+	/** Allow only characters that make sense in a PHP date format. */
+	public function sanitize_order_date_format( $value ) {
+		$format = sanitize_text_field( (string) $value );
+
+		return preg_replace( '/[^A-Za-z0-9\/\-_.,: ]/', '', $format );
+	}
+
+	/** Constrain the zero-padding length of the running number. */
+	public function sanitize_order_padding( $value ) {
+		return min( 10, max( 0, (int) $value ) );
+	}
+
+	/** Constrain the first number a scope may issue. */
+	public function sanitize_order_start( $value ) {
+		return max( 1, (int) $value );
 	}
 
 	/** Render the J&T Express settings introduction and service status. */
@@ -1053,6 +1341,26 @@ class LWC_Admin_Settings {
 		$value = get_option( 'lwc_fedex_shipper_phone', '' );
 		echo '<input type="text" name="lwc_fedex_shipper_phone" value="' . esc_attr( $value ) . '" class="regular-text" />';
 		echo '<p class="description">' . esc_html__( 'Required by FedEx when creating shipments and printing labels.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Sanitize the default text used for FedEx customs commodity descriptions. */
+	public function sanitize_fedex_label_description( $value ) {
+		$value = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $value ) ) );
+		if ( function_exists( 'remove_accents' ) ) {
+			$value = remove_accents( $value );
+		}
+		$value = trim( preg_replace( '/[^\x20-\x7E]/', '', $value ) );
+		if ( '' === $value ) {
+			$value = 'AROMATHERAPY ESSENTIAL OILS PURE 100%';
+		}
+		return substr( $value, 0, 100 );
+	}
+
+	/** Render the default FedEx label description setting. */
+	public function render_fedex_default_label_description_field() {
+		$value = get_option( 'lwc_fedex_default_label_description', 'AROMATHERAPY ESSENTIAL OILS PURE 100%' );
+		echo '<input type="text" name="lwc_fedex_default_label_description" value="' . esc_attr( $value ) . '" class="regular-text" maxlength="100" />';
+		echo '<p class="description">' . esc_html__( 'Used as the one customs/label description on new FedEx AWBs. Selected items are aggregated into one commodity with their total quantity, declared value, and weight; carton weight and dimensions still determine the shipment package.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	public function render_rayspeed_section_intro() {

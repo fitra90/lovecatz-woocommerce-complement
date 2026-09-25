@@ -96,6 +96,14 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-international-order-fee.php';
 		}
 
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/core/class-lwc-order-number.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-order-number.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'includes/admin/class-lwc-order-number-admin.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'includes/admin/class-lwc-order-number-admin.php';
+		}
+
 		if ( file_exists( LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-order-admin.php' ) ) {
 					require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-order-admin.php';
 		}
@@ -137,6 +145,12 @@ class LWC_Core {
 			( new LWC_JT_Order_Admin() )->init();
 		}
 
+		// Automatic AWB creation on order receipt, per courier: FedEx is manual
+		// only, every other courier is created as soon as the order processes.
+		if ( class_exists( 'LWC_AWB_Automation' ) ) {
+			( new LWC_AWB_Automation() )->init();
+		}
+
 		// Product quantity limits — load from organized path.
 		if ( file_exists( LWC_PLUGIN_DIR . 'products/class-lwc-product-quantity-limits.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'products/class-lwc-product-quantity-limits.php';
@@ -169,6 +183,18 @@ class LWC_Core {
 
 		if ( class_exists( 'LWC_International_Order_Fee' ) ) {
 			( new LWC_International_Order_Fee() )->init();
+		}
+
+		// Custom order IDs must be assigned wherever an order is created, so
+		// this runs on every request, not only in the admin.
+		if ( class_exists( 'LWC_Order_Number' ) ) {
+			LWC_Order_Number::instance()->init();
+		}
+
+		// Order Number admin metabox (manual correction) — admin only.
+		if ( is_admin() && class_exists( 'LWC_Order_Number_Admin' ) ) {
+			$order_number_admin = new LWC_Order_Number_Admin();
+			$order_number_admin->init();
 		}
 
 		// Include the plugin version in WooCommerce's package hash. This clears

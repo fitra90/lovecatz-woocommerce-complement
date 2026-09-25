@@ -210,7 +210,9 @@ class LWC_JTC_API {
 		if ( ! isset( $data['customerCode'] ) ) {
 			$data['customerCode'] = (string) $credentials['customer_code'];
 		}
-		if ( 'freight_calculation' === $interface && ! isset( $data['digest'] ) ) {
+		// Manual 3.4.1 / 3.4.2: every business payload that carries customerCode
+		// also requires the body signature "digest" — not only freight calculation.
+		if ( ! isset( $data['digest'] ) ) {
 			$data['digest'] = self::build_content_digest(
 				$credentials['customer_code'],
 				$credentials['customer_password'],
@@ -274,7 +276,7 @@ class LWC_JTC_API {
 				'mode' => 'open_platform_signed',
 				'api_account_sent' => true,
 				'header_digest_sent' => true,
-				'content_digest_sent' => 'freight_calculation' === $interface,
+				'content_digest_sent' => isset( $data['digest'] ) && '' !== (string) $data['digest'],
 			),
 			'response' => JSON_ERROR_NONE === json_last_error() ? $decoded : $raw,
 		);
@@ -325,17 +327,29 @@ class LWC_JTC_API {
 			return $result;
 		}
 
+		$code = '';
+		$msg  = '';
 		if ( isset( $decoded['code'] ) && is_scalar( $decoded['code'] ) ) {
-			$result['code']    = sanitize_text_field( (string) $decoded['code'] );
-			$result['success'] = $transport_ok && '1' === $result['code'];
-		} else {
+			$code = sanitize_text_field( (string) $decoded['code'] );
+		}
+		if ( isset( $decoded['msg'] ) && is_scalar( $decoded['msg'] ) ) {
+			$msg = sanitize_text_field( (string) $decoded['msg'] );
+		} elseif ( isset( $decoded['message'] ) && is_scalar( $decoded['message'] ) ) {
+			$msg = sanitize_text_field( (string) $decoded['message'] );
+		}
+
+		$result['code']    = $code;
+		$result['message'] = $msg;
+
+		if ( '' === $code && '' === $msg ) {
 			$result['message'] = __( 'Respons tidak menyertakan kode hasil bisnis.', 'lovecatz-wc' );
+			return $result;
 		}
-		if ( '' === $result['message'] && isset( $decoded['msg'] ) && is_scalar( $decoded['msg'] ) ) {
-			$result['message'] = sanitize_text_field( (string) $decoded['msg'] );
-		} elseif ( '' === $result['message'] && isset( $decoded['message'] ) && is_scalar( $decoded['message'] ) ) {
-			$result['message'] = sanitize_text_field( (string) $decoded['message'] );
-		}
+
+		// The manual documents "msg" as the request status (success / fail) and
+		// never specifies which "code" value means success, so accept either
+		// signal rather than betting on code === '1'.
+		$result['success'] = $transport_ok && ( '1' === $code || 'success' === strtolower( $msg ) );
 		return $result;
 	}
 

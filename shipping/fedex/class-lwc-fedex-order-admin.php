@@ -149,22 +149,22 @@ class LWC_FedEx_Order_Admin {
 		$pickup = $order->get_meta( '_lwc_fedex_pickup' );
 		$pickup = is_array( $pickup ) ? $pickup : array();
 
-		// Items already covered by a previous (partial) shipment.
-		$shipped_item_ids = array();
-		$has_cancelled_shipments = false;
-		foreach ( $shipments as $shipment ) {
-			if ( 'cancelled' === ( isset( $shipment['status'] ) ? $shipment['status'] : '' ) ) {
-				$has_cancelled_shipments = true;
-				continue;
-			}
-			if ( ! empty( $shipment['item_ids'] ) && is_array( $shipment['item_ids'] ) ) {
-				$shipped_item_ids = array_merge( $shipped_item_ids, array_map( 'intval', $shipment['item_ids'] ) );
-			}
-			if ( ! empty( $shipment['replaced_item_ids'] ) && is_array( $shipment['replaced_item_ids'] ) ) {
-				$shipped_item_ids = array_merge( $shipped_item_ids, array_map( 'intval', $shipment['replaced_item_ids'] ) );
-			}
-		}
-		$shipped_item_ids = array_unique( $shipped_item_ids );
+		$fedex_api = new LWC_FedEx_API();
+
+		// Items already covered by a previous (partial) shipment. The coverage is
+		// shared with the create-shipment handler so the screen never offers a
+		// selection that the create request would reject.
+		$coverage = $fedex_api->get_shipment_coverage( $order );
+		$shipped_item_ids = $coverage['active_item_ids'];
+		$has_cancelled_shipments = $coverage['has_cancelled'];
+
+		/*
+		 * An AWB created before per-item manifests were stored cannot be scoped,
+		 * and the handler refuses every new label while one is active. Lock the
+		 * items and say why, instead of letting the merchant pick items that the
+		 * request can never accept.
+		 */
+		$blocked_reason = $this->get_manifest_blocked_reason( $coverage );
 
 		$order_items = array();
 		$has_available_items = false;
@@ -181,14 +181,51 @@ class LWC_FedEx_Order_Admin {
 			$has_available_items = $has_available_items || ! $item_shipped;
 		}
 		$is_replacement = $has_cancelled_shipments && $has_available_items;
-		$selected_service_type = 'INTERNATIONAL_ECONOMY';
-		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
-			$stored_service_type = strtoupper( trim( (string) $shipping_item->get_meta( 'lwc_fedex_service' ) ) );
-			if ( in_array( $stored_service_type, array( 'FEDEX_INTERNATIONAL_PRIORITY', 'INTERNATIONAL_ECONOMY' ), true ) ) {
-				$selected_service_type = $stored_service_type;
-				break;
+		$items_locked = '' !== $blocked_reason;
+
+		/*
+		 * A catalog item only reaches FedEx as the replacement of an order line,
+		 * so the handler refuses it while every line is already on an active AWB.
+		 * Offer the reason instead of a control that always fails.
+		 */
+		$replacement_blocked = $this->get_replacement_blocked_reason( $coverage, $has_available_items );
+		$add_item_blocked  = $items_locked || '' !== $replacement_blocked;
+		$can_create_label  = $has_available_items && ! $add_item_blocked;
+
+		/*
+		 * Ship date, carton measurements and the label description are request
+		 * inputs: FedEx prints them onto the label while the AWB is created and
+		 * offers no way to change them afterwards. So when an active AWB blocks
+		 * the next label, surface the exact AWB to cancel instead of leaving the
+		 * merchant with fields that no longer do anything.
+		 */
+		$blocking_awbs = array();
+		if ( ! $can_create_label ) {
+			$blocking_indexes = ! empty( $coverage['unscoped_indices'] ) ? $coverage['unscoped_indices'] : $coverage['active_indices'];
+			foreach ( $blocking_indexes as $blocking_index ) {
+				$blocking_shipment = isset( $shipments[ $blocking_index ] ) && is_array( $shipments[ $blocking_index ] ) ? $shipments[ $blocking_index ] : array();
+				$blocking_tracking = isset( $blocking_shipment['tracking_number'] ) ? (string) $blocking_shipment['tracking_number'] : '';
+				if ( '' === $blocking_tracking ) {
+					// Without a tracking number the cancel action cannot run.
+					continue;
+				}
+				$blocking_awbs[] = array(
+					'index'    => (int) $blocking_index,
+					'tracking' => $blocking_tracking,
+				);
 			}
 		}
+		$selected_service_type = $fedex_api->get_order_selected_service_type( $order );
+		if ( '' === $selected_service_type ) {
+			$selected_service_type = 'INTERNATIONAL_ECONOMY';
+		}
+		$today = new DateTimeImmutable( 'today', wp_timezone() );
+		$future_day_limit = $today->modify( '+10 days' );
+		$express_pickup_limit = $today->modify( '+1 day' );
+		while ( (int) $express_pickup_limit->format( 'N' ) > 5 ) {
+			$express_pickup_limit = $express_pickup_limit->modify( '+1 day' );
+		}
+		$ground_pickup_limit = $today->modify( '+14 days' );
 		if ( $is_replacement ) {
 			$create_label_text = $is_sandbox ? __( 'Create replacement test AWB', 'lovecatz-wc' ) : __( 'Create replacement AWB', 'lovecatz-wc' );
 		} else {
@@ -224,53 +261,32 @@ class LWC_FedEx_Order_Admin {
 					<?php esc_html_e( 'Configure your FedEx credentials under LoveCatz → Shipping → FedEx to create labels.', 'lovecatz-wc' ); ?>
 				</p>
 			<?php else : ?>
-				<label class="lwc-fedex-service-field" for="lwc_fedex_service_type">
-					<span><?php esc_html_e( 'FedEx service', 'lovecatz-wc' ); ?></span>
-					<select id="lwc_fedex_service_type">
-						<option value="FEDEX_INTERNATIONAL_PRIORITY" <?php selected( $selected_service_type, 'FEDEX_INTERNATIONAL_PRIORITY' ); ?>><?php esc_html_e( 'FedEx International Priority', 'lovecatz-wc' ); ?></option>
-						<option value="INTERNATIONAL_ECONOMY" <?php selected( $selected_service_type, 'INTERNATIONAL_ECONOMY' ); ?>><?php esc_html_e( 'FedEx International Economy', 'lovecatz-wc' ); ?></option>
-					</select>
-				</label>
-				<p class="lwc-fedex-order-actions">
-					<button type="button" class="button" id="lwc_fedex_quote_btn"><?php esc_html_e( 'Test rate quote', 'lovecatz-wc' ); ?></button>
-					<button type="button" class="button button-primary" id="lwc_fedex_create_label_btn" <?php disabled( ! $has_available_items ); ?>><?php echo esc_html( $create_label_text ); ?></button>
+				<p class="lwc-fedex-service-selected">
+					<strong><?php esc_html_e( 'Service selected by buyer:', 'lovecatz-wc' ); ?></strong>
+					<?php echo esc_html( $fedex_api->get_service_label( $selected_service_type ) ); ?>
 				</p>
-				<?php if ( $is_replacement ) : ?>
-					<div class="notice notice-info inline"><p><?php esc_html_e( 'The previous FedEx AWB is cancelled. Confirm the selected items and actual carton measurements, then create the replacement AWB.', 'lovecatz-wc' ); ?></p></div>
-				<?php endif; ?>
-				<?php if ( $is_sandbox ) : ?>
-					<div class="notice notice-warning inline lwc-fedex-sandbox-notice"><p><?php esc_html_e( 'Sandbox mode: rates and labels are for testing only. Live tracking and courier pickup are disabled.', 'lovecatz-wc' ); ?></p></div>
-				<?php endif; ?>
-
-				<fieldset class="lwc-fedex-package-fields">
-					<legend><?php esc_html_e( 'Actual packed carton (optional)', 'lovecatz-wc' ); ?></legend>
-					<p class="description"><?php esc_html_e( 'Enter the actual packed weight as a fully custom value. Dimensions are optional; leave them blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
-					<label>
-						<?php esc_html_e( 'Weight (kg)', 'lovecatz-wc' ); ?>
-						<input type="number" id="lwc_fedex_package_weight" min="0.01" max="68" step="0.01" inputmode="decimal" />
-					</label>
-					<div class="lwc-fedex-dimension-fields">
-						<label><?php esc_html_e( 'Length (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_length" min="1" step="1" inputmode="numeric" /></label>
-						<label><?php esc_html_e( 'Width (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_width" min="1" step="1" inputmode="numeric" /></label>
-						<label><?php esc_html_e( 'Height (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_height" min="1" step="1" inputmode="numeric" /></label>
-					</div>
-				</fieldset>
-
+				<label class="lwc-fedex-ship-date-field" for="lwc_fedex_ship_date">
+					<span><?php esc_html_e( '1. Scheduled ship date', 'lovecatz-wc' ); ?></span>
+					<input type="date" id="lwc_fedex_ship_date" min="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" max="<?php echo esc_attr( $future_day_limit->format( 'Y-m-d' ) ); ?>" value="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" />
+					<small><?php esc_html_e( 'Printed as SHIP DATE on the label. Choose today, or up to 10 days ahead for a Future Day AWB, then tender the parcel on that date.', 'lovecatz-wc' ); ?></small>
+				</label>
 				<?php if ( ! empty( $order_items ) ) : ?>
 					<div class="lwc-fedex-items">
 						<p class="description">
+							<strong><?php esc_html_e( '2. Items in this FedEx package', 'lovecatz-wc' ); ?></strong><br />
 							<?php esc_html_e( 'Check the items included in this FedEx package. Item selection affects the manifest and customs only; a custom carton weight is never recalculated from the checked items.', 'lovecatz-wc' ); ?>
 						</p>
 						<div id="lwc-fedex-package-items" class="lwc-fedex-package-items">
 							<?php foreach ( $order_items as $item ) : ?>
-								<div class="lwc-fedex-item <?php echo $item['shipped'] ? 'is-shipped' : ''; ?>" data-product-id="<?php echo esc_attr( (string) $item['product_id'] ); ?>">
+								<?php $item_locked = $item['shipped'] || $items_locked; ?>
+								<div class="lwc-fedex-item <?php echo $item['shipped'] ? 'is-shipped' : ( $items_locked ? 'is-locked' : '' ); ?>" data-product-id="<?php echo esc_attr( (string) $item['product_id'] ); ?>">
 									<input
 										type="checkbox"
 										id="lwc_fedex_item_<?php echo esc_attr( (string) $item['id'] ); ?>"
 										class="lwc-fedex-item-checkbox"
 										value="<?php echo esc_attr( (string) $item['id'] ); ?>"
-										<?php checked( ! $item['shipped'] ); ?>
-										<?php disabled( $item['shipped'] ); ?>
+										<?php checked( ! $item_locked ); ?>
+										<?php disabled( $item_locked ); ?>
 									/>
 									<label for="lwc_fedex_item_<?php echo esc_attr( (string) $item['id'] ); ?>">
 								<?php
@@ -282,10 +298,12 @@ class LWC_FedEx_Order_Admin {
 								);
 								if ( $item['shipped'] ) {
 									echo ' — <em>' . esc_html__( 'already shipped', 'lovecatz-wc' ) . '</em>';
+								} elseif ( $items_locked ) {
+									echo ' — <em>' . esc_html__( 'locked by an unrecorded AWB', 'lovecatz-wc' ) . '</em>';
 								}
 								?>
 									</label>
-									<?php if ( ! $item['shipped'] ) : ?>
+									<?php if ( ! $item_locked ) : ?>
 										<button type="button" class="button-link-delete lwc-fedex-remove-package-item"><?php esc_html_e( 'Remove', 'lovecatz-wc' ); ?></button>
 									<?php endif; ?>
 								</div>
@@ -301,11 +319,64 @@ class LWC_FedEx_Order_Admin {
 									data-placeholder="<?php esc_attr_e( 'Search an in-stock product…', 'lovecatz-wc' ); ?>"
 									data-action="woocommerce_json_search_products_and_variations"
 									data-allow_clear="true"
+									<?php disabled( $add_item_blocked ); ?>
 								></select>
 							</div>
-							<button type="button" class="button" id="lwc_fedex_add_package_item"><?php esc_html_e( 'Add item', 'lovecatz-wc' ); ?></button>
+							<button type="button" class="button" id="lwc_fedex_add_package_item" <?php disabled( $add_item_blocked ); ?>><?php esc_html_e( 'Add item', 'lovecatz-wc' ); ?></button>
 						</div>
 					</div>
+				<?php endif; ?>
+
+				<fieldset class="lwc-fedex-package-fields">
+					<legend><?php esc_html_e( '3. Actual packed carton', 'lovecatz-wc' ); ?></legend>
+					<p class="description"><?php esc_html_e( 'Sent to FedEx with the AWB and printed on the label. Enter the real packed weight as a custom value; dimensions are optional — leave them blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
+					<label>
+						<?php esc_html_e( 'Weight (kg)', 'lovecatz-wc' ); ?>
+						<input type="number" id="lwc_fedex_package_weight" min="0.01" max="68" step="0.01" inputmode="decimal" />
+					</label>
+					<div class="lwc-fedex-dimension-fields">
+						<label><?php esc_html_e( 'Length (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_length" min="1" step="1" inputmode="numeric" /></label>
+						<label><?php esc_html_e( 'Width (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_width" min="1" step="1" inputmode="numeric" /></label>
+						<label><?php esc_html_e( 'Height (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_height" min="1" step="1" inputmode="numeric" /></label>
+					</div>
+				</fieldset>
+
+				<label class="lwc-fedex-label-description-field" for="lwc_fedex_label_description">
+					<span><?php esc_html_e( '4. FedEx label item description', 'lovecatz-wc' ); ?></span>
+					<input type="text" id="lwc_fedex_label_description" maxlength="100" value="<?php echo esc_attr( get_option( 'lwc_fedex_default_label_description', LWC_FedEx_API::DEFAULT_LABEL_COMMODITY_DESCRIPTION ) ); ?>" />
+					<small><?php esc_html_e( 'Printed as the DESC line on the label. Defaults to the text configured in FedEx Settings. Selected items are sent as one aggregated customs commodity, so FedEx prints one DESC line. Total quantity, declared value, and weight are calculated from the selected items; carton weight and dimensions remain used for the shipment.', 'lovecatz-wc' ); ?></small>
+				</label>
+
+				<p class="lwc-fedex-order-actions">
+					<button type="button" class="button" id="lwc_fedex_quote_btn" <?php disabled( $items_locked ); ?>><?php esc_html_e( 'Test rate quote', 'lovecatz-wc' ); ?></button>
+					<button type="button" class="button button-primary" id="lwc_fedex_create_label_btn" <?php disabled( ! $can_create_label ); ?>><?php echo esc_html( $create_label_text ); ?></button>
+					<small class="description lwc-fedex-actions-hint"><?php esc_html_e( 'Steps 1-4 are sent to FedEx while the AWB is created and are printed on the label, so they must be set before this button. To change an AWB that was already issued, cancel it first and create a new one.', 'lovecatz-wc' ); ?></small>
+				</p>
+				<?php if ( '' !== $blocked_reason || '' !== $replacement_blocked ) : ?>
+					<div class="notice notice-warning inline lwc-fedex-blocked-notice">
+						<p><?php echo esc_html( '' !== $blocked_reason ? $blocked_reason : $replacement_blocked ); ?></p>
+						<?php if ( ! empty( $blocking_awbs ) ) : ?>
+							<p class="lwc-fedex-blocked-actions">
+								<?php foreach ( $blocking_awbs as $blocking_awb ) : ?>
+									<button type="button" class="button lwc-fedex-cancel-shipment" data-shipment="<?php echo esc_attr( (string) $blocking_awb['index'] ); ?>" data-tracking="<?php echo esc_attr( $blocking_awb['tracking'] ); ?>">
+										<?php
+										printf(
+											/* translators: %s: FedEx AWB number, such as #1. */
+											esc_html__( 'Cancel AWB %s and start over', 'lovecatz-wc' ),
+											esc_html( '#' . ( (int) $blocking_awb['index'] + 1 ) )
+										);
+										?>
+									</button>
+								<?php endforeach; ?>
+							</p>
+						<?php endif; ?>
+					</div>
+				<?php endif; ?>
+				<?php if ( $is_replacement ) : ?>
+					<div class="notice notice-info inline"><p><?php esc_html_e( 'The previous FedEx AWB is cancelled. Confirm the selected items and actual carton measurements, then create the replacement AWB.', 'lovecatz-wc' ); ?></p></div>
+				<?php endif; ?>
+				<?php if ( $is_sandbox ) : ?>
+					<div class="notice notice-warning inline lwc-fedex-sandbox-notice"><p><?php esc_html_e( 'Sandbox mode: rates and labels are for testing only. Live tracking and courier pickup are disabled.', 'lovecatz-wc' ); ?></p></div>
 				<?php endif; ?>
 
 				<p id="lwc-fedex-order-status" class="lwc-fedex-order-status" hidden></p>
@@ -344,14 +415,50 @@ class LWC_FedEx_Order_Admin {
 											?>
 										</small>
 									<?php endif; ?>
-									<?php if ( ! empty( $shipment['service_type'] ) ) : ?>
+					<?php if ( ! empty( $shipment['service_type'] ) ) : ?>
 										<small class="lwc-fedex-shipment-service">
 											<?php echo esc_html( ( new LWC_FedEx_API() )->get_service_label( $shipment['service_type'] ) ); ?>
 										</small>
-									<?php endif; ?>
-									<?php if ( ! empty( $shipment['contents'] ) && is_array( $shipment['contents'] ) ) : ?>
+					<?php endif; ?>
+					<?php if ( ! empty( $shipment['ship_date'] ) ) : ?>
+						<small class="lwc-fedex-shipment-ship-date">
+							<?php
+							printf(
+								/* translators: %s: scheduled FedEx ship date. */
+								esc_html__( 'Ship date: %s', 'lovecatz-wc' ),
+								esc_html( $shipment['ship_date'] )
+							);
+							?>
+						</small>
+					<?php endif; ?>
+					<?php if ( ! empty( $shipment['label_description'] ) ) : ?>
+						<small class="lwc-fedex-shipment-label-description"><?php echo esc_html( $shipment['label_description'] ); ?></small>
+					<?php endif; ?>
+									<?php
+									/*
+									 * Show the items this AWB actually carries. Shipments
+									 * created before the manifest snapshot existed only
+									 * stored their order line IDs, so they are resolved
+									 * against the order instead of a generic placeholder.
+									 */
+									$manifest_lines = $fedex_api->get_shipment_manifest_lines( $order, $shipment );
+									if ( ! empty( $manifest_lines ) ) :
+										$manifest_text = array();
+										foreach ( $manifest_lines as $manifest_line ) {
+											$manifest_text[] = sprintf(
+												/* translators: 1: item name, 2: quantity */
+												__( '%1$s × %2$s', 'lovecatz-wc' ),
+												$manifest_line['name'],
+												$manifest_line['quantity']
+											);
+										}
+										?>
 										<small class="lwc-fedex-shipment-contents">
-											<?php esc_html_e( 'Essential Oils', 'lovecatz-wc' ); ?>
+											<?php echo esc_html( implode( ' · ', $manifest_text ) ); ?>
+										</small>
+									<?php elseif ( ! $shipment_cancelled && empty( $shipment['item_ids'] ) ) : ?>
+										<small class="lwc-fedex-shipment-contents is-unknown">
+											<?php esc_html_e( 'Items not recorded on this AWB', 'lovecatz-wc' ); ?>
 										</small>
 									<?php endif; ?>
 								</li>
@@ -410,11 +517,12 @@ class LWC_FedEx_Order_Admin {
 							<p><button type="button" class="button button-link-delete" id="lwc_fedex_cancel_pickup_btn"><?php esc_html_e( 'Cancel pickup', 'lovecatz-wc' ); ?></button></p>
 						<?php else : ?>
 							<div class="lwc-fedex-pickup-fields">
-								<label><?php esc_html_e( 'Pickup date', 'lovecatz-wc' ); ?><input type="date" id="lwc_fedex_pickup_date" min="<?php echo esc_attr( current_time( 'Y-m-d' ) ); ?>" value="<?php echo esc_attr( current_time( 'Y-m-d' ) ); ?>" /></label>
+								<label><?php esc_html_e( 'Pickup date', 'lovecatz-wc' ); ?><input type="date" id="lwc_fedex_pickup_date" min="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" max="<?php echo esc_attr( $express_pickup_limit->format( 'Y-m-d' ) ); ?>" data-express-max="<?php echo esc_attr( $express_pickup_limit->format( 'Y-m-d' ) ); ?>" data-ground-max="<?php echo esc_attr( $ground_pickup_limit->format( 'Y-m-d' ) ); ?>" value="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" /></label>
 								<label><?php esc_html_e( 'Package ready', 'lovecatz-wc' ); ?><input type="time" id="lwc_fedex_pickup_ready" value="09:00" /></label>
 								<label><?php esc_html_e( 'Store closes', 'lovecatz-wc' ); ?><input type="time" id="lwc_fedex_pickup_close" value="17:00" /></label>
 								<label><?php esc_html_e( 'Carrier', 'lovecatz-wc' ); ?><select id="lwc_fedex_pickup_carrier"><option value="FDXE">FedEx Express</option><option value="FDXG">FedEx Ground</option></select></label>
 							</div>
+							<p class="description"><?php esc_html_e( 'FedEx Express pickup can be booked only for today or the next business day. You may create a Future Day AWB earlier, then request its pickup when it is within that window.', 'lovecatz-wc' ); ?></p>
 							<p class="lwc-fedex-order-actions">
 								<button type="button" class="button" id="lwc_fedex_check_pickup_btn"><?php esc_html_e( 'Check availability', 'lovecatz-wc' ); ?></button>
 								<button type="button" class="button button-primary" id="lwc_fedex_schedule_pickup_btn" disabled><?php esc_html_e( 'Schedule pickup', 'lovecatz-wc' ); ?></button>
@@ -425,6 +533,45 @@ class LWC_FedEx_Order_Admin {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Explain why no new FedEx label can be created for the order.
+	 *
+	 * @param array $coverage Coverage returned by LWC_FedEx_API::get_shipment_coverage().
+	 * @return string Empty when a label can be created.
+	 */
+	private function get_manifest_blocked_reason( $coverage ) {
+		if ( empty( $coverage['has_unscoped_active'] ) ) {
+			return '';
+		}
+
+		// The shipment list numbers the AWBs from 1, so match it.
+		$numbers = array();
+		foreach ( $coverage['unscoped_indices'] as $index ) {
+			$numbers[] = '#' . ( (int) $index + 1 );
+		}
+
+		return sprintf(
+			/* translators: %s: FedEx AWB numbers, such as "#1". */
+			__( 'FedEx AWB %s does not record which items it covers, so no new label can be created. Cancel that AWB to release the order items.', 'lovecatz-wc' ),
+			implode( ', ', $numbers )
+		);
+	}
+
+	/**
+	 * Explain why a catalog replacement item cannot be added right now.
+	 *
+	 * @param array $coverage            Coverage from LWC_FedEx_API::get_shipment_coverage().
+	 * @param bool  $has_available_items Whether any order line is still free.
+	 * @return string Empty when a catalog item can be added.
+	 */
+	private function get_replacement_blocked_reason( $coverage, $has_available_items ) {
+		if ( ! empty( $coverage['has_unscoped_active'] ) || $has_available_items ) {
+			return '';
+		}
+
+		return __( 'Every order item is already covered by an active FedEx AWB. Cancel that AWB to release the items before creating another label or adding a catalog item.', 'lovecatz-wc' );
 	}
 
 	/**
@@ -440,6 +587,8 @@ class LWC_FedEx_Order_Admin {
 			'nonce'    => wp_create_nonce( 'lwc_fedex_connection_check' ),
 			'order_id' => 0,
 			'currency' => get_option( 'woocommerce_currency', 'IDR' ),
+			'manifest_blocked' => '',
+			'replacement_blocked' => '',
 			'address'  => array(
 				'country'  => '',
 				'state'    => '',
@@ -480,6 +629,18 @@ class LWC_FedEx_Order_Admin {
 			$config['address']['state']    = $order->get_shipping_state() ? $order->get_shipping_state() : $order->get_billing_state();
 			$config['address']['postcode'] = $order->get_shipping_postcode() ? $order->get_shipping_postcode() : $order->get_billing_postcode();
 			$config['address']['city']     = $order->get_shipping_city() ? $order->get_shipping_city() : $order->get_billing_city();
+			// Keep the browser from enabling an action the handler would reject.
+			$coverage = ( new LWC_FedEx_API() )->get_shipment_coverage( $order );
+			$config['manifest_blocked'] = $this->get_manifest_blocked_reason( $coverage );
+
+			$has_available_items = false;
+			foreach ( $order->get_items() as $item ) {
+				if ( ! in_array( (int) $item->get_id(), $coverage['active_item_ids'], true ) ) {
+					$has_available_items = true;
+					break;
+				}
+			}
+			$config['replacement_blocked'] = $this->get_replacement_blocked_reason( $coverage, $has_available_items );
 		}
 
 		return $config;
@@ -816,17 +977,35 @@ class LWC_FedEx_Order_Admin {
 		$ready = isset( $_POST['ready_time'] ) ? sanitize_text_field( wp_unslash( $_POST['ready_time'] ) ) : '';
 		$close = isset( $_POST['close_time'] ) ? sanitize_text_field( wp_unslash( $_POST['close_time'] ) ) : '';
 		$carrier = isset( $_POST['carrier'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['carrier'] ) ) ) : 'FDXE';
+		if ( ! in_array( $carrier, array( 'FDXE', 'FDXG' ), true ) ) {
+			$carrier = 'FDXE';
+		}
 		$date_value = DateTime::createFromFormat( '!Y-m-d', $date, wp_timezone() );
 		if ( ! $date_value || $date_value->format( 'Y-m-d' ) !== $date || $date < current_time( 'Y-m-d' ) ) {
 			wp_send_json( array( 'success' => false, 'message' => __( 'Choose a valid pickup date.', 'lovecatz-wc' ) ) );
+		}
+		$pickup_limit = new DateTimeImmutable( 'today', wp_timezone() );
+		if ( 'FDXE' === $carrier ) {
+			do {
+				$pickup_limit = $pickup_limit->modify( '+1 day' );
+			} while ( (int) $pickup_limit->format( 'N' ) > 5 );
+		} else {
+			$pickup_limit = $pickup_limit->modify( '+14 days' );
+		}
+		if ( $date_value > $pickup_limit ) {
+			wp_send_json(
+				array(
+					'success' => false,
+					'message' => 'FDXE' === $carrier
+						? __( 'FedEx Express pickup can be scheduled only for today or the next business day. Create the Future Day AWB now, then request pickup when its date is within that window.', 'lovecatz-wc' )
+						: __( 'FedEx Ground pickup can be scheduled no more than 14 days ahead.', 'lovecatz-wc' ),
+				)
+			);
 		}
 		$ready_value = DateTime::createFromFormat( '!H:i', $ready, wp_timezone() );
 		$close_value = DateTime::createFromFormat( '!H:i', $close, wp_timezone() );
 		if ( ! $ready_value || ! $close_value || $ready_value->format( 'H:i' ) !== $ready || $close_value->format( 'H:i' ) !== $close || $ready >= $close ) {
 			wp_send_json( array( 'success' => false, 'message' => __( 'Pickup ready time must be earlier than the store closing time.', 'lovecatz-wc' ) ) );
-		}
-		if ( ! in_array( $carrier, array( 'FDXE', 'FDXG' ), true ) ) {
-			$carrier = 'FDXE';
 		}
 		return array( 'date' => $date, 'ready_time' => $ready, 'close_time' => $close, 'carrier' => $carrier );
 	}
