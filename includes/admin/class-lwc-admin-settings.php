@@ -129,11 +129,15 @@ class LWC_Admin_Settings {
 			'lwc-admin-settings',
 			'lwcShippingSettings',
 			array(
-				'ajax_url'         => admin_url( 'admin-ajax.php' ),
-				'nonce'            => wp_create_nonce( 'lwc_fedex_connection_check' ),
-				'checking'         => __( 'Checking credentials…', 'lovecatz-wc' ),
-				'requestFailed'    => __( 'Connection request failed.', 'lovecatz-wc' ),
-				'waiting'          => __( 'Waiting for credentials', 'lovecatz-wc' ),
+				'ajax_url'             => admin_url( 'admin-ajax.php' ),
+				'nonce'                => wp_create_nonce( 'lwc_fedex_connection_check' ),
+				'checking'             => __( 'Checking credentials…', 'lovecatz-wc' ),
+				'requestFailed'        => __( 'Connection request failed.', 'lovecatz-wc' ),
+				'waiting'              => __( 'Waiting for credentials', 'lovecatz-wc' ),
+				'jtc_samples'          => class_exists( 'LWC_JTC_Payload_Schema' ) ? LWC_JTC_Payload_Schema::get_samples_for_console() : array(),
+				'jtc_sample_label'     => __( 'Isi contoh payload (%s)', 'lovecatz-wc' ),
+				'jtc_no_schema_label'  => __( 'Tidak ada schema untuk %s', 'lovecatz-wc' ),
+				'jtc_interface_labels' => class_exists( 'LWC_JTC_API' ) ? LWC_JTC_API::get_interface_labels() : array(),
 			)
 		);
 	}
@@ -337,6 +341,17 @@ class LWC_Admin_Settings {
 		add_settings_field( 'lwc_jt_cargo_environment', __( 'Active API Environment', 'lovecatz-wc' ), array( $this, 'render_jtc_environment_field' ), $jtc_group, $jtc_section );
 		add_settings_field( 'lwc_jt_cargo_sandbox_credentials', __( 'Sandbox Credentials', 'lovecatz-wc' ), array( $this, 'render_jtc_credentials_field' ), $jtc_group, $jtc_section, array( 'environment' => 'sandbox' ) );
 		add_settings_field( 'lwc_jt_cargo_production_credentials', __( 'Production Credentials', 'lovecatz-wc' ), array( $this, 'render_jtc_credentials_field' ), $jtc_group, $jtc_section, array( 'environment' => 'production' ) );
+		register_setting(
+			$jtc_group,
+			'lwc_jtc_debug',
+			array(
+				'default'           => 'no',
+				'sanitize_callback' => function ( $value ) {
+					return ( true === $value || 'yes' === $value || '1' === $value || 1 === $value ) ? 'yes' : 'no';
+				},
+			)
+		);
+		add_settings_field( 'lwc_jtc_debug', __( 'Debug logging', 'lovecatz-wc' ), array( $this, 'render_jtc_debug_field' ), $jtc_group, $jtc_section );
 
 		// Label copy that has no server source. Empty means the element is
 		// hidden on the label — the plugin never prints a guessed value.
@@ -419,6 +434,27 @@ class LWC_Admin_Settings {
 			)
 		);
 
+		// Custom shipper (origin) address. Optional; when disabled every FedEx
+		// request keeps using the WooCommerce store address. Each part gets its
+		// own closure because WordPress passes only the value to the callback.
+		// Guarded so a load-order change can never fatal the settings screen.
+		if ( class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			register_setting( 'lwc_shipping_fedex_options', LWC_FedEx_Shipper_Address::OPT_ENABLED, array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+			foreach ( array_keys( LWC_FedEx_Shipper_Address::FIELDS ) as $lwc_shipper_part ) {
+				register_setting(
+					'lwc_shipping_fedex_options',
+					LWC_FedEx_Shipper_Address::get_option_name( $lwc_shipper_part ),
+					array(
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => function ( $value ) use ( $lwc_shipper_part ) {
+							return LWC_FedEx_Shipper_Address::sanitize_part( $lwc_shipper_part, $value );
+						},
+					)
+				);
+			}
+		}
+
 		add_settings_section(
 			'lwc_shipping_fedex_section',
 			__( 'FedEx Settings', 'lovecatz-wc' ),
@@ -493,6 +529,36 @@ class LWC_Admin_Settings {
 			'lwc_shipping_fedex_options',
 			'lwc_shipping_fedex_section'
 		);
+
+		// Custom shipper address block. Kept in its own section so the toggle
+		// and the nine address parts read as one unit on the settings page.
+		if ( class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			add_settings_section(
+				'lwc_fedex_shipper_address_section',
+				__( 'Custom Shipper Address (FedEx)', 'lovecatz-wc' ),
+				array( $this, 'render_fedex_shipper_address_section_intro' ),
+				'lwc_shipping_fedex_options'
+			);
+
+			add_settings_field(
+				LWC_FedEx_Shipper_Address::OPT_ENABLED,
+				__( 'Use a custom shipper address', 'lovecatz-wc' ),
+				array( $this, 'render_fedex_shipper_address_enabled_field' ),
+				'lwc_shipping_fedex_options',
+				'lwc_fedex_shipper_address_section'
+			);
+
+			foreach ( LWC_FedEx_Shipper_Address::FIELDS as $lwc_shipper_part => $lwc_shipper_config ) {
+				add_settings_field(
+					LWC_FedEx_Shipper_Address::get_option_name( $lwc_shipper_part ),
+					$lwc_shipper_config['label'] . ( $lwc_shipper_config['required'] ? ' *' : '' ),
+					array( $this, 'render_fedex_shipper_address_field' ),
+					'lwc_shipping_fedex_options',
+					'lwc_fedex_shipper_address_section',
+					array( 'part' => $lwc_shipper_part )
+				);
+			}
+		}
 
 		// RaySpeed RETAIL Sandbox settings. The development API exposes a
 		// single key rather than OAuth client credentials.
@@ -1138,6 +1204,21 @@ class LWC_Admin_Settings {
 		echo '<p class="description">' . esc_html__( 'Kosongkan untuk menyembunyikan elemen ini pada label.', 'lovecatz-wc' ) . '</p>';
 	}
 
+	/**
+	 * Render the J&T Cargo debug switch.
+	 *
+	 * The log stores the interface, the order id, the customer order number and
+	 * the request payload with every credential masked. Passwords, private keys
+	 * and digests are never written.
+	 */
+	public function render_jtc_debug_field() {
+		$value = get_option( 'lwc_jtc_debug', 'no' );
+		echo '<label><input type="checkbox" name="lwc_jtc_debug" value="yes"' . checked( $value, 'yes', false ) . '> ';
+		esc_html_e( 'Write J&T Cargo request/response diagnostics to the WooCommerce log (source lwc-jtc).', 'lovecatz-wc' );
+		echo '</label>';
+		echo '<p class="description">' . esc_html__( 'Credential values are always masked in the log.', 'lovecatz-wc' ) . '</p>';
+	}
+
 	/** Render Cargo credentials without sharing J&T Express form definitions. */
 	public function render_jtc_credentials_field( $args = array() ) {
 		$environment = isset( $args['environment'] ) && 'production' === $args['environment'] ? 'production' : 'sandbox';
@@ -1214,7 +1295,11 @@ class LWC_Admin_Settings {
 					<textarea id="lwc-jtc-test-headers" class="large-text code" rows="14" spellcheck="false">{}</textarea>
 				</div>
 			</div>
-			<p class="submit"><button type="button" class="button button-primary" id="lwc-jtc-send-test"><?php esc_html_e( 'Send Sandbox Request', 'lovecatz-wc' ); ?></button></p>
+			<p class="submit">
+				<button type="button" class="button button-primary" id="lwc-jtc-send-test"><?php esc_html_e( 'Send Sandbox Request', 'lovecatz-wc' ); ?></button>
+				<button type="button" class="button" id="lwc-jtc-fill-sample" disabled><?php esc_html_e( 'Isi contoh payload', 'lovecatz-wc' ); ?></button>
+			</p>
+			<p class="description"><?php esc_html_e( 'Tombol contoh diisi dari schema tiap interface yang tercatat di LWC_JTC_Payload_Schema. Interface yang tidak memiliki schema akan otomatis nonaktif. Untuk menambah atau mengubah schema, gunakan filter lwc_jtc_payload_schemas. Untuk menguji data order sungguhan, gunakan tombol Create J&T Cargo Order di halaman order WooCommerce.', 'lovecatz-wc' ); ?></p>
 			<div id="lwc-jtc-test-status" class="lwc-provider-status" data-status="idle" aria-live="polite"><span class="lwc-provider-status-dot"></span><span class="lwc-provider-status-label"><?php esc_html_e( 'Ready', 'lovecatz-wc' ); ?></span></div>
 			<div class="lwc-jtc-progress-wrap">
 				<h3><?php esc_html_e( 'Three-hit Progress', 'lovecatz-wc' ); ?></h3>
@@ -1362,6 +1447,103 @@ class LWC_Admin_Settings {
 		echo '<input type="text" name="lwc_fedex_default_label_description" value="' . esc_attr( $value ) . '" class="regular-text" maxlength="100" />';
 		echo '<p class="description">' . esc_html__( 'Used as the one customs/label description on new FedEx AWBs. Selected items are aggregated into one commodity with their total quantity, declared value, and weight; carton weight and dimensions still determine the shipment package.', 'lovecatz-wc' ) . '</p>';
 	}
+
+	/**
+	 * Render the section introduction for the custom shipper address block,
+	 * including a live completeness warning when the toggle is on.
+	 */
+	public function render_fedex_shipper_address_section_intro() {
+		if ( ! class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			return;
+		}
+
+		echo '<p>' . esc_html__( 'Ship FedEx orders from an address other than the WooCommerce store address (a warehouse or fulfilment partner). When enabled and complete, this address becomes the origin on FedEx rate quotes, shipments, printed labels, AWBs, and pickups.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'When disabled or incomplete, FedEx keeps using the WooCommerce store address, so live shipping is never blocked by this setting.', 'lovecatz-wc' ) . '</p>';
+
+		if ( ! LWC_FedEx_Shipper_Address::is_enabled() ) {
+			return;
+		}
+
+		if ( LWC_FedEx_Shipper_Address::is_complete() ) {
+			printf(
+				'<div class="notice notice-success inline"><p>%s</p></div>',
+				esc_html__( 'The custom shipper address is complete and will be used as the FedEx origin.', 'lovecatz-wc' )
+			);
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning inline"><p>%s</p></div>',
+			esc_html( LWC_FedEx_Shipper_Address::get_invalid_message() )
+		);
+	}
+
+	/** Render the toggle that activates the custom shipper address. */
+	public function render_fedex_shipper_address_enabled_field() {
+		$enabled = LWC_FedEx_Shipper_Address::is_enabled();
+		printf(
+			'<label><input type="checkbox" name="%1$s" value="yes" %2$s> %3$s</label>',
+			esc_attr( LWC_FedEx_Shipper_Address::OPT_ENABLED ),
+			checked( $enabled, true, false ),
+			esc_html__( 'Use the address below as the FedEx shipper / origin address', 'lovecatz-wc' )
+		);
+		echo '<p class="description">' . esc_html__( 'Required fields are marked with an asterisk. If any required field is empty the store address is used instead.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Render one custom shipper address field.
+	 *
+	 * @param array $args Field arguments carrying the address part key.
+	 */
+	public function render_fedex_shipper_address_field( $args ) {
+		$part    = isset( $args['part'] ) ? (string) $args['part'] : '';
+		$config  = isset( LWC_FedEx_Shipper_Address::FIELDS[ $part ] ) ? LWC_FedEx_Shipper_Address::FIELDS[ $part ] : array();
+		$name    = LWC_FedEx_Shipper_Address::get_option_name( $part );
+		$value   = LWC_FedEx_Shipper_Address::get_part( $part );
+
+		if ( 'country' === $part && $this->render_fedex_shipper_country_select( $name, $value ) ) {
+			return;
+		}
+
+		printf(
+			'<input type="text" name="%1$s" value="%2$s" class="regular-text" maxlength="%3$d" />',
+			esc_attr( $name ),
+			esc_attr( $value ),
+			absint( isset( $config['max_length'] ) ? $config['max_length'] : 255 )
+		);
+	}
+
+	/**
+	 * Render the country field as a select when WooCommerce countries exist.
+	 *
+	 * @param string $name  Input name.
+	 * @param string $value Current value.
+	 * @return bool True when a select was rendered.
+	 */
+	private function render_fedex_shipper_country_select( $name, $value ) {
+		if ( ! class_exists( 'WC_Countries' ) || ! WC()->countries ) {
+			return false;
+		}
+
+		$countries = WC()->countries->get_countries();
+		if ( empty( $countries ) || ! is_array( $countries ) ) {
+			return false;
+		}
+
+		printf( '<select name="%s" class="regular-text">', esc_attr( $name ) );
+		foreach ( $countries as $code => $label ) {
+			printf(
+				'<option value="%1$s" %2$s>%3$s</option>',
+				esc_attr( $code ),
+				selected( strtoupper( (string) $value ), strtoupper( (string) $code ), false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+
+		return true;
+	}
+
 
 	public function render_rayspeed_section_intro() {
 		echo '<p>' . esc_html__( 'RaySpeed RETAIL development integration for pricing, test AWB creation, and tracking. Production endpoints and credentials must be supplied by RaySpeed before going live.', 'lovecatz-wc' ) . '</p>';

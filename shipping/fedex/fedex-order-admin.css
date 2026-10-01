@@ -323,3 +323,22 @@
 .lwc-fedex-track-exception {
 	color: #b42318 !important;
 }
+
+.lwc-fedex-origin-summary {
+	margin: 6px 0 8px;
+	padding: 6px 8px;
+	border-left: 3px solid #2271b1;
+	background: #f6f7f7;
+	font-size: 12px;
+	line-height: 1.5;
+	word-break: break-word;
+}
+
+.lwc-fedex-origin-summary strong {
+	display: block;
+	margin-bottom: 2px;
+}
+
+.lwc-fedex-order-box .notice.inline {
+	margin: 6px 0 8px;
+}

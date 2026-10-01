@@ -441,6 +441,27 @@
         var viewOutput = $('#lwc-jtc-test-view');
         var statusEl = $('#lwc-jtc-test-status');
         var sendButton = $('#lwc-jtc-send-test');
+        var sampleButton = $('#lwc-jtc-fill-sample');
+        var samples = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_samples) || {};
+        var interfaceLabels = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_interface_labels) || {};
+        var sampleLabelTemplate = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_sample_label) || 'Isi contoh payload (%s)';
+        var noSchemaTemplate = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_no_schema_label) || 'Tidak ada schema untuk %s';
+
+        function refreshSampleButton() {
+            if (!sampleButton.length) {
+                return;
+            }
+            var slug = interfaceSelect.val();
+            var name = interfaceLabels[slug] || slug || '';
+            var sample = samples[slug];
+            if (sample) {
+                sampleButton.prop('disabled', false).text(sampleLabelTemplate.replace('%s', name));
+                sampleButton.data('sample', sample);
+            } else {
+                sampleButton.prop('disabled', true).text(noSchemaTemplate.replace('%s', name));
+                sampleButton.removeData('sample');
+            }
+        }
 
         function updateProgress(progress) {
             if (!progress || !progress.interfaces) {
@@ -485,6 +506,17 @@
         interfaceSelect.on('change', updateEndpoint);
         methodSelect.on('change', updateEndpoint);
         updateEndpoint();
+        refreshSampleButton();
+
+        interfaceSelect.on('change', refreshSampleButton);
+
+        sampleButton.on('click', function () {
+            var sample = $(this).data('sample');
+            if (!sample) {
+                return;
+            }
+            payloadInput.val(sample);
+        });
 
         sendButton.on('click', function () {
             try {

@@ -297,6 +297,19 @@ class LWC_FedEx_API {
 		if ( is_wp_error( $package_override ) ) {
 			return array( 'success' => false, 'message' => $package_override->get_error_message() );
 		}
+
+		// A custom shipper address is mandatory once the toggle is on: silently
+		// printing a label from the store address would put the wrong origin on
+		// the AWB, so refuse early with an actionable message instead.
+		$origin_error = $this->validate_origin_for_shipment();
+		if ( '' !== $origin_error ) {
+			$this->log( 'Shipment request blocked: ' . $origin_error, 'error' );
+			return array(
+				'success' => false,
+				'message' => $origin_error,
+			);
+		}
+
 		$shipper_contact   = $this->build_shipper_contact();
 		$recipient_contact = $this->build_recipient_contact( $order );
 		if ( empty( $shipper_contact['phoneNumber'] ) ) {
@@ -560,6 +573,15 @@ class LWC_FedEx_API {
 		if ( 'yes' === $this->settings['test_mode'] ) {
 			return array( 'success' => false, 'message' => __( 'Courier pickup is available only in FedEx Production mode.', 'lovecatz-wc' ) );
 		}
+
+		// The courier collects from the origin, so the same mandatory-origin
+		// rule applies as for AWB creation.
+		$origin_error = $this->validate_origin_for_shipment();
+		if ( '' !== $origin_error ) {
+			$this->log( 'Pickup request blocked: ' . $origin_error, 'error' );
+			return array( 'success' => false, 'message' => $origin_error );
+		}
+
 		$token = $this->get_access_token();
 		if ( '' === $token ) {
 			return array( 'success' => false, 'message' => __( 'Unable to authenticate with FedEx.', 'lovecatz-wc' ) );
@@ -946,7 +968,11 @@ class LWC_FedEx_API {
 		$destination = $this->build_destination_address_from_order( $order );
 		$relationship = isset( $destination['countryCode'] ) && $destination['countryCode'] === $origin['countryCode'] ? 'DOMESTIC' : 'INTERNATIONAL';
 		$contact = $this->build_shipper_contact();
-		$contact['companyName'] = get_bloginfo( 'name' );
+		// Keep the custom company when the shipper address supplies one; the
+		// site title is only the fallback for the default store contact.
+		if ( empty( $contact['companyName'] ) ) {
+			$contact['companyName'] = get_bloginfo( 'name' );
+		}
 
 		return array(
 			'associatedAccountNumber' => array( 'value' => $this->settings['account_number'] ),
@@ -1201,9 +1227,29 @@ class LWC_FedEx_API {
 	/**
 	 * Build the shipper contact from plugin settings.
 	 *
+	 * Uses the custom shipper address contact block when that feature is on and
+	 * complete, so the name, company, and phone printed on the label always
+	 * match the origin address FedEx receives.
+	 *
 	 * @return array
 	 */
 	private function build_shipper_contact() {
+		if ( class_exists( 'LWC_FedEx_Shipper_Address' ) && LWC_FedEx_Shipper_Address::should_use_custom() ) {
+			$custom = LWC_FedEx_Shipper_Address::build_fedex_contact();
+			if ( ! is_wp_error( $custom ) ) {
+				return $custom;
+			}
+
+			$this->log(
+				'Custom FedEx shipper contact is enabled but invalid; using the default shipper contact. ' . $custom->get_error_message(),
+				'error'
+			);
+		}
+
+		if ( class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			return LWC_FedEx_Shipper_Address::build_store_contact();
+		}
+
 		return array(
 			'personName'  => get_option( 'lwc_fedex_shipper_name', get_bloginfo( 'name' ) ),
 			'phoneNumber' => get_option( 'lwc_fedex_shipper_phone', '' ),
@@ -1407,13 +1453,87 @@ class LWC_FedEx_API {
 	}
 
 	/**
+	 * Validate the origin address before a label/AWB request is sent.
+	 *
+	 * The custom shipper address is mandatory while its toggle is on, so an
+	 * incomplete block is a hard error here. Rate quotes deliberately take the
+	 * softer path in {@see resolve_origin_address()} so checkout is never
+	 * blocked by an admin misconfiguration.
+	 *
+	 * @return string Empty string when the origin is usable, otherwise a
+	 *                human-readable error message.
+	 */
+	private function validate_origin_for_shipment() {
+		if ( ! class_exists( 'LWC_FedEx_Shipper_Address' ) || ! LWC_FedEx_Shipper_Address::is_enabled() ) {
+			return '';
+		}
+
+		$message = LWC_FedEx_Shipper_Address::get_invalid_message();
+		if ( '' !== $message ) {
+			return $message . ' ' . __( 'Complete the address in LoveCatz > Shipping > FedEx, or turn the custom shipper address off to use the WooCommerce store address.', 'lovecatz-wc' );
+		}
+
+		$origin = LWC_FedEx_Shipper_Address::build_fedex_address();
+		if ( is_wp_error( $origin ) ) {
+			return __( 'The custom FedEx shipper address could not be used. Review it in LoveCatz > Shipping > FedEx.', 'lovecatz-wc' );
+		}
+
+		if ( empty( $origin['countryCode'] ) || empty( $origin['postalCode'] ) ) {
+			return __( 'The custom FedEx shipper address needs a country and postal code before an AWB can be created.', 'lovecatz-wc' );
+		}
+
+		if ( empty( $origin['streetLines'] ) || empty( $origin['city'] ) ) {
+			return __( 'The custom FedEx shipper address needs a street line and a city before an AWB can be created.', 'lovecatz-wc' );
+		}
+
+		return '';
+	}
+
+	/**
+	 * Determine which origin address should be used for a FedEx request.
+	 *
+	 * Falls back to the WooCommerce store address whenever the custom shipper
+	 * address is switched off or incomplete, so a partially filled address can
+	 * never break live shipping.
+	 *
+	 * @return array FedEx-formatted origin address.
+	 */
+	private function resolve_origin_address() {
+		if ( ! class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			return $this->build_store_origin_address();
+		}
+
+		if ( ! LWC_FedEx_Shipper_Address::should_use_custom() ) {
+			return $this->build_store_origin_address();
+		}
+
+		$custom = LWC_FedEx_Shipper_Address::build_fedex_address();
+		if ( is_wp_error( $custom ) ) {
+			// The toggle is on but the address is unusable: log once and keep
+			// shipping alive with the store address rather than failing hard.
+			$this->log(
+				'Custom FedEx shipper address is enabled but invalid; using the store address. ' . $custom->get_error_message(),
+				'error'
+			);
+
+			return $this->build_store_origin_address();
+		}
+
+		return $custom;
+	}
+
+	/**
 	 * Build a store-origin address using WooCommerce settings.
 	 *
 	 * @return array
 	 */
-	private function build_origin_address() {
-		$country = WC()->countries->get_base_country();
-		$state = WC()->countries->get_base_state();
+	private function build_store_origin_address() {
+		if ( class_exists( 'LWC_FedEx_Shipper_Address' ) ) {
+			return LWC_FedEx_Shipper_Address::build_store_address();
+		}
+
+		$country = WC()->countries ? WC()->countries->get_base_country() : '';
+		$state   = WC()->countries ? WC()->countries->get_base_state() : '';
 		$address = array(
 			'streetLines' => array(
 				get_option( 'woocommerce_store_address', '' ),
@@ -1426,7 +1546,61 @@ class LWC_FedEx_API {
 		);
 
 		$address['streetLines'] = array_values( array_filter( $address['streetLines'] ) );
+
 		return $address;
+	}
+
+	/**
+	 * Build the origin (shipper) address for a FedEx request.
+	 *
+	 * @return array
+	 */
+	private function build_origin_address() {
+		return $this->resolve_origin_address();
+	}
+
+	/**
+	 * Summarise the origin that the next FedEx request will use.
+	 *
+	 * Lets the order screen show the merchant exactly which address FedEx will
+	 * print on the label, and flag the case where the custom address is enabled
+	 * but incomplete.
+	 *
+	 * @return array {
+	 *     @type string $source  'custom' or 'store'.
+	 *     @type bool   $custom_enabled Whether the toggle is on.
+	 *     @type bool   $custom_valid   Whether the stored custom address is complete.
+	 *     @type array  $address FedEx-formatted origin address.
+	 *     @type string $error   Non-empty when a shipment would be blocked.
+	 *     @type string $summary One-line human-readable address.
+	 * }
+	 */
+	public function get_origin_summary() {
+		$custom_enabled = class_exists( 'LWC_FedEx_Shipper_Address' ) && LWC_FedEx_Shipper_Address::is_enabled();
+		$custom_valid   = $custom_enabled && LWC_FedEx_Shipper_Address::is_complete();
+		$address        = $this->resolve_origin_address();
+		$street         = isset( $address['streetLines'] ) ? (array) $address['streetLines'] : array();
+
+		$parts = array_filter(
+			array_merge(
+				$street,
+				array(
+					isset( $address['city'] ) ? (string) $address['city'] : '',
+					isset( $address['stateOrProvinceCode'] ) ? (string) $address['stateOrProvinceCode'] : '',
+					isset( $address['postalCode'] ) ? (string) $address['postalCode'] : '',
+					isset( $address['countryCode'] ) ? (string) $address['countryCode'] : '',
+				)
+			)
+		);
+
+		return array(
+			'source'         => $custom_valid ? 'custom' : 'store',
+			'custom_enabled' => $custom_enabled,
+			'custom_valid'   => $custom_valid,
+			'address'        => $address,
+			'error'          => $this->validate_origin_for_shipment(),
+			'summary'        => implode( ', ', $parts ),
+		);
 	}
 
 	/**

@@ -265,6 +265,28 @@ class LWC_FedEx_Order_Admin {
 					<strong><?php esc_html_e( 'Service selected by buyer:', 'lovecatz-wc' ); ?></strong>
 					<?php echo esc_html( $fedex_api->get_service_label( $selected_service_type ) ); ?>
 				</p>
+				<?php
+				// Show the exact origin FedEx will print on the label, and flag
+				// a custom address that is switched on but still incomplete.
+				$origin = $fedex_api->get_origin_summary();
+				if ( ! empty( $origin['summary'] ) ) :
+					?>
+					<p class="lwc-fedex-origin-summary">
+						<strong>
+							<?php
+							echo 'custom' === $origin['source']
+								? esc_html__( 'Shipping from (custom shipper address):', 'lovecatz-wc' )
+								: esc_html__( 'Shipping from (WooCommerce store address):', 'lovecatz-wc' );
+							?>
+						</strong>
+						<?php echo esc_html( $origin['summary'] ); ?>
+					</p>
+				<?php endif; ?>
+				<?php if ( '' !== $origin['error'] ) : ?>
+					<div class="notice notice-warning inline">
+						<p><?php echo esc_html( $origin['error'] ); ?></p>
+					</div>
+				<?php endif; ?>
 				<label class="lwc-fedex-ship-date-field" for="lwc_fedex_ship_date">
 					<span><?php esc_html_e( '1. Scheduled ship date', 'lovecatz-wc' ); ?></span>
 					<input type="date" id="lwc_fedex_ship_date" min="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" max="<?php echo esc_attr( $future_day_limit->format( 'Y-m-d' ) ); ?>" value="<?php echo esc_attr( $today->format( 'Y-m-d' ) ); ?>" />

@@ -105,6 +105,15 @@
 .lwc-checkout-account-promo__link:hover, .lwc-checkout-account-promo__link:focus { background: #115e59; color: #fff; }
 @media (max-width: 480px) { .lwc-checkout-account-promo { grid-template-columns: 38px minmax(0, 1fr); } .lwc-checkout-account-promo__link { grid-column: 1 / -1; text-align: center; } }
 .lwc-open-coupon-modal span { font-size: 22px; line-height: 12px; }
+/* On phones the picker sits between the order-summary items, where a plain
+ * text row is easy to miss. Give it an explicit button affordance so the
+ * interactive coupon popup is obviously available next to the manual
+ * "Add coupons" input. */
+@media (max-width: 699px) {
+	.lwc-checkout-coupon-picker { margin: 12px 0 6px; }
+	.lwc-checkout-coupon-picker .lwc-open-coupon-modal { padding: 13px 14px; border: 1px solid #0f766e; border-radius: 9px; background: #f0fdfa; font-weight: 700; }
+	.lwc-checkout-coupon-picker .lwc-open-coupon-modal:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+}
 .lwc-coupon-modal[hidden] { display: none; }
 html.lwc-coupon-modal-open, body.lwc-coupon-modal-open { overflow: hidden !important; }
 .lwc-coupon-modal { position: fixed !important; z-index: 2147483647 !important; inset: 0 !important; display: grid; place-items: center; isolation: isolate; padding: 16px; }
@@ -166,5 +175,25 @@ html.lwc-coupon-modal-open, body.lwc-coupon-modal-open { overflow: hidden !impor
 	.lwc-promo-card:hover,
 	.lwc-promo-card:focus-visible {
 		transform: none;
+	}
+}
+
+/* Mobile checkout: WooCommerce gives the order summary sidebar
+ * (`.wc-block-checkout__sidebar`) `order:0` below its 700px breakpoint, so it
+ * renders *before* the main column. Its title then shows as a bare
+ * "Order summary" heading at the top of the checkout while the sidebar body
+ * stays collapsed — a redundant duplicate of the full order summary (which
+ * includes the promo picker) rendered at the bottom via the
+ * `checkout-order-summary-block-fill` wrapper inside the actions block.
+ *
+ * The breakpoint is mirrored as a container query on purpose: WooCommerce
+ * scopes its own layout rules to `@container (max-width: 699px)` against
+ * `.wp-block-woocommerce-checkout` (`container-type: inline-size`), which can
+ * disagree with a plain viewport media query (e.g. a 720px viewport with a
+ * 690px container). Matching the container query keeps both rules in sync.
+ */
+@container (max-width: 699px) {
+	.wc-block-checkout__sidebar .wc-block-components-checkout-order-summary__title {
+		display: none !important;
 	}
 }

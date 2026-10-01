@@ -134,6 +134,10 @@ class LWC_Currency_Converter {
 		// Keep cart totals consistent when the shopper switches currency.
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'maybe_recalculate_cart' ) );
 
+		// Replace the WooCommerce Customer history metabox template so totals
+		// stay in the customer's checkout currency rather than the store base.
+		add_filter( 'wc_get_template', array( $this, 'filter_customer_history_template' ), 10, 5 );
+
 		if ( ! $this->owns_currency_conversion() ) {
 			return;
 		}
@@ -931,6 +935,307 @@ class LWC_Currency_Converter {
 		if ( $this->is_active() && $cart ) {
 			$cart->calculate_totals();
 		}
+	}
+
+	/**
+	 * Redirect the WooCommerce Customer history metabox template to the
+	 * override shipped with this plugin.
+	 *
+	 * Runs only when the request can resolve a current admin order (HPOS
+	 * `?id=`, CPT `?post=`, or a posted `post_ID`). Otherwise WooCommerce
+	 * keeps its original rendering so unrelated calls to `wc_get_template()`
+	 * never pick up this override.
+	 *
+	 * @param string $template       Resolved template path.
+	 * @param string $template_name  Template name being requested.
+	 * @param array  $args           Arguments passed to the template.
+	 * @param string $template_path  Optional template-path hint.
+	 * @param string $default_path   Optional default-path hint.
+	 * @return string Possibly-overridden template path.
+	 */
+	public function filter_customer_history_template( $template, $template_name, $args = array(), $template_path = '', $default_path = '' ) {
+		if ( 'order/customer-history.php' !== $template_name ) {
+			return $template;
+		}
+
+		if ( ! is_admin() || ! $this->get_current_admin_order() ) {
+			return $template;
+		}
+
+		$override = LWC_PLUGIN_DIR . 'includes/core/templates/' . $template_name;
+		if ( file_exists( $override ) ) {
+			return $override;
+		}
+
+		return $template;
+	}
+
+	/**
+	 * Compute the customer-history stats (orders count, total spend, average
+	 * order value) restricted to a single currency.
+	 *
+	 * WooCommerce's built-in Customer history metabox sums `total_amount`
+	 * across every order the customer has ever placed, regardless of currency,
+	 * then renders the result with `wc_price()` using the current store currency.
+	 * When the store base currency differs from the customer currency (the
+	 * common case after `LWC_Currency_Converter` lets shoppers switch between
+	 * IDR and USD), the metabox prints nonsense figures such as "Rp 1,476"
+	 * for what is actually a USD order total.
+	 *
+	 * The fix is to re-aggregate the customer's paid orders in the same
+	 * currency as the order that is being viewed, then render with that currency.
+	 * Filtering by currency also avoids summing incompatible currencies.
+	 *
+	 * @param WC_Order $order        Current order being viewed in admin.
+	 * @param string   $currency     Three-letter currency code to filter by.
+	 * @return array{orders_count:int,total_spend:float,avg_order_value:float}
+	 */
+	public function get_customer_history_for_currency( $order, $currency ) {
+		$default = array(
+			'orders_count'    => 0,
+			'total_spend'     => 0.0,
+			'avg_order_value' => 0.0,
+		);
+
+		if ( ! $order instanceof WC_Order ) {
+			return $default;
+		}
+
+		$currency = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $currency ) );
+		if ( 3 !== strlen( $currency ) ) {
+			return $default;
+		}
+
+		$customer_id   = (int) $order->get_customer_id();
+		$billing_email = (string) $order->get_billing_email();
+		if ( $customer_id <= 0 && '' === $billing_email ) {
+			return $default;
+		}
+
+		if ( function_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil' )
+			&& \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			return array_merge( $default, $this->query_hpos_customer_history( $customer_id, $billing_email, $currency ) );
+		}
+
+		return array_merge( $default, $this->query_cpt_customer_history( $order, $currency ) );
+	}
+
+	/**
+	 * Run the HPOS equivalent of the WooCommerce Customer history query but
+	 * filter the totals to a single currency. Mirrors the SQL structure in
+	 * {@see \Automattic\WooCommerce\Internal\Admin\Orders\MetaBoxes\CustomerHistory::query_hpos()}
+	 * so the result covers the same status set and refund handling.
+	 *
+	 * @param int    $customer_id   Customer user ID; 0 means guest.
+	 * @param string $billing_email Billing email for guest lookups.
+	 * @param string $currency      Currency code to restrict to.
+	 * @return array
+	 */
+	private function query_hpos_customer_history( $customer_id, $billing_email, $currency ) {
+		global $wpdb;
+
+		$default = array(
+			'orders_count' => 0,
+			'total_spend'  => 0.0,
+		);
+
+		if ( ! class_exists( '\\Automattic\\WooCommerce\\Internal\\DataStores\\Orders\\OrdersTableDataStore' ) ) {
+			return $default;
+		}
+
+		$orders_table     = \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::get_orders_table_name();
+		$addresses_table  = \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::get_addresses_table_name();
+		$excluded_status  = (array) get_option( 'woocommerce_excluded_report_order_statuses', array( 'pending', 'failed', 'cancelled' ) );
+		$excluded_status  = array_merge( array( 'auto-draft', 'trash' ), $excluded_status );
+		$excluded_status  = array_values( array_unique( array_filter( array_map( 'sanitize_key', $excluded_status ) ) ) );
+		$excluded_status  = array_map(
+			static function ( $status ) {
+				return 'auto-draft' === $status || 'trash' === $status ? $status : 'wc-' . $status;
+			},
+			$excluded_status
+		);
+		$status_placeholders = implode( ',', array_fill( 0, count( $excluded_status ), '%s' ) );
+		$status_clause       = ! empty( $excluded_status ) ? $wpdb->prepare( " AND status NOT IN ($status_placeholders)", $excluded_status ) : ''; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared above.
+		$co_status_clause    = ! empty( $excluded_status ) ? $wpdb->prepare( " AND co.status NOT IN ($status_placeholders)", $excluded_status ) : ''; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- prepared above.
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $customer_id > 0 ) {
+			$sql = $wpdb->prepare(
+				"SELECT COUNT(*) AS orders_count,
+					COALESCE( SUM( filtered.total_amount ), 0 ) + COALESCE( SUM( r.refund_total ), 0 ) AS total_spend
+				FROM (
+					SELECT id, total_amount
+					FROM {$orders_table}
+					WHERE customer_id = %d AND type = 'shop_order' AND currency = %s {$status_clause}
+				) AS filtered
+				LEFT JOIN (
+					SELECT rp.parent_order_id, SUM( rp.total_amount ) AS refund_total
+					FROM {$orders_table} AS rp
+					INNER JOIN {$orders_table} AS co ON rp.parent_order_id = co.id
+					WHERE rp.type = 'shop_order_refund'
+						AND co.customer_id = %d AND co.type = 'shop_order' AND co.currency = %s {$co_status_clause}
+					GROUP BY rp.parent_order_id
+				) AS r ON filtered.id = r.parent_order_id",
+				$customer_id,
+				$currency,
+				$customer_id,
+				$currency
+			);
+		} elseif ( '' !== $billing_email ) {
+			$sql = $wpdb->prepare(
+				"SELECT COUNT(*) AS orders_count,
+					COALESCE( SUM( filtered.total_amount ), 0 ) + COALESCE( SUM( r.refund_total ), 0 ) AS total_spend
+				FROM (
+					SELECT o.id, o.total_amount
+					FROM {$orders_table} AS o
+					INNER JOIN {$addresses_table} AS a ON o.id = a.order_id AND a.address_type = 'billing'
+					WHERE o.customer_id = 0 AND a.email = %s AND o.type = 'shop_order' AND o.currency = %s {$status_clause}
+				) AS filtered
+				LEFT JOIN (
+					SELECT rp.parent_order_id, SUM( rp.total_amount ) AS refund_total
+					FROM {$orders_table} AS rp
+					INNER JOIN {$orders_table} AS co ON rp.parent_order_id = co.id
+					INNER JOIN {$addresses_table} AS ca ON co.id = ca.order_id AND ca.address_type = 'billing'
+					WHERE rp.type = 'shop_order_refund'
+						AND co.customer_id = 0 AND ca.email = %s AND co.type = 'shop_order' AND co.currency = %s {$co_status_clause}
+					GROUP BY rp.parent_order_id
+				) AS r ON filtered.id = r.parent_order_id",
+				$billing_email,
+				$currency,
+				$billing_email,
+				$currency
+			);
+		} else {
+			return $default;
+		}
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		$row = $wpdb->get_row( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is prepared above.
+		if ( ! is_object( $row ) ) {
+			return $default;
+		}
+
+		return array(
+			'orders_count' => (int) ( $row->orders_count ?? 0 ),
+			'total_spend'  => (float) ( $row->total_spend ?? 0 ),
+		);
+	}
+
+	/**
+	 * Compute Customer history stats from classic post-based orders, restricted
+	 * to a single currency. Uses `wc_get_orders()` for portability across the
+	 * legacy CPT storage engine.
+	 *
+	 * @param WC_Order $order    Reference order (for customer identity).
+	 * @param string   $currency Currency code to restrict to.
+	 * @return array
+	 */
+	private function query_cpt_customer_history( $order, $currency ) {
+		$default = array(
+			'orders_count' => 0,
+			'total_spend'  => 0.0,
+		);
+
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return $default;
+		}
+
+		$customer_id   = (int) $order->get_customer_id();
+		$billing_email = (string) $order->get_billing_email();
+
+		$args = array(
+			'type'         => 'shop_order',
+			'limit'        => -1,
+			'return'       => 'objects',
+			'paginate'     => false,
+			'currency'     => $currency,
+			'orderby'      => 'ID',
+			'order'        => 'ASC',
+		);
+
+		if ( $customer_id > 0 ) {
+			$args['customer_id'] = $customer_id;
+		} elseif ( '' !== $billing_email ) {
+			$args['billing_email'] = $billing_email;
+			$args['customer_id']   = 0;
+		} else {
+			return $default;
+		}
+
+		$orders = wc_get_orders( $args );
+		if ( empty( $orders ) ) {
+			return $default;
+		}
+
+		$total   = 0.0;
+		$count   = 0;
+		$allowed = $this->get_excluded_report_statuses_slug_keys();
+		foreach ( $orders as $customer_order ) {
+			if ( ! $customer_order instanceof WC_Order ) {
+				continue;
+			}
+			$status = (string) $customer_order->get_status();
+			if ( in_array( $status, $allowed, true ) ) {
+				continue;
+			}
+			$total += (float) $customer_order->get_total();
+			++$count;
+		}
+
+		return array(
+			'orders_count' => $count,
+			'total_spend'  => $total,
+		);
+	}
+
+	/**
+	 * Compute the canonical excluded-status set used by the analytics report.
+	 *
+	 * Mirrors the helper inside {@see \Automattic\WooCommerce\Internal\Admin\Orders\MetaBoxes\CustomerHistory}
+	 * but returns the raw slugs (no `wc-` prefix) for status comparisons.
+	 *
+	 * @return string[]
+	 */
+	private function get_excluded_report_statuses_slug_keys() {
+		$statuses = get_option( 'woocommerce_excluded_report_order_statuses', array( 'pending', 'failed', 'cancelled' ) );
+		if ( ! is_array( $statuses ) ) {
+			$statuses = array( 'pending', 'failed', 'cancelled' );
+		}
+		$statuses = array_merge( array( 'auto-draft', 'trash' ), $statuses );
+		$statuses = apply_filters( 'woocommerce_analytics_excluded_order_statuses', $statuses );
+		if ( ! is_array( $statuses ) ) {
+			$statuses = array( 'auto-draft', 'trash', 'pending', 'failed', 'cancelled' );
+		}
+
+		return array_values( array_unique( array_filter( array_map( 'sanitize_key', $statuses ) ) ) );
+	}
+
+	/**
+	 * Resolve the admin order object for the current request, when one is on
+	 * the edit-order screen.
+	 *
+	 * @return WC_Order|null Order object when one can be loaded, otherwise null.
+	 */
+	public function get_current_admin_order() {
+		if ( ! is_admin() || ! function_exists( 'wc_get_order' ) ) {
+			return null;
+		}
+
+		$order_id = 0;
+		if ( isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = (int) $_GET['post']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( isset( $_GET['id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = (int) $_GET['id']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( isset( $_POST['post_ID'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$order_id = (int) $_POST['post_ID']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		if ( $order_id <= 0 ) {
+			return null;
+		}
+
+		$order = wc_get_order( $order_id );
+		return $order instanceof WC_Order ? $order : null;
 	}
 
 	/**

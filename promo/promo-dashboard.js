@@ -207,37 +207,72 @@
             '#payment .checkout_coupon',
             '.wp-block-woocommerce-checkout-order-summary-block .wc-block-components-totals-coupon',
             '.entry-content .woocommerce-checkout .coupon',
-            '.blocksy-content-wrapper .woocommerce-checkout .coupon'
+            '.blocksy-content-wrapper .woocommerce-checkout .coupon',
+            /* Last resort: the Checkout Block actions area always renders, so
+             * the picker still has a visible home if every coupon container
+             * above is missing or hidden. */
+            '.wc-block-checkout__actions',
+            '.wp-block-woocommerce-checkout-actions-block'
         ];
+        var fallback = $();
 
         for (var i = 0; i < selectors.length; i += 1) {
             var container = $(selectors[i]).first();
-            if (container.length) {
+            if (!container.length) {
+                continue;
+            }
+
+            /* The Checkout Block renders a second order summary
+             * (`.checkout-order-summary-block-fill-wrapper`) while its own
+             * container is <=700px wide, but WooCommerce's CSS hides that
+             * wrapper again at `@container (min-width: 700px)`. At a container
+             * width of exactly 700px both are true, so the wrapper sits in the
+             * DOM as `display:none`. Attaching the picker to a hidden node
+             * would make it invisible, so prefer the first container that is
+             * actually rendered. */
+            if (container.is(':visible')) {
                 return container;
+            }
+
+            if (!fallback.length) {
+                fallback = container;
             }
         }
 
         // Never fall back to <body>: outside a real checkout layout the
         // picker would render below the site footer.
-        return $();
+        return fallback;
     }
 
     function renderCheckoutCouponPicker() {
-        if (!isCheckoutLikePage()) {
+        if (!isCheckoutLikePage() || typeof lwcPromoDashboard === 'undefined') {
+            return;
+        }
+
+        var couponArea = getCheckoutCouponContainer();
+        var existing = $('#lwc-checkout-coupon-picker');
+
+        if (existing.length) {
+            /* A checkout update or a container-query flip can leave the picker
+             * inside a container that is now hidden (WooCommerce swaps between
+             * the sidebar and the mobile fill-wrapper at its 700px container
+             * breakpoint). Re-home it when a visible container exists instead
+             * of leaving an invisible picker on the page. */
+            if (existing.is(':visible') || !couponArea.length || !couponArea.is(':visible')) {
+                return;
+            }
+
+            existing.remove();
+            $('#lwc-coupon-modal').remove();
+            $('html, body').removeClass('lwc-coupon-modal-open');
+        }
+
+        if (!couponArea.length) {
             return;
         }
 
         var coupons = lwcPromoDashboard.coupons || [];
         var showAccountInvite = !!(lwcPromoDashboard.isGuest && lwcPromoDashboard.hasAccountPromos);
-
-        if ($('#lwc-checkout-coupon-picker').length) {
-            return;
-        }
-
-        var couponArea = getCheckoutCouponContainer();
-        if (!couponArea.length) {
-            return;
-        }
 
         /* Checkout fragments can remove the trigger without removing a modal
          * that was portalled to <body>. Clear that orphan before rebuilding. */
@@ -375,7 +410,12 @@
 
         if (typeof MutationObserver !== 'undefined' && $('body').length) {
             var checkoutObserver = new MutationObserver(function () {
-                if ($('#lwc-checkout-coupon-picker').length === 0) {
+                var picker = $('#lwc-checkout-coupon-picker');
+                /* Re-render when the picker is missing OR stranded in a hidden
+                 * container, so a late React render always recovers it. The
+                 * render function bails out when no visible container exists,
+                 * which keeps this from looping. */
+                if (!picker.length || !picker.is(':visible')) {
                     renderCheckoutCouponPicker();
                 }
             });
@@ -390,5 +430,28 @@
         window.setTimeout(function () {
             renderCheckoutCouponPicker();
         }, 1200);
+
+        /* The Checkout Block hydrates asynchronously, and on a slow phone the
+         * coupon container can appear well after `ready`. Keep retrying until
+         * the picker exists *and* is rendered so the popup is never silently
+         * missing. */
+        var pickerAttempts = 0;
+        var pickerRetry = window.setInterval(function () {
+            pickerAttempts += 1;
+            renderCheckoutCouponPicker();
+            var picker = $('#lwc-checkout-coupon-picker');
+            if ((picker.length && picker.is(':visible')) || pickerAttempts >= 25) {
+                window.clearInterval(pickerRetry);
+            }
+        }, 700);
+
+        /* A viewport change can flip WooCommerce's container query without any
+         * DOM mutation (mobile address bars, rotation, resize), which would
+         * leave the picker stranded inside a hidden container. */
+        var resizeTimer = null;
+        $(window).on('resize orientationchange', function () {
+            window.clearTimeout(resizeTimer);
+            resizeTimer = window.setTimeout(renderCheckoutCouponPicker, 250);
+        });
     });
 })(jQuery);

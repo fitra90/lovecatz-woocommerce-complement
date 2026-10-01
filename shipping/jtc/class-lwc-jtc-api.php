@@ -136,15 +136,86 @@ class LWC_JTC_API {
 	 * @return array|WP_Error
 	 */
 	public static function request( $interface, $data = array(), $environment = '' ) {
+		return self::send( $interface, (array) $data, $environment );
+	}
+
+	/**
+	 * Send one business-content array as the single canonical payload.
+	 *
+	 * Contract: the array that leaves this method is encoded exactly once. The
+	 * resulting JSON string is the string the header digest is calculated from
+	 * AND the string placed in the bizContent form field. There is no second
+	 * build for the signature and no second build for the body.
+	 *
+	 * customerCode and the body signature (digest, manual 3.3.2) are added here
+	 * when the caller did not supply them, so no credential has to live in the
+	 * mapping layer.
+	 *
+	 * @param string $interface   Interface slug.
+	 * @param array  $data        Business content (no credentials required).
+	 * @param string $environment sandbox|production. Empty = active environment.
+	 * @return array|WP_Error
+	 */
+	public static function send( $interface, $data = array(), $environment = '' ) {
+		$interface = sanitize_key( (string) $interface );
+		$paths     = self::get_interface_paths();
+		if ( ! isset( $paths[ $interface ] ) ) {
+			return new WP_Error( 'lwc_jtc_unknown_interface', __( 'Unknown J&T Cargo interface.', 'lovecatz-wc' ) );
+		}
 		if ( '' === (string) $environment ) {
 			$credentials = LWC_JTC_Account::get_active_credentials();
 			$environment = isset( $credentials['environment'] ) ? $credentials['environment'] : 'sandbox';
 		}
-		$payload = wp_json_encode( (array) $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
-		if ( false === $payload ) {
+		$environment = 'production' === $environment ? 'production' : 'sandbox';
+		$credentials = LWC_JTC_Account::get_credentials( $environment );
+
+		$missing = self::get_missing_signing_credentials( $credentials );
+		if ( ! empty( $missing ) ) {
+			return new WP_Error(
+				'lwc_jtc_missing_signing_credentials',
+				sprintf(
+					/* translators: %s: comma-separated credential labels. */
+					__( 'Complete the J&T Cargo signing credentials first: %s.', 'lovecatz-wc' ),
+					implode( ', ', $missing )
+				)
+			);
+		}
+
+		// FINAL PAYLOAD: credentials first, exactly as the manual lists them.
+		$final = array();
+		if ( ! isset( $data['customerCode'] ) ) {
+			$final['customerCode'] = (string) $credentials['customer_code'];
+		}
+		if ( ! isset( $data['digest'] ) ) {
+			$final['digest'] = self::build_content_digest(
+				$credentials['customer_code'],
+				$credentials['customer_password'],
+				$credentials['private_key']
+			);
+		}
+		$final = array_merge( $final, (array) $data );
+
+		$biz_content = wp_json_encode( $final, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		if ( false === $biz_content ) {
 			return new WP_Error( 'lwc_jtc_payload_encoding_failed', __( 'The Sandbox payload could not be encoded.', 'lovecatz-wc' ) );
 		}
-		return self::signed_request( $interface, 'POST', 'json', $payload, '', $environment );
+		if ( strlen( $biz_content ) > 1048576 ) {
+			return new WP_Error( 'lwc_jtc_request_too_large', __( 'Sandbox test payload or headers are too large.', 'lovecatz-wc' ) );
+		}
+
+		$endpoint = self::get_endpoint( $interface, $environment, $credentials['uuid'] );
+		if ( '' === $endpoint ) {
+			return new WP_Error( 'lwc_jtc_missing_endpoint', __( 'The selected J&T Cargo endpoint is unavailable.', 'lovecatz-wc' ) );
+		}
+
+		$result = self::transmit( $interface, $endpoint, 'POST', $final, $biz_content, array(), $environment, $credentials );
+		if ( is_array( $result ) ) {
+			// Fingerprint only: the body itself carries customerCode and digest,
+			// so it must never travel into a rendered response view or a log.
+			$result['biz_content_length'] = strlen( $biz_content );
+			$result['biz_content_sha256'] = hash( 'sha256', $biz_content );
+		}
+		return $result;
 	}
 
 	/**
@@ -223,6 +294,26 @@ class LWC_JTC_API {
 		if ( false === $biz_content ) {
 			return new WP_Error( 'lwc_jtc_payload_encoding_failed', __( 'The Sandbox payload could not be encoded.', 'lovecatz-wc' ) );
 		}
+		return self::transmit( $interface, $endpoint, $method, $data, $biz_content, $headers, $environment, $credentials );
+	}
+
+	/**
+	 * Sign and send one already-encoded bizContent string.
+	 *
+	 * The header digest is calculated from the exact string that is placed in
+	 * the bizContent form field, so the signature can never drift from the body.
+	 *
+	 * @param string $interface    Interface slug.
+	 * @param string $endpoint     Fully built endpoint URL.
+	 * @param string $method       GET or POST.
+	 * @param array  $data         Decoded business content (used for GET query args).
+	 * @param string $biz_content  The JSON string that is signed and sent.
+	 * @param array  $headers      Extra headers already sanitised.
+	 * @param string $environment  sandbox|production.
+	 * @param array  $credentials  Credential set for the environment.
+	 * @return array|WP_Error
+	 */
+	private static function transmit( $interface, $endpoint, $method, $data, $biz_content, $headers, $environment, $credentials ) {
 		$headers['apiAccount'] = (string) $credentials['api_account'];
 		$headers['digest']     = self::build_header_digest( $biz_content, $credentials['private_key'] );
 		$headers['timestamp']  = (string) round( microtime( true ) * 1000 );
@@ -235,7 +326,7 @@ class LWC_JTC_API {
 			'headers' => $headers,
 		);
 		if ( 'GET' === $method ) {
-			foreach ( $data as $key => $value ) {
+			foreach ( (array) $data as $key => $value ) {
 				$key = sanitize_key( $key );
 				if ( '' !== $key && is_scalar( $value ) ) {
 					$endpoint = add_query_arg( $key, (string) $value, $endpoint );
@@ -258,7 +349,7 @@ class LWC_JTC_API {
 		if ( strlen( $raw ) > 1048576 ) {
 			$raw = substr( $raw, 0, 1048576 ) . "\n[Response truncated at 1 MB]";
 		}
-		$decoded = json_decode( $raw, true );
+		$decoded = self::decode_body( $raw );
 		$business = self::evaluate_business_response( (int) wp_remote_retrieve_response_code( $response ), $decoded );
 
 		return array(
@@ -278,8 +369,36 @@ class LWC_JTC_API {
 				'header_digest_sent' => true,
 				'content_digest_sent' => isset( $data['digest'] ) && '' !== (string) $data['digest'],
 			),
-			'response' => JSON_ERROR_NONE === json_last_error() ? $decoded : $raw,
+			'response' => is_array( $decoded ) ? $decoded : $raw,
 		);
+	}
+
+	/**
+	 * Decode a J&T response body.
+	 *
+	 * The manual declares the response type as "JSON (URL-encoded)", so a body
+	 * that is still percent-encoded is decoded before it is parsed. Neither
+	 * attempt ever throws: undecodable bodies are returned untouched.
+	 *
+	 * @param string $raw Raw response body.
+	 * @return array|null
+	 */
+	private static function decode_body( $raw ) {
+		$decoded = json_decode( $raw, true );
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+			return $decoded;
+		}
+
+		// Retry once after URL-decoding — the documented response encoding.
+		$unwrapped = rawurldecode( (string) $raw );
+		if ( $unwrapped !== $raw ) {
+			$decoded = json_decode( $unwrapped, true );
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+				return $decoded;
+			}
+		}
+
+		return null;
 	}
 
 	/** Header signature from the supplied J&T Open Platform PHP example. */
@@ -350,6 +469,24 @@ class LWC_JTC_API {
 		// never specifies which "code" value means success, so accept either
 		// signal rather than betting on code === '1'.
 		$result['success'] = $transport_ok && ( '1' === $code || 'success' === strtolower( $msg ) );
+
+		// Sandbox errors arrive with a bare status word in "msg" and the real
+		// reason in a sibling key (e.g. 145003082 + "fail"). Showing only
+		// "fail" would leave the admin with a useless message, so the first
+		// sibling that actually carries text wins for display. Only keys the
+		// server really sent are considered - nothing is invented.
+		if ( ! $result['success'] && in_array( strtolower( $msg ), array( 'fail', 'failed', 'error' ), true ) ) {
+			foreach ( array( 'message', 'errorMsg', 'errorMessage', 'subMsg' ) as $candidate ) {
+				if ( isset( $decoded[ $candidate ] ) && is_scalar( $decoded[ $candidate ] ) ) {
+					$detail = sanitize_text_field( (string) $decoded[ $candidate ] );
+					if ( '' !== $detail && ! in_array( strtolower( $detail ), array( 'fail', 'failed', 'error' ), true ) ) {
+						$result['message'] = $detail;
+						break;
+					}
+				}
+			}
+		}
+
 		return $result;
 	}
 

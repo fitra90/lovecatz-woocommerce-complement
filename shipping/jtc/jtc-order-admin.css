@@ -1,0 +1,22 @@
+.lwc-jtc-order-box p {
+	margin: 0 0 8px;
+}
+
+.lwc-jtc-order-box .button {
+	margin-right: 4px;
+}
+
+#lwc-jtc-order-status {
+	margin-top: 8px;
+	min-height: 1em;
+}
+
+#lwc-jtc-order-status.is-error {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+#lwc-jtc-order-status.is-success {
+	color: #0f7a3e;
+	font-weight: 600;
+}
