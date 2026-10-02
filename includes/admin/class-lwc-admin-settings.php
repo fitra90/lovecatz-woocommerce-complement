@@ -1445,7 +1445,7 @@ class LWC_Admin_Settings {
 	public function render_fedex_default_label_description_field() {
 		$value = get_option( 'lwc_fedex_default_label_description', 'AROMATHERAPY ESSENTIAL OILS PURE 100%' );
 		echo '<input type="text" name="lwc_fedex_default_label_description" value="' . esc_attr( $value ) . '" class="regular-text" maxlength="100" />';
-		echo '<p class="description">' . esc_html__( 'Used as the one customs/label description on new FedEx AWBs. Selected items are aggregated into one commodity with their total quantity, declared value, and weight; carton weight and dimensions still determine the shipment package.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Used as the one customs/label description on new FedEx AWBs. Selected items are aggregated into one commodity with their total quantity and weight, while the declared value always follows the order invoice total (goods after discount + shipping + tax); carton weight and dimensions still determine the shipment package.', 'lovecatz-wc' ) . '</p>';
 	}
 
 	/**

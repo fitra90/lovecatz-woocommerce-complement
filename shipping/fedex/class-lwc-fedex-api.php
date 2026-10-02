@@ -1282,8 +1282,12 @@ class LWC_FedEx_API {
 	/**
 	 * Build the customs clearance detail required for international shipments.
 	 *
+	 * The declared value is always the invoice grand total (see
+	 * {@see get_declared_value_total()}); the item arguments only decide the
+	 * manifest quantity and weight.
+	 *
 	 * @param WC_Order $order Order object.
-	 * @param int[]    $item_ids Restrict commodities to these order item IDs.
+	 * @param int[]    $item_ids Restrict the manifest quantity/weight to these order item IDs.
 	 * @param int[]    $extra_product_ids Catalog products added only to the FedEx manifest.
 	 * @param array    $package_override Actual one-carton weight and optional dimensions.
 	 * @param string   $label_description Description for the single aggregated customs commodity.
@@ -1293,50 +1297,31 @@ class LWC_FedEx_API {
 		$currency = $order->get_currency();
 		$base_country = $this->get_base_country();
 		$label_description = $this->normalize_label_description( $label_description );
-		$commodities = array();
-		$total = 0.0;
 		$restrict_order_items = ! empty( $item_ids ) || ! empty( $extra_product_ids );
+
+		/*
+		 * Quantity and weight describe what is physically inside this carton, so
+		 * they follow the selected order lines (plus any manifest-only extras).
+		 * The declared money value does NOT: it must equal the invoice the
+		 * customer receives, which is resolved separately below.
+		 */
+		$total_quantity = 0.0;
+		$total_weight   = 0.0;
+		$has_line       = false;
 
 		foreach ( $order->get_items() as $item ) {
 			if ( $restrict_order_items && ! in_array( (int) $item->get_id(), array_map( 'intval', $item_ids ), true ) ) {
 				continue;
 			}
 
-			$product = $item->get_product();
+			$product  = $item->get_product();
 			$quantity = max( 1, (float) $item->get_quantity() );
-			$unit_price = (float) $order->get_item_subtotal( $item, false, true );
-			$line_total = $unit_price * $quantity;
-			$total += $line_total;
+			$has_line = true;
 
-			$commodity = array(
-				'description' => $label_description,
-				'countryOfManufacture' => apply_filters(
-					'lwc_fedex_commodity_country_of_manufacture',
-					$base_country,
-					$product,
-					$item
-				),
-				'quantity' => $quantity,
-				'quantityUnits' => 'PCS',
-				'unitPrice' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $unit_price, $currency ),
-					'currency' => $currency,
-				),
-				'customsValue' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $line_total, $currency ),
-					'currency' => $currency,
-				),
-				'weight' => array(
-					'units' => 'KG',
-					'value' => 0.5,
-				),
-			);
-
-			if ( $product && $product->get_weight() ) {
-				$commodity['weight']['value'] = round( floatval( wc_get_weight( $product->get_weight(), 'kg' ) ) * $quantity, 2 );
-			}
-
-			$commodities[] = $commodity;
+			$total_quantity += $quantity;
+			$total_weight   += ( $product && $product->get_weight() )
+				? round( floatval( wc_get_weight( $product->get_weight(), 'kg' ) ) * $quantity, 2 )
+				: 0.5;
 		}
 
 		$extra_product_counts = array_count_values( array_filter( array_map( 'absint', (array) $extra_product_ids ) ) );
@@ -1346,71 +1331,37 @@ class LWC_FedEx_API {
 				continue;
 			}
 			$quantity = max( 1, (int) $quantity );
-			$unit_price = (float) wc_get_price_excluding_tax( $product );
-			$line_total = $unit_price * $quantity;
-			$total += $line_total;
+			$has_line = true;
+
 			$product_weight = $product->get_weight() ? (float) wc_get_weight( $product->get_weight(), 'kg' ) : 0.5;
-			$commodities[] = array(
-				'description' => $label_description,
-				'countryOfManufacture' => apply_filters(
-					'lwc_fedex_commodity_country_of_manufacture',
-					$base_country,
-					$product,
-					null
-				),
-				'quantity' => $quantity,
-				'quantityUnits' => 'PCS',
-				'unitPrice' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $unit_price, $currency ),
-					'currency' => $currency,
-				),
-				'customsValue' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $line_total, $currency ),
-					'currency' => $currency,
-				),
-				'weight' => array(
-					'units' => 'KG',
-					'value' => max( 0.01, round( $product_weight * $quantity, 2 ) ),
-				),
-			);
+			$total_quantity += $quantity;
+			$total_weight   += max( 0.01, round( $product_weight * $quantity, 2 ) );
 		}
 
-		if ( empty( $commodities ) ) {
-			$total = (float) $order->get_total();
-			$commodities[] = array(
-				'description' => $label_description,
-				'countryOfManufacture' => $base_country,
-				'quantity' => 1,
-				'quantityUnits' => 'PCS',
-				'unitPrice' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
-					'currency' => $currency,
-				),
-				'customsValue' => array(
-					'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
-					'currency' => $currency,
-				),
-				'weight' => array(
-					'units' => 'KG',
-					'value' => 0.5,
-				),
-			);
+		if ( ! $has_line ) {
+			$total_quantity = 1;
+			$total_weight   = 0.5;
 		}
+
+		$total_quantity = max( 1, $total_quantity );
+		$total_weight   = max( 0.01, round( $total_weight, 2 ) );
+
+		/*
+		 * Declared value = the invoice total the customer actually pays, so the
+		 * customs paperwork can never disagree with the invoice attached to the
+		 * parcel. Discounts, shipping and tax are already folded into the order
+		 * grand total. FedEx requires totalCustomsValue to equal the sum of the
+		 * commodity customsValue, so both use the same figure.
+		 */
+		$declared_total = $this->get_declared_value_total( $order );
 
 		/*
 		 * FedEx renders one DESC field for each customs commodity. This shipment
-		 * uses a single declared goods category, so aggregate the selected order
-		 * lines into one commodity rather than repeating the same label text.
-		 * The package line item still contains the measured/carton dimensions and
-		 * total shipment weight used by FedEx for rating and transport.
+		 * uses a single declared goods category, so the selected order lines are
+		 * aggregated into one commodity rather than repeating the same label
+		 * text. The package line item still contains the measured/carton
+		 * dimensions and total shipment weight used by FedEx for rating.
 		 */
-		$total_quantity = 0.0;
-		$total_weight   = 0.0;
-		foreach ( $commodities as $commodity ) {
-			$total_quantity += (float) $commodity['quantity'];
-			$total_weight   += (float) $commodity['weight']['value'];
-		}
-		$total_quantity = max( 1, $total_quantity );
 		$commodities = array(
 			array(
 				'description'          => $label_description,
@@ -1418,16 +1369,16 @@ class LWC_FedEx_API {
 				'quantity'             => $total_quantity,
 				'quantityUnits'        => 'PCS',
 				'unitPrice'            => array(
-					'amount'   => LWC_Currency_Converter::round_for_currency( $total / $total_quantity, $currency ),
+					'amount'   => LWC_Currency_Converter::round_for_currency( $declared_total / $total_quantity, $currency ),
 					'currency' => $currency,
 				),
 				'customsValue'         => array(
-					'amount'   => LWC_Currency_Converter::round_for_currency( $total, $currency ),
+					'amount'   => LWC_Currency_Converter::round_for_currency( $declared_total, $currency ),
 					'currency' => $currency,
 				),
 				'weight'               => array(
 					'units' => 'KG',
-					'value' => max( 0.01, round( $total_weight, 2 ) ),
+					'value' => $total_weight,
 				),
 			),
 		);
@@ -1446,10 +1397,32 @@ class LWC_FedEx_API {
 			'invoiceDate' => $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d' ) : current_time( 'Y-m-d' ),
 			'commodities' => $commodities,
 			'totalCustomsValue' => array(
-				'amount' => LWC_Currency_Converter::round_for_currency( $total, $currency ),
+				'amount' => LWC_Currency_Converter::round_for_currency( $declared_total, $currency ),
 				'currency' => $currency,
 			),
 		);
+	}
+
+	/**
+	 * Declared customs value for one shipment.
+	 *
+	 * Mirrors the invoice the customer receives: the order grand total, so any
+	 * discount, shipping charge and tax are already included. This is the single
+	 * source of truth for both the commodity customsValue and totalCustomsValue.
+	 *
+	 * @param WC_Order $order Order being declared.
+	 * @return float
+	 */
+	public function get_declared_value_total( $order ) {
+		$total = (float) $order->get_total();
+
+		/**
+		 * Filter the declared customs value sent to FedEx.
+		 *
+		 * @param float    $total Order grand total in the order currency.
+		 * @param WC_Order $order Order being declared.
+		 */
+		return (float) apply_filters( 'lwc_fedex_declared_value_total', $total, $order );
 	}
 
 	/**

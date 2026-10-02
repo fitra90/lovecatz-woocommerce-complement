@@ -296,7 +296,7 @@ class LWC_FedEx_Order_Admin {
 					<div class="lwc-fedex-items">
 						<p class="description">
 							<strong><?php esc_html_e( '2. Items in this FedEx package', 'lovecatz-wc' ); ?></strong><br />
-							<?php esc_html_e( 'Check the items included in this FedEx package. Item selection affects the manifest and customs only; a custom carton weight is never recalculated from the checked items.', 'lovecatz-wc' ); ?>
+							<?php esc_html_e( 'Check the items included in this FedEx package. Item selection drives the manifest quantity and weight only — the declared customs value always follows the invoice total. A custom carton weight is never recalculated from the checked items.', 'lovecatz-wc' ); ?>
 						</p>
 						<div id="lwc-fedex-package-items" class="lwc-fedex-package-items">
 							<?php foreach ( $order_items as $item ) : ?>
@@ -366,8 +366,21 @@ class LWC_FedEx_Order_Admin {
 				<label class="lwc-fedex-label-description-field" for="lwc_fedex_label_description">
 					<span><?php esc_html_e( '4. FedEx label item description', 'lovecatz-wc' ); ?></span>
 					<input type="text" id="lwc_fedex_label_description" maxlength="100" value="<?php echo esc_attr( get_option( 'lwc_fedex_default_label_description', LWC_FedEx_API::DEFAULT_LABEL_COMMODITY_DESCRIPTION ) ); ?>" />
-					<small><?php esc_html_e( 'Printed as the DESC line on the label. Defaults to the text configured in FedEx Settings. Selected items are sent as one aggregated customs commodity, so FedEx prints one DESC line. Total quantity, declared value, and weight are calculated from the selected items; carton weight and dimensions remain used for the shipment.', 'lovecatz-wc' ); ?></small>
+					<small><?php esc_html_e( 'Printed as the DESC line on the label. Defaults to the text configured in FedEx Settings. Selected items are sent as one aggregated customs commodity, so FedEx prints one DESC line. Total quantity and weight are calculated from the selected items; the declared customs value always matches the order invoice total. Carton weight and dimensions remain used for the shipment.', 'lovecatz-wc' ); ?></small>
 				</label>
+
+				<p class="lwc-fedex-declared-value">
+					<strong><?php esc_html_e( 'Declared customs value', 'lovecatz-wc' ); ?></strong>
+					<?php
+					echo wp_kses_post(
+						wc_price(
+							$fedex_api->get_declared_value_total( $order ),
+							array( 'currency' => $order->get_currency() )
+						)
+					);
+					?>
+					<small><?php esc_html_e( 'The invoice total (goods after discount + shipping + tax). Sent to FedEx as both the commodity value and totalCustomsValue, so the label always agrees with the invoice attached to the parcel.', 'lovecatz-wc' ); ?></small>
+				</p>
 
 				<p class="lwc-fedex-order-actions">
 					<button type="button" class="button" id="lwc_fedex_quote_btn" <?php disabled( $items_locked ); ?>><?php esc_html_e( 'Test rate quote', 'lovecatz-wc' ); ?></button>
