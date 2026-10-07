@@ -1732,9 +1732,9 @@ class LWC_FedEx_API {
 		$dimensions = isset( $package_override['length'], $package_override['width'], $package_override['height'] )
 			? array(
 				'units'  => 'CM',
-				'length' => (int) ceil( (float) $package_override['length'] ),
-				'width'  => (int) ceil( (float) $package_override['width'] ),
-				'height' => (int) ceil( (float) $package_override['height'] ),
+				'length' => $this->floor_dimension_cm( $package_override['length'] ),
+				'width'  => $this->floor_dimension_cm( $package_override['width'] ),
+				'height' => $this->floor_dimension_cm( $package_override['height'] ),
 			)
 			: $this->cube_dimensions( $total_volume );
 
@@ -1797,7 +1797,7 @@ class LWC_FedEx_API {
 			if ( ! is_numeric( $package_override[ $key ] ) || (float) $package_override[ $key ] <= 0 ) {
 				return new WP_Error( 'lwc_fedex_invalid_package_override', __( 'Enter positive values for carton dimensions.', 'lovecatz-wc' ) );
 			}
-			$normalized[ $key ] = (int) ceil( (float) $package_override[ $key ] );
+			$normalized[ $key ] = $this->floor_dimension_cm( $package_override[ $key ] );
 		}
 		$ceiling = (float) apply_filters( 'lwc_fedex_package_weight_ceiling_kg', 68 );
 		if ( $ceiling > 0 && $normalized['weight'] > $ceiling ) {
@@ -1805,6 +1805,20 @@ class LWC_FedEx_API {
 		}
 
 		return $normalized;
+	}
+
+	/**
+	 * Round a manually entered carton measurement down to whole centimeters.
+	 *
+	 * FedEx only accepts whole centimeters, and the operator measures the real
+	 * carton, so a fractional entry is truncated instead of inflated. Zero is
+	 * never valid, so the result is clamped to 1 cm.
+	 *
+	 * @param mixed $value Raw measurement in centimeters.
+	 * @return int
+	 */
+	private function floor_dimension_cm( $value ) {
+		return max( 1, (int) floor( (float) $value ) );
 	}
 
 	/**
@@ -1876,6 +1890,9 @@ class LWC_FedEx_API {
 	/**
 	 * Derive box dimensions from a volume using its cube root.
 	 *
+	 * Used when the operator leaves the carton dimensions blank. The cube root
+	 * is rounded down so both dimension paths behave the same way.
+	 *
 	 * @param float $volume_cm3 Volume in cubic centimeters.
 	 * @return array|null
 	 */
@@ -1885,7 +1902,17 @@ class LWC_FedEx_API {
 			return null;
 		}
 
-		$side = (int) ceil( pow( $volume_cm3, 1 / 3 ) );
+		$side = (int) floor( pow( $volume_cm3, 1 / 3 ) );
+
+		/*
+		 * pow() can land a hair below an exact cube root (2197 = 13^3 comes back
+		 * as 12.999999999999998), which would silently cost a whole centimeter.
+		 * Step back up when the next whole centimeter still fits in the volume.
+		 */
+		if ( pow( $side + 1, 3 ) <= $volume_cm3 ) {
+			$side++;
+		}
+
 		$side = max( 1, $side );
 
 		return array(

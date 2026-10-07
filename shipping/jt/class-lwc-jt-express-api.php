@@ -186,8 +186,20 @@ class LWC_JT_Express_API {
 			return new WP_Error( 'lwc_jt_incomplete_print_credentials', __( 'J&T Print Key, E-company ID, or Print endpoint is incomplete.', 'lovecatz-wc' ) );
 		}
 
-		$payload  = wp_json_encode( array( 'billcode' => $awb ), JSON_UNESCAPED_SLASHES );
-		$msg_type = (string) apply_filters( 'lwc_jt_express_print_message_type', self::PRINT_MESSAGE_TYPE, $environment, $awb );
+		$payload_data = array(
+			'customerid' => sanitize_text_field( $credentials['print_company_id'] ),
+			'billcode'   => $awb,
+			// printmode per J&T Express Indonesia Print API specification (confirmed by support).
+			'printmode'  => '1',
+			// printType per J&T Express Indonesia Print API specification (confirmed by support).
+			'printType'  => '1',
+		);
+		$payload = wp_json_encode( $payload_data, JSON_UNESCAPED_SLASHES );
+		$msg_type = apply_filters( 'lwc_jt_express_print_message_type', self::PRINT_MESSAGE_TYPE, $environment, $awb );
+		// Validate filter result to prevent invalid msg_type from breaking the request.
+		if ( ! is_string( $msg_type ) || '' === trim( $msg_type ) ) {
+			$msg_type = self::PRINT_MESSAGE_TYPE;
+		}
 		$request_headers = array( 'Content-Type' => 'application/x-www-form-urlencoded' );
 		$request_body = array(
 			'logistics_interface' => $payload,
@@ -217,10 +229,13 @@ class LWC_JT_Express_API {
 		}
 
 		$item    = isset( $result['responseitems'][0] ) && is_array( $result['responseitems'][0] ) ? $result['responseitems'][0] : array();
-		$success = isset( $item['success'] ) && 'true' === strtolower( (string) $item['success'] );
+		// Handle both boolean true and string 'true' from J&T API.
+		$success = isset( $item['success'] )
+			&& ( true === $item['success'] || 'true' === strtolower( (string) $item['success'] ) );
 		if ( ! $success ) {
 			$reason = isset( $item['reason'] ) ? (string) $item['reason'] : '';
-			$message = '' !== $reason ? $reason : $raw;
+			// Truncate very long error messages for readability.
+			$message = '' !== $reason ? $reason : ( strlen( $raw ) > 500 ? substr( $raw, 0, 500 ) . '...' : $raw );
 			LWC_JT_Account::set_service_status( $environment, 'print', 'partial', $message, $credentials, array( 'print_company_id', 'print_key' ) );
 			return new WP_Error( 'lwc_jt_print_failed', $message, $exchange );
 		}
@@ -471,11 +486,30 @@ class LWC_JT_Express_API {
 		return true;
 	}
 
-	/** Find the first HTTP(S) URL in a successful Print response. */
-	private function find_print_url( $value ) {
+	/**
+	 * Find the first HTTP(S) URL in a successful Print response.
+	 *
+	 * @param mixed $value  Response data (string, array, or other).
+	 * @param int   $depth  Current recursion depth (defense against malicious responses).
+	 * @return string       The first valid HTTP(S) URL found, or empty string.
+	 */
+	private function find_print_url( $value, $depth = 0 ) {
+		// Prevent stack overflow from deeply nested or malicious responses.
+		if ( $depth > 10 ) {
+			return '';
+		}
+
 		if ( is_string( $value ) ) {
-			$url = esc_url_raw( trim( html_entity_decode( $value, ENT_QUOTES, 'UTF-8' ) ) );
-			return in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ? $url : '';
+			$url = trim( html_entity_decode( $value, ENT_QUOTES, 'UTF-8' ) );
+			// Require an explicit http/https scheme. esc_url_raw() must NOT be used
+			// to validate here: it prepends http:// to any string without a scheme,
+			// which would turn a bare billcode like "JO0329275642" into the fake
+			// URL "http://JO0329275642" and make the plugin print the AWB itself.
+			$scheme = '' === $url ? '' : wp_parse_url( $url, PHP_URL_SCHEME );
+			if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+				return '';
+			}
+			return esc_url_raw( $url );
 		}
 		if ( ! is_array( $value ) ) {
 			return '';
@@ -483,14 +517,20 @@ class LWC_JT_Express_API {
 
 		foreach ( array( 'url', 'print_url', 'printUrl', 'printurl', 'label_url', 'labelUrl' ) as $key ) {
 			if ( isset( $value[ $key ] ) ) {
-				$url = $this->find_print_url( $value[ $key ] );
+				$url = $this->find_print_url( $value[ $key ], $depth + 1 );
 				if ( '' !== $url ) {
 					return $url;
 				}
 			}
 		}
-		foreach ( $value as $child ) {
-			$url = $this->find_print_url( $child );
+		// Carrier fields that are never URLs. Skipping them keeps a waybill number
+		// from ever being mistaken for a label link during the recursive scan.
+		$skip_keys = array( 'billcode', 'customerid', 'eccompanyid', 'msg_type', 'printmode', 'printType', 'reason', 'success', 'logisticproviderid', 'data_digest' );
+		foreach ( $value as $key => $child ) {
+			if ( in_array( (string) $key, $skip_keys, true ) ) {
+				continue;
+			}
+			$url = $this->find_print_url( $child, $depth + 1 );
 			if ( '' !== $url ) {
 				return $url;
 			}

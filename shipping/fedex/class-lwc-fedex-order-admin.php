@@ -351,15 +351,15 @@ class LWC_FedEx_Order_Admin {
 
 				<fieldset class="lwc-fedex-package-fields">
 					<legend><?php esc_html_e( '3. Actual packed carton', 'lovecatz-wc' ); ?></legend>
-					<p class="description"><?php esc_html_e( 'Sent to FedEx with the AWB and printed on the label. Enter the real packed weight as a custom value; dimensions are optional — leave them blank to use product-derived estimates.', 'lovecatz-wc' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Sent to FedEx with the AWB and printed on the label. Enter the real packed weight as a custom value; dimensions are optional — leave them blank to use product-derived estimates. FedEx only accepts whole centimeters, so any fractional dimension is rounded down.', 'lovecatz-wc' ); ?></p>
 					<label>
 						<?php esc_html_e( 'Weight (kg)', 'lovecatz-wc' ); ?>
 						<input type="number" id="lwc_fedex_package_weight" min="0.01" max="68" step="0.01" inputmode="decimal" />
 					</label>
 					<div class="lwc-fedex-dimension-fields">
-						<label><?php esc_html_e( 'Length (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_length" min="1" step="1" inputmode="numeric" /></label>
-						<label><?php esc_html_e( 'Width (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_width" min="1" step="1" inputmode="numeric" /></label>
-						<label><?php esc_html_e( 'Height (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_height" min="1" step="1" inputmode="numeric" /></label>
+						<label><?php esc_html_e( 'Length (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_length" min="1" step="0.01" inputmode="decimal" /></label>
+						<label><?php esc_html_e( 'Width (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_width" min="1" step="0.01" inputmode="decimal" /></label>
+						<label><?php esc_html_e( 'Height (cm)', 'lovecatz-wc' ); ?><input type="number" id="lwc_fedex_package_height" min="1" step="0.01" inputmode="decimal" /></label>
 					</div>
 				</fieldset>
 

@@ -318,11 +318,17 @@ class LWC_JT_Order_Admin {
 		if ( is_wp_error( $result ) ) {
 			return $this->save_create_error( $order, $result );
 		}
+		// Validate AWB format before accepting it.
+		$awb = isset( $result['awb'] ) ? (string) $result['awb'] : '';
+		if ( strlen( $awb ) < 8 || preg_match( '/xx|placeholder|test/i', $awb ) ) {
+			return $this->save_create_error( $order, new WP_Error( 'lwc_jt_invalid_awb_format', sprintf( __( 'J&T returned an invalid AWB format: %s. Please contact J&T support or check your API credentials.', 'lovecatz-wc' ), $awb ) ) );
+		}
 		$order->delete_meta_data( '_lwc_jt_create_error' );
 		$order->update_meta_data( '_lwc_jt_awb', $result['awb'] );
 		$order->update_meta_data( '_lwc_jt_order_id', $result['order_id'] );
 		$order->update_meta_data( '_lwc_jt_etd', $result['etd'] );
 		$order->update_meta_data( '_lwc_jt_declared_weight_kg', $data['weight'] );
+		$order->update_meta_data( '_lwc_jt_awb_environment', $environment );
 		$order->add_order_note( sprintf( __( 'J&T %1$s order created. AWB: %2$s', 'lovecatz-wc' ), ucfirst( $environment ), $result['awb'] ) );
 		$order->save();
 		$this->refresh_tracking( $order );
@@ -441,6 +447,12 @@ class LWC_JT_Order_Admin {
 	}
 
 	private function get_order_environment( $order ) {
+		// Priority 1: Use the environment that was used to create the AWB (authoritative).
+		$awb_environment = $order->get_meta( '_lwc_jt_awb_environment', true );
+		if ( $awb_environment ) {
+			return 'production' === $awb_environment ? 'production' : 'sandbox';
+		}
+		// Priority 2: Read from shipping item meta (for orders without AWB yet).
 		foreach ( $order->get_items( 'shipping' ) as $item ) {
 			if ( in_array( $item->get_method_id(), array( 'lwc_jt_express', 'lwc_jt' ), true ) ) {
 				$value = $item->get_meta( '_lwc_jt_environment', true );

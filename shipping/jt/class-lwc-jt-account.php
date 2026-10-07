@@ -61,6 +61,8 @@ class LWC_JT_Account {
 		$credentials = array( 'provider' => 'express', 'environment' => $environment );
 		$fields = array( 'order_username', 'order_api_key', 'order_key', 'tariff_customer_name', 'tariff_check_key', 'tracking_password', 'tracking_company_id', 'print_key', 'print_company_id', 'cancel_key', 'cancel_username', 'cancel_api_key' );
 		foreach ( $fields as $field ) {
+			// Secret fields are decrypted by the option_lwc_jt_express_* filters
+			// registered in the plugin bootstrap; get_option already returns plaintext.
 			$credentials[ $field ] = get_option( "{$prefix}_{$field}", '' );
 		}
 		return $credentials;
