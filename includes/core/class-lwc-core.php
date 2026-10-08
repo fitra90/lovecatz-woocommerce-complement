@@ -96,6 +96,23 @@ class LWC_Core {
 			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-international-order-fee.php';
 		}
 
+		// Purchase Order and partial payment (DP) plans.
+		if ( file_exists( LWC_PLUGIN_DIR . 'payment/class-lwc-payment-plan.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-payment-plan.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'payment/class-lwc-gateway-purchase-order.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-gateway-purchase-order.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'payment/class-lwc-gateway-partial-payment.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-gateway-partial-payment.php';
+		}
+
+		if ( file_exists( LWC_PLUGIN_DIR . 'payment/class-lwc-payment-plan-admin.php' ) ) {
+			require_once LWC_PLUGIN_DIR . 'payment/class-lwc-payment-plan-admin.php';
+		}
+
 		if ( file_exists( LWC_PLUGIN_DIR . 'includes/core/class-lwc-order-number.php' ) ) {
 			require_once LWC_PLUGIN_DIR . 'includes/core/class-lwc-order-number.php';
 		}
@@ -185,6 +202,18 @@ class LWC_Core {
 			( new LWC_International_Order_Fee() )->init();
 		}
 
+		// Purchase Order / partial payment plans. The model must run on every
+		// request because the checkout gateways write to it, not only in admin.
+		if ( class_exists( 'LWC_Payment_Plan' ) ) {
+			LWC_Payment_Plan::instance()->init();
+			add_filter( 'woocommerce_payment_gateways', array( $this, 'register_payment_gateways' ) );
+		}
+
+		// Order-screen management of the plan, ledger and payment column.
+		if ( is_admin() && class_exists( 'LWC_Payment_Plan_Admin' ) ) {
+			( new LWC_Payment_Plan_Admin() )->init();
+		}
+
 		// Custom order IDs must be assigned wherever an order is created, so
 		// this runs on every request, not only in the admin.
 		if ( class_exists( 'LWC_Order_Number' ) ) {
@@ -253,6 +282,27 @@ class LWC_Core {
 			$this->jt_express_global_method = new LWC_Shipping_JT_Express();
 		}
 		return $this->jt_express_global_method->inject_global_rates( $rates, $package );
+	}
+
+	/**
+	 * Register the Purchase Order and partial payment gateways.
+	 *
+	 * Both stay in the list even while the feature is switched off: the gateway
+	 * decides availability through is_available(), and removing them would drop
+	 * the merchant's saved settings from the WooCommerce Payments screen.
+	 *
+	 * @param array $gateways Registered gateway class names.
+	 * @return array
+	 */
+	public function register_payment_gateways( $gateways ) {
+		if ( class_exists( 'LWC_Gateway_Purchase_Order' ) ) {
+			$gateways[] = 'LWC_Gateway_Purchase_Order';
+		}
+		if ( class_exists( 'LWC_Gateway_Partial_Payment' ) ) {
+			$gateways[] = 'LWC_Gateway_Partial_Payment';
+		}
+
+		return $gateways;
 	}
 
 	/**

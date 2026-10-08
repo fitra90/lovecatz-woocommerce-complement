@@ -1,0 +1,294 @@
+/**
+ * Purchase Order / partial payment admin styles.
+ *
+ * Scoped to the order screen metabox and the Orders list column so nothing
+ * leaks into the rest of the WooCommerce admin.
+ */
+
+.lwc-pp-root {
+	--lwc-pp-border: #dcdcde;
+	--lwc-pp-muted: #646970;
+	--lwc-pp-unpaid-bg: #fcf0f1;
+	--lwc-pp-unpaid-fg: #b32d2e;
+	--lwc-pp-partial-bg: #fef8e7;
+	--lwc-pp-partial-fg: #8a6116;
+	--lwc-pp-paid-bg: #edfaef;
+	--lwc-pp-paid-fg: #1a7f37;
+	--lwc-pp-plan-bg: #f0f0f1;
+	--lwc-pp-plan-fg: #1d2327;
+}
+
+/* ---------- Summary ---------- */
+
+.lwc-pp-panel .lwc-pp-summary {
+	margin-bottom: 16px;
+}
+
+.lwc-pp-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.lwc-pp-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.6;
+	white-space: nowrap;
+}
+
+.lwc-pp-plan {
+	background: var(--lwc-pp-plan-bg);
+	color: var(--lwc-pp-plan-fg);
+	border: 1px solid var(--lwc-pp-border);
+}
+
+.lwc-pp-status--unpaid {
+	background: var(--lwc-pp-unpaid-bg);
+	color: var(--lwc-pp-unpaid-fg);
+}
+
+.lwc-pp-status--partial {
+	background: var(--lwc-pp-partial-bg);
+	color: var(--lwc-pp-partial-fg);
+}
+
+.lwc-pp-status--paid {
+	background: var(--lwc-pp-paid-bg);
+	color: var(--lwc-pp-paid-fg);
+}
+
+.lwc-pp-figures {
+	width: 100%;
+	max-width: 460px;
+	border-collapse: collapse;
+}
+
+.lwc-pp-figures th,
+.lwc-pp-figures td {
+	padding: 5px 0;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.lwc-pp-figures th {
+	width: 55%;
+	font-weight: 500;
+	color: var(--lwc-pp-muted);
+}
+
+.lwc-pp-figures td {
+	font-weight: 600;
+	text-align: right;
+}
+
+.lwc-pp-balance-row th,
+.lwc-pp-balance-row td {
+	border-bottom: none;
+	padding-top: 8px;
+}
+
+.lwc-pp-balance {
+	font-size: 15px;
+}
+
+.lwc-pp-paid-date {
+	margin: 8px 0 0;
+}
+
+/* ---------- Plan switcher ---------- */
+
+.lwc-pp-plans {
+	padding: 12px 0;
+	border-top: 1px solid var(--lwc-pp-border);
+}
+
+.lwc-pp-plans-label {
+	margin: 0 0 6px;
+	font-weight: 600;
+}
+
+.lwc-pp-plan-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.lwc-pp-plan-button.is-active {
+	border-color: #2271b1;
+	color: #2271b1;
+	box-shadow: inset 0 0 0 1px #2271b1;
+}
+
+/* ---------- Plan forms ---------- */
+
+.lwc-pp-plan-form {
+	display: none;
+	margin: 0 0 16px;
+	padding: 12px 14px;
+	background: #f6f7f7;
+	border: 1px solid var(--lwc-pp-border);
+	border-radius: 4px;
+}
+
+.lwc-pp-plan-form.is-visible {
+	display: block;
+}
+
+.lwc-pp-plan-form h4,
+.lwc-pp-ledger h4,
+.lwc-pp-record h4 {
+	margin: 0 0 10px;
+	font-size: 13px;
+}
+
+.lwc-pp-field {
+	margin: 0 0 10px;
+}
+
+.lwc-pp-field label {
+	display: block;
+	margin-bottom: 3px;
+	font-weight: 600;
+}
+
+.lwc-pp-field input[type="text"],
+.lwc-pp-field input[type="number"],
+.lwc-pp-field input[type="date"],
+.lwc-pp-field select {
+	width: 100%;
+	max-width: 320px;
+}
+
+.lwc-pp-field .description {
+	display: block;
+	margin-top: 3px;
+	color: var(--lwc-pp-muted);
+	font-size: 12px;
+}
+
+.lwc-pp-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+}
+
+/* ---------- Ledger ---------- */
+
+.lwc-pp-ledger {
+	padding-top: 12px;
+	border-top: 1px solid var(--lwc-pp-border);
+}
+
+.lwc-pp-ledger-count {
+	display: inline-block;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 9px;
+	background: var(--lwc-pp-plan-bg);
+	color: var(--lwc-pp-muted);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.lwc-pp-ledger-table {
+	margin: 0 0 12px;
+}
+
+.lwc-pp-ledger-table th {
+	font-weight: 600;
+}
+
+.lwc-pp-ledger-amount {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.lwc-pp-delete-payment {
+	color: #b32d2e;
+	cursor: pointer;
+}
+
+.lwc-pp-empty,
+.lwc-pp-settled {
+	margin: 0 0 12px;
+	color: var(--lwc-pp-muted);
+	font-style: italic;
+}
+
+.lwc-pp-record {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px dashed var(--lwc-pp-border);
+}
+
+.lwc-pp-record-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 0 14px;
+}
+
+.lwc-pp-field--wide {
+	grid-column: 1 / -1;
+}
+
+/* ---------- Feedback ---------- */
+
+.lwc-pp-feedback {
+	min-height: 0;
+	margin-top: 10px;
+	font-weight: 600;
+}
+
+.lwc-pp-feedback:empty {
+	display: none;
+}
+
+.lwc-pp-feedback.is-error {
+	color: var(--lwc-pp-unpaid-fg);
+}
+
+.lwc-pp-feedback.is-success {
+	color: var(--lwc-pp-paid-fg);
+}
+
+.lwc-pp-spinner {
+	float: none;
+	margin: 0;
+	visibility: hidden;
+}
+
+.lwc-pp-spinner.is-active {
+	visibility: visible;
+}
+
+/* ---------- Orders list column ---------- */
+
+.column-lwc_payment {
+	width: 130px;
+}
+
+.lwc-pp-column-plan,
+.lwc-pp-column-balance {
+	display: block;
+	margin-top: 3px;
+	font-size: 12px;
+}
+
+.lwc-pp-column-plan {
+	color: var(--lwc-pp-muted);
+}
+
+.lwc-pp-column-balance {
+	font-weight: 600;
+}
+
+.lwc-pp-muted {
+	color: #a7aaad;
+}

@@ -33,6 +33,7 @@ The plugin exits early and shows an admin notice when WooCommerce is inactive.
 - `includes/admin/` — active settings and membership implementation plus admin assets.
 - `products/` — quantity limits and pre-order behavior.
 - `promo/` — promo administration and customer/checkout integration.
+- `payment/` — international order handling fee, plus the Purchase Order / partial payment plan model, gateways and order-screen administration.
 - `shipping/fedex/` — account storage, REST client, native method, and order-screen label controls.
 - `shipping/jt/` — per-provider account storage and the provisional J&T Express / J&T Cargo methods.
 - `membership/` — duplicate/alternate membership classes which `LWC_Core` does not instantiate.
@@ -63,7 +64,7 @@ The top-level menu requires `manage_woocommerce`; its label and Dashicon are con
 
 The sidebar menu expands into one submenu entry per main tab (Setting, Products, Order, Members, Shipping, Promo, Currency); each links straight to that tab via `?page=lovecatz-wc&tab=…`, and the open tab highlights its entry through a `submenu_file` filter.
 - **Products** — quantity-limit and pre-order feature controls.
-- **Order** — custom order ID (prefix, date, scope label, running number, suffix) per destination scope.
+- **Order** — custom order ID (prefix, date, scope label, running number, suffix) per destination scope, plus the Purchase Order / partial payment switch and defaults.
 - **Members** — import, list, delete, and print cards.
 - **Shipping** — J&T and FedEx settings.
 - **Promo** — coupon create/edit/list/trash workspace.
@@ -146,6 +147,30 @@ The ID is stored in `_lwc_order_number` plus `_lwc_order_number_scope`; an order
 Both automatic generation and manual correction call `order_id_exists()`, which searches the HPOS `wc_orders_meta` table and classic `postmeta`. If resetting/toggling the counter would build an already-used ID, the generator reserves the next sequence until the result is unique. Existing duplicate data is not silently rewritten.
 
 **Manual correction** — `LWC_Order_Number_Admin` adds an **Order Number** side metabox on every order edit screen (admin-only). It shows the immutable WooCommerce internal ID (database primary key), current custom ID, scope, and an editable **Corrected ID** field. Administrators may correct any order, including historical orders; automatic eligibility restrictions do not block an explicit correction. A duplicate of another order's custom ID is rejected. Saving a non-empty correction re-derives the scope from the destination country and updates the displayed ID without a full page reload. Submitting an empty field keeps the existing custom ID; it never silently clears it.
+
+## Purchase Order and partial payment (DP)
+
+WooCommerce has no native notion of a Purchase Order or a partly paid order. `LWC_Payment_Plan` supplies both: an order carries a **plan** (`full`, `po`, `dp`) plus a **ledger** of payments actually received, and every derived figure — amount paid, balance due, payment status — is computed from that ledger rather than cached, so the order screen can never disagree with the stored data.
+
+The plan lives in order metadata, never in a custom order status. Payment state is orthogonal to fulfilment state: a partly paid order must still be able to move through Processing, Completed and the existing courier automation untouched. `woocommerce_*_process_payment_order_status` is restricted to the statuses WooCommerce reserves stock on (`pending`, `on-hold`, `processing`), so a PO or DP order can never be placed without reserving inventory. `on-hold` is the default, matching how WooCommerce treats BACS and cheque.
+
+**Gateways.** `LWC_Gateway_Purchase_Order` (`lwc_purchase_order`) and `LWC_Gateway_Partial_Payment` (`lwc_partial_payment`) are registered through `woocommerce_payment_gateways`, so both appear in WooCommerce → Settings → Payments, at checkout, and in the Payment Method dropdown of an admin-created order. Neither collects fields at checkout: this store uses the Checkout Block, which does not render legacy gateway fields, so the PO reference, payment term and due date are all managed from the order screen. `process_payment()` records the plan, applies the configured status and returns the thank-you redirect, mirroring the BACS gateway. `is_available()` is authoritative on the plugin switch: turning the feature off hides both methods immediately, and the Purchase Order method is additionally restricted to signed-in customers (`lwc_po_require_login`, default on) because it is a B2B method.
+
+Because WooCommerce stores the payment method of an admin-created order without ever calling the gateway, `sync_plan_from_payment_method()` initialises the plan on `woocommerce_new_order` and `woocommerce_process_shop_order_meta`. It never overwrites a plan that is already set, and it does nothing while the feature is switched off.
+
+**Deposit.** The site-wide default is a percentage (`lwc_dp_default_percent`, default 50). Each order stores its own percentage and, optionally, an explicit deposit amount that overrides the percentage; clearing the override falls back to the percentage. The deposit is an expectation, not a receipt — the ledger stays manual, so `get_deposit_outstanding()` reports how much of the deposit is still unpaid. Only a `dp` order has a deposit; a PO or full-payment order reports zero rather than silently inheriting the site percentage. A Purchase Order additionally stores a reference, a payment term in days (`lwc_po_terms_days`, default 30) and a due date derived from the order date plus that term.
+
+**Ledger.** `add_payment()` appends an entry (amount, method, date, reference, note, author) and rejects a zero, negative or above-balance amount; overpayment is refused rather than accepted, because the balance is the figure the merchant invoices against. `delete_payment()` removes an entry. Both write an order note and re-derive the status. `refresh_paid_state()` keeps WooCommerce's own `_date_paid` in step: it stamps the date once the order is fully covered and clears it again when a managed order falls back to partly paid, so the native "Paid" indicator and reports stay meaningful. It only writes when the stored value actually disagrees, which keeps it safe to call from inside a save hook.
+
+**Order screen.** `LWC_Payment_Plan_Admin` adds a **Payment plan — PO / Partial payment** metabox (normal context, both classic and HPOS order screens) showing the plan and status badges, the total / paid / balance figures, the deposit rows for a DP order, the PO reference and due date, the payment ledger, and a record-payment form. Recording or removing a payment and switching plans post to `lwc_payment_plan_record`, `lwc_payment_plan_delete` and `lwc_payment_plan_apply`, each of which returns the freshly rendered panel so the figures always come from the server. All three require `edit_shop_orders` and the shared nonce. The **Payment** column on the Orders list shows the status badge, the plan and the balance; orders the feature does not manage stay quiet with a dash, or a paid badge when WooCommerce itself recorded a payment date.
+
+Customers see a **Payment summary** table (plan, status, amount paid, balance due, and for a PO the reference and due date) on the thank-you page, in My Account, and appended to transactional emails. An ordinary order prints nothing.
+
+Options: `lwc_po_dp_enabled`, `lwc_dp_default_percent`, `lwc_po_default_status`, `lwc_dp_default_status`, `lwc_po_terms_days`, `lwc_po_require_login`.
+
+Order meta: `_lwc_payment_plan`, `_lwc_payments`, `_lwc_deposit_percent`, `_lwc_deposit_amount`, `_lwc_po_number`, `_lwc_po_terms_days`, `_lwc_po_due_date`.
+
+Known gaps: a partial shipment still declares and settles against the whole invoice, refunds are not modelled in the ledger, and enabling the feature turns both WooCommerce gateways on unless the merchant had already chosen otherwise (`sync_gateway_defaults()` never overwrites an existing setting).
 
 ## Shipping
 
@@ -284,12 +309,12 @@ The order-screen metabox provides a package-content editor. Unshipped order line
 
 ## Data model
 
-- Options: `lwc_menu_*`, `lwc_enable_product_quantity_limits`, `lwc_enable_product_preorder`, `lwc_preorder_all_products`, `lwc_preorder_product_ids`, `lwc_jt_{express|cargo}_*` (plus legacy `lwc_jt_*`), `lwc_fedex_*` (including `lwc_fedex_shipper_name` and `lwc_fedex_shipper_phone`), `lwc_currency_enabled`, `lwc_currency_rates`, `lwc_international_fee_*`, `lwc_order_number_*` (plus `lwc_order_number_seq_{local|global}[_Ymd]` counters), rewrite-version, and legacy promo options.
+- Options: `lwc_menu_*`, `lwc_enable_product_quantity_limits`, `lwc_enable_product_preorder`, `lwc_preorder_all_products`, `lwc_preorder_product_ids`, `lwc_jt_{express|cargo}_*` (plus legacy `lwc_jt_*`), `lwc_fedex_*` (including `lwc_fedex_shipper_name` and `lwc_fedex_shipper_phone`), `lwc_currency_enabled`, `lwc_currency_rates`, `lwc_international_fee_*`, `lwc_order_number_*` (plus `lwc_order_number_seq_{local|global}[_Ymd]` counters), `lwc_po_*` / `lwc_dp_*` (plus WooCommerce's own `woocommerce_lwc_{purchase_order|partial_payment}_settings`), rewrite-version, and legacy promo options.
 - Tables: `{prefix}lwc_fedex_accounts`, `{prefix}lwc_jt_express_accounts`, `{prefix}lwc_jt_cargo_accounts` (legacy `{prefix}lwc_jt_accounts` dropped on uninstall).
 - Product meta: `_lwc_minimum_quantity`, `_lwc_maximum_quantity`; pre-order eligibility is option-based rather than duplicated per product.
 - User meta: `lwc_imported_member`, optional `lwc_customer_id`, plus WooCommerce billing/shipping fields.
 - Coupon meta: LoveCatz promo fields listed above.
-- Order meta: `_lwc_fedex_label_path`, `_lwc_fedex_tracking_number`, `_lwc_jt_awb`, `_lwc_jt_order_id`, `_lwc_jt_etd`, `_lwc_jt_tracking`, `_lwc_jt_create_error`, `_lwc_jt_tracking_error`, `_lwc_jt_cancelled`, `_lwc_order_number`, `_lwc_order_number_scope`.
+- Order meta: `_lwc_fedex_label_path`, `_lwc_fedex_tracking_number`, `_lwc_jt_awb`, `_lwc_jt_order_id`, `_lwc_jt_etd`, `_lwc_jt_tracking`, `_lwc_jt_create_error`, `_lwc_jt_tracking_error`, `_lwc_jt_cancelled`, `_lwc_order_number`, `_lwc_order_number_scope`, `_lwc_payment_plan`, `_lwc_payments`, `_lwc_deposit_percent`, `_lwc_deposit_amount`, `_lwc_po_number`, `_lwc_po_terms_days`, `_lwc_po_due_date`.
 
 ## Known architecture issues
 

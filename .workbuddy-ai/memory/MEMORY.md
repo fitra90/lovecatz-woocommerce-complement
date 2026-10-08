@@ -17,6 +17,16 @@ Hooks: primary `woocommerce_before_order_object_save`; defensive `woocommerce_ne
 Meta `_lwc_order_number`, `_lwc_order_number_scope`; existing IDs never auto-change; `lwc_order_number_enabled_at` gates old orders. One SQL atomic increment per scope (do not replace with PHP read/modify/write); duplicate-check and advance.
 Woo test trap: reload an auto-draft with `wc_get_order()` before simulating the next save.
 
+## Purchase Order / partial payment (DP)
+`payment/class-lwc-payment-plan.php` (model), `class-lwc-gateway-purchase-order.php`, `class-lwc-gateway-partial-payment.php`, `class-lwc-payment-plan-admin.php` (+ `payment-plan-admin.{css,js}`).
+Plan meta `_lwc_payment_plan` = `full|po|dp`; ledger `_lwc_payments` (array of entries). **Amount paid, balance and payment status are always derived from the ledger — never cache them.** `get_deposit_amount()` returns 0 unless the plan is `dp` (a PO must not inherit the site percentage).
+**Deliberately NOT a custom order status.** Payment state is orthogonal to fulfilment; a DP order must still reach `processing` so `LWC_AWB_Automation` fires. `process_payment` only applies `pending|on-hold|processing` (the statuses WC reserves stock on) — confirmed `wc_maybe_reduce_stock_levels` is hooked to `on-hold`, `processing`, `completed`, `payment_complete`.
+Gateways register via `woocommerce_payment_gateways`; `is_available()` is gated on `lwc_po_dp_enabled` first. `sync_gateway_defaults()` writes `woocommerce_lwc_{purchase_order|partial_payment}_settings` only when absent — never clobber a merchant's choice.
+Admin-created orders never call the gateway → `sync_plan_from_payment_method()` on `woocommerce_new_order` + `woocommerce_process_shop_order_meta` (no-op when a plan already exists, and while the feature is off).
+Order-list column hooks: HPOS `manage_woocommerce_page_wc-orders_{columns,custom_column}` (callback gets a `WC_Order`), classic `manage_edit-shop_order_columns` + `manage_shop_order_posts_custom_column` (gets a post ID).
+`refresh_paid_state()` owns `_date_paid`: stamps when fully covered, clears when a managed order drops back to partial, and only writes when the stored value actually disagrees (so it is safe inside a save hook).
+Options: `lwc_po_dp_enabled`, `lwc_dp_default_percent` (50), `lwc_po_default_status`/`lwc_dp_default_status` (on-hold), `lwc_po_terms_days` (30), `lwc_po_require_login` (yes). Settings live on the plugin's **Order** tab (`lwc_order_options`).
+
 ## Shipping & AWB
 - `LWC_AWB_Automation` alone owns `woocommerce_order_status_processing`. Auto: J&T Express, RaySpeed. FedEx always manual (ship date, carton dims, DESC1 frozen at creation). J&T Cargo has no auto path.
 - Courier switching uses the buyer shipping address (authoritative); incomplete address suppresses live tariff couriers. Admin rate conversion must detach cart currency conversion.

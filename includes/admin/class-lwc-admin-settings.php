@@ -710,6 +710,83 @@ class LWC_Admin_Settings {
 
 		// Custom order ID (Order tab): one format and one counter per scope.
 		$this->register_order_number_settings();
+
+		// Purchase Order and partial payment (Order tab).
+		$this->register_payment_plan_settings();
+	}
+
+	/**
+	 * Register the Purchase Order / partial payment settings on the Order tab.
+	 *
+	 * These control the checkout gateways and the defaults the order screen
+	 * falls back to; the per-order figures are managed from the order itself.
+	 */
+	private function register_payment_plan_settings() {
+		if ( ! class_exists( 'LWC_Payment_Plan' ) ) {
+			return;
+		}
+
+		$group   = 'lwc_order_options';
+		$section = 'lwc_order_section_payment_plan';
+
+		register_setting( $group, LWC_Payment_Plan::OPT_ENABLED, array( 'default' => 'no', 'sanitize_callback' => array( $this, 'sanitize_payment_plan_enabled' ) ) );
+		register_setting( $group, LWC_Payment_Plan::OPT_DP_PERCENT, array( 'default' => 50, 'sanitize_callback' => array( $this, 'sanitize_deposit_percent' ) ) );
+		register_setting( $group, LWC_Payment_Plan::OPT_PO_STATUS, array( 'default' => 'on-hold', 'sanitize_callback' => array( $this, 'sanitize_payment_plan_status' ) ) );
+		register_setting( $group, LWC_Payment_Plan::OPT_DP_STATUS, array( 'default' => 'on-hold', 'sanitize_callback' => array( $this, 'sanitize_payment_plan_status' ) ) );
+		register_setting( $group, LWC_Payment_Plan::OPT_PO_TERMS_DAYS, array( 'default' => 30, 'sanitize_callback' => array( $this, 'sanitize_payment_terms_days' ) ) );
+		register_setting( $group, LWC_Payment_Plan::OPT_PO_REQUIRE_LOGIN, array( 'default' => 'yes', 'sanitize_callback' => array( $this, 'sanitize_yes_no_option' ) ) );
+
+		add_settings_section(
+			$section,
+			__( 'Purchase Order & partial payment (DP)', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_section_intro' ),
+			$group
+		);
+
+		add_settings_field(
+			LWC_Payment_Plan::OPT_ENABLED,
+			__( 'Enable Purchase Order & DP', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_enabled_field' ),
+			$group,
+			$section
+		);
+		add_settings_field(
+			LWC_Payment_Plan::OPT_PO_REQUIRE_LOGIN,
+			__( 'Purchase Order access', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_require_login_field' ),
+			$group,
+			$section
+		);
+		add_settings_field(
+			LWC_Payment_Plan::OPT_PO_TERMS_DAYS,
+			__( 'PO payment term', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_terms_field' ),
+			$group,
+			$section
+		);
+		add_settings_field(
+			LWC_Payment_Plan::OPT_PO_STATUS,
+			__( 'Purchase Order status', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_status_field' ),
+			$group,
+			$section,
+			array( 'option' => LWC_Payment_Plan::OPT_PO_STATUS )
+		);
+		add_settings_field(
+			LWC_Payment_Plan::OPT_DP_PERCENT,
+			__( 'Default deposit', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_deposit_field' ),
+			$group,
+			$section
+		);
+		add_settings_field(
+			LWC_Payment_Plan::OPT_DP_STATUS,
+			__( 'Partial payment status', 'lovecatz-wc' ),
+			array( $this, 'render_payment_plan_status_field' ),
+			$group,
+			$section,
+			array( 'option' => LWC_Payment_Plan::OPT_DP_STATUS )
+		);
 	}
 
 	/**
@@ -973,6 +1050,97 @@ class LWC_Admin_Settings {
 	/** Constrain the first number a scope may issue. */
 	public function sanitize_order_start( $value ) {
 		return max( 1, (int) $value );
+	}
+
+	/** Explain what the Purchase Order / partial payment feature does. */
+	public function render_payment_plan_section_intro() {
+		echo '<p>' . esc_html__( 'Accept Purchase Orders and partial payments (DP) at checkout. Every PO or DP order tracks its deposit, the amount already received, the remaining balance and a payment status on the order screen.', 'lovecatz-wc' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Payments are recorded manually from the order screen, so the ledger always reflects money actually received. Turning this on also enables both payment methods in WooCommerce → Settings → Payments.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the master switch for the feature. */
+	public function render_payment_plan_enabled_field() {
+		$current = get_option( LWC_Payment_Plan::OPT_ENABLED, 'no' );
+		echo '<input type="hidden" name="' . esc_attr( LWC_Payment_Plan::OPT_ENABLED ) . '" value="no" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_Payment_Plan::OPT_ENABLED ) . '" value="yes" ' . checked( $current, 'yes', false ) . ' /> ' . esc_html__( 'Offer Purchase Order and partial payment at checkout and manage them on the order screen.', 'lovecatz-wc' ) . '</label>';
+	}
+
+	/** Render whether Purchase Orders are limited to logged-in customers. */
+	public function render_payment_plan_require_login_field() {
+		$current = get_option( LWC_Payment_Plan::OPT_PO_REQUIRE_LOGIN, 'yes' );
+		echo '<input type="hidden" name="' . esc_attr( LWC_Payment_Plan::OPT_PO_REQUIRE_LOGIN ) . '" value="no" />';
+		echo '<label><input type="checkbox" name="' . esc_attr( LWC_Payment_Plan::OPT_PO_REQUIRE_LOGIN ) . '" value="yes" ' . checked( $current, 'yes', false ) . ' /> ' . esc_html__( 'Only signed-in customers may place a Purchase Order.', 'lovecatz-wc' ) . '</label>';
+		echo '<p class="description">' . esc_html__( 'Partial payment (DP) stays available to guests either way.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the default Purchase Order payment term. */
+	public function render_payment_plan_terms_field() {
+		$value = max( 0, (int) get_option( LWC_Payment_Plan::OPT_PO_TERMS_DAYS, 30 ) );
+		echo '<input type="number" name="' . esc_attr( LWC_Payment_Plan::OPT_PO_TERMS_DAYS ) . '" value="' . esc_attr( $value ) . '" min="0" max="365" step="1" class="small-text" />';
+		echo '<p class="description">' . esc_html__( 'Days after the order date that a Purchase Order falls due. Used to derive each PO order\'s due date; 0 makes it due immediately.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/** Render the default deposit percentage for partial payments. */
+	public function render_payment_plan_deposit_field() {
+		$value = LWC_Payment_Plan::instance()->get_default_deposit_percent();
+		echo '<input type="number" name="' . esc_attr( LWC_Payment_Plan::OPT_DP_PERCENT ) . '" value="' . esc_attr( $value ) . '" min="1" max="99" step="1" class="small-text" /> %';
+		echo '<p class="description">' . esc_html__( 'Share of the order total collected as the deposit at checkout. Administrators can override the deposit for any individual order.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Render a select for the order status applied after a PO or DP checkout.
+	 *
+	 * @param array $args Settings field arguments; expects `option`.
+	 */
+	public function render_payment_plan_status_field( $args = array() ) {
+		$option = isset( $args['option'] ) ? $args['option'] : '';
+		$value  = (string) get_option( $option, 'on-hold' );
+
+		echo '<select name="' . esc_attr( $option ) . '">';
+		foreach ( LWC_Payment_Plan::get_available_order_statuses() as $slug => $label ) {
+			echo '<option value="' . esc_attr( $slug ) . '"' . selected( $value, $slug, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Status the order receives once it is placed. Only statuses that reserve stock are offered.', 'lovecatz-wc' ) . '</p>';
+	}
+
+	/**
+	 * Sanitize the master switch and enable the gateways the first time it is on.
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string yes|no
+	 */
+	public function sanitize_payment_plan_enabled( $value ) {
+		$new = 'yes' === $value ? 'yes' : 'no';
+
+		if ( 'yes' === $new ) {
+			LWC_Payment_Plan::sync_gateway_defaults();
+		}
+
+		return $new;
+	}
+
+	/** Keep the deposit percentage inside a range that still leaves a balance. */
+	public function sanitize_deposit_percent( $value ) {
+		return max( 1, min( 99, (int) $value ) );
+	}
+
+	/** Constrain the Purchase Order payment term. */
+	public function sanitize_payment_terms_days( $value ) {
+		return max( 0, min( 365, (int) $value ) );
+	}
+
+	/**
+	 * Only accept an order status the gateway can actually apply.
+	 *
+	 * @param mixed $value Submitted status slug.
+	 * @return string
+	 */
+	public function sanitize_payment_plan_status( $value ) {
+		$value     = sanitize_key( (string) $value );
+		$available = LWC_Payment_Plan::get_available_order_statuses();
+
+		return array_key_exists( $value, $available ) ? $value : 'on-hold';
 	}
 
 	/** Render the J&T Express settings introduction and service status. */
