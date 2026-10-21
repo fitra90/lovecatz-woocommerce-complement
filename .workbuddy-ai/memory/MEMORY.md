@@ -1,74 +1,47 @@
 # Project memory — lovecatz-woocommerce-complement
 
 ## Environment
-- WP: `C:\laragon\www\ddistillers`; PHP CLI `C:/laragon/bin/php/php-8.3.33-Win32-vs16-x64/php.exe`; WooCommerce 11.1.1; WP 7.1.2.
-- Site URL is `http://ddistillers.test` (hosts entry). Active theme: **`ddistillers`** (FSE block theme, `wp-content/themes/ddistillers`). Blocksy + `lovecatz-blocksy-complement` are a separate, unused track.
-- MySQL: start `mysqld.exe --defaults-file="C:/laragon/bin/mysql/mysql-8.4.3-winx64/my.ini"` (background). datadir `C:/laragon/data/mysql-8.4`. **DB name is `ddistillers_db`, not `ddistillers`.** Client: `C:/laragon/bin/mysql/mysql-8.4.3-winx64/bin/mysql.exe`; `--defaults-file=...` must be the **first** argument or MySQL errors out. HPOS tables (`wp_wc_orders`, `wp_wc_orders_meta`) have no `shipping_total_amount` column — read totals through `wc_get_order()`, not SQL.
-- No web server runs by default — Laragon's nginx/apache were absent; verify with PHP CLI instead of HTTP.
-- Verify WP things via CLI: set `$_SERVER['HTTP_HOST'/'REQUEST_URI'/'REQUEST_METHOD']`, `require wp-load.php`, then `WP_Block_Patterns_Registry` + `do_blocks()`. Force a theme with a temp mu-plugin filtering `template`/`stylesheet` (never write the DB). Harnesses go in gitignored `tmp/` and are deleted after.
+- WP `C:\laragon\www\ddistillers`; PHP CLI `C:/laragon/bin/php/php-8.3.33-Win32-vs16-x64/php.exe`; Woo 11.1.1. Site `http://ddistillers.test`; active theme `ddistillers` (FSE). Blocksy track separate/unused.
+- MySQL: `mysqld.exe --defaults-file="C:/laragon/bin/mysql/mysql-8.4.3-winx64/my.ini"`; **DB `ddistillers_db`**; client `.../bin/mysql.exe`, `--defaults-file` must be FIRST arg. HPOS order tables have no `shipping_total_amount` — use `wc_get_order()`.
+- No web server by default; verify via PHP CLI harnesses in gitignored `tmp/` (deleted after).
 - Style: tabs, `lwc_` prefix, text domain `lovecatz-wc`; bump plugin header + `LWC_VERSION` together.
-- **Never tell the user to deactivate/reactivate the plugin.** `lwc_install()` runs on `admin_init` and self-heals when `lwc_schema_version !== LWC_VERSION`; `lwc_maybe_flush_rewrite_rules()` self-heals on `init`. Only DB/schema work needs wp-admin; options-only features are live on file upload.
-- Per-feature toggles are the real off switch: `lwc_order_number_enabled`, `lwc_fedex_shipper_address_enabled`, `lwc_jtc_debug`.
+- **Never tell the user to deactivate/reactivate the plugin** — `lwc_install()` self-heals on `admin_init` when `lwc_schema_version !== LWC_VERSION`; rewrite rules self-heal on `init`. Only DB/schema work needs wp-admin.
+- Feature toggles: `lwc_order_number_enabled`, `lwc_fedex_shipper_address_enabled`, `lwc_jtc_debug`.
 
 ## Custom order IDs
-`includes/core/class-lwc-order-number.php` + `includes/admin/class-lwc-order-number-admin.php`.
-Format: prefix + date + Local/Global + atomic per-scope sequence + suffix. Country from shipping → billing → store base; `ID` = Local.
-Hooks: primary `woocommerce_before_order_object_save`; defensive `woocommerce_new_order`, `woocommerce_process_shop_order_meta`. `woocommerce_order_number` is display-only — never assign from a read; never assign while destination is unknown.
-Meta `_lwc_order_number`, `_lwc_order_number_scope`; existing IDs never auto-change; `lwc_order_number_enabled_at` gates old orders. One SQL atomic increment per scope (do not replace with PHP read/modify/write); duplicate-check and advance.
-Woo test trap: reload an auto-draft with `wc_get_order()` before simulating the next save.
+`includes/core/class-lwc-order-number.php` (+ admin). prefix+date+Local/Global+atomic per-scope sequence+suffix; country from shipping→billing→store base. Primary hook `woocommerce_before_order_object_save`; defensive `woocommerce_new_order`, `woocommerce_process_shop_order_meta`. `woocommerce_order_number` is display-only. Meta `_lwc_order_number`, `_lwc_order_number_scope`; existing IDs never auto-change; one SQL atomic increment per scope. Test trap: reload an auto-draft via `wc_get_order()` before simulating the next save.
 
-## Purchase Order / partial payment (DP)
-`payment/class-lwc-payment-plan.php` (model), `class-lwc-gateway-purchase-order.php`, `class-lwc-gateway-partial-payment.php`, `class-lwc-payment-plan-admin.php` (+ `payment-plan-admin.{css,js}`).
-Plan meta `_lwc_payment_plan` = `full|po|dp`; ledger `_lwc_payments` (array of entries). **Amount paid, balance and payment status are always derived from the ledger — never cache them.** `get_deposit_amount()` returns 0 unless the plan is `dp` (a PO must not inherit the site percentage).
-**Deliberately NOT a custom order status.** Payment state is orthogonal to fulfilment; a DP order must still reach `processing` so `LWC_AWB_Automation` fires. `process_payment` only applies `pending|on-hold|processing` (the statuses WC reserves stock on) — confirmed `wc_maybe_reduce_stock_levels` is hooked to `on-hold`, `processing`, `completed`, `payment_complete`.
-Gateways register via `woocommerce_payment_gateways`; `is_available()` is gated on `lwc_po_dp_enabled` first. `sync_gateway_defaults()` writes `woocommerce_lwc_{purchase_order|partial_payment}_settings` only when absent — never clobber a merchant's choice.
-Admin-created orders never call the gateway → `sync_plan_from_payment_method()` on `woocommerce_new_order` + `woocommerce_process_shop_order_meta` (no-op when a plan already exists, and while the feature is off).
-Order-list column hooks: HPOS `manage_woocommerce_page_wc-orders_{columns,custom_column}` (callback gets a `WC_Order`), classic `manage_edit-shop_order_columns` + `manage_shop_order_posts_custom_column` (gets a post ID).
-`refresh_paid_state()` owns `_date_paid`: stamps when fully covered, clears when a managed order drops back to partial, and only writes when the stored value actually disagrees (so it is safe inside a save hook).
-Options: `lwc_po_dp_enabled`, `lwc_dp_default_percent` (50), `lwc_po_default_status`/`lwc_dp_default_status` (on-hold), `lwc_po_terms_days` (30), `lwc_po_require_login` (yes). Settings live on the plugin's **Order** tab (`lwc_order_options`).
+## PO / DP payments
+`payment/class-lwc-payment-plan.php` + PO/DP gateways + admin. Plan meta `_lwc_payment_plan`=`full|po|dp`; ledger `_lwc_payments`. **Paid/balance/status always derived from the ledger.** `get_deposit_amount()`=0 unless plan is `dp`. Not a custom order status — a DP order must still reach `processing` so AWB automation fires; `process_payment` only applies pending|on-hold|processing. `is_available()` gated on `lwc_po_dp_enabled`. `sync_gateway_defaults()` writes gateway settings only when absent. Admin-created orders: `sync_plan_from_payment_method()` on new_order + process_shop_order_meta. Order-list columns: HPOS `manage_woocommerce_page_wc-orders_*` (gets WC_Order) vs classic `manage_edit-shop_order_*` (gets post ID). `refresh_paid_state()` owns `_date_paid`. Options: `lwc_po_dp_enabled`, `lwc_dp_default_percent`(50), `lwc_po/dp_default_status`(on-hold), `lwc_po_terms_days`(30), `lwc_po_require_login`.
 
 ## Shipping & AWB
-- `LWC_AWB_Automation` alone owns `woocommerce_order_status_processing`. Auto: J&T Express, RaySpeed. FedEx always manual (ship date, carton dims, DESC1 frozen at creation). J&T Cargo has no auto path.
-- Courier switching uses the buyer shipping address (authoritative); incomplete address suppresses live tariff couriers. Admin rate conversion must detach cart currency conversion.
+- `LWC_AWB_Automation` alone owns `woocommerce_order_status_processing`. Auto: J&T Express, RaySpeed. FedEx always manual; J&T Cargo manual.
+- Courier switching uses the buyer shipping address (authoritative); incomplete address suppresses live tariff couriers.
 
 ## J&T Cargo (OpenAPI)
-Manual (source of truth, never guess fields): `E:\Downloads\JTC_API_Integration_Manual_251208_121336 (1).pdf`.
-Customer order number is **`txlogisticId`** (String(50), required) — not `customerOrderNo`. Error `145003082` = empty/too long.
-Required: `expressType`=`FT`, `orderType`(`1`/`2`), `serviceType`(`01`/`02`), `deliveryType`=`101`, `payType`(`PP_PM`/`CC_CASH`/`PP_CASH`), `sender{}`, `receiver{}`, `goodsType`(`bm000001..bm000011`), `weight` min 1 KG, `offerFee`. `totalQuantity` = number of koli. Party: name32 mobile30 countryCode20(`IDN`) prov32 city32 area32 address150.
-Signing: header digest `base64(md5_raw(bizContent + privateKey))`; body digest `base64(md5_raw(customerCode + UPPER(md5(pwd+'jadada236t2')) + privateKey))`, 24 chars.
-`LWC_JTC_API::send()` is the only path: one array → one `wp_json_encode` → digest → one `bizContent` field. `LWC_JTC_Order` owns mapping/validation. Customer number in `_lwc_jtc_txlogistic_id`, reused on retry.
+Source of truth, never guess fields: `E:\Downloads\JTC_API_Integration_Manual_251208_121336 (1).pdf` (20 pages; no error-code table).
+Customer order number is **`txlogisticId`** (String(50)) — not `customerOrderNo`; error `145003082` = empty/too long.
+Required: `expressType=FT`, `orderType`(1/2), `serviceType`(01/02), `deliveryType=101`, `payType`(PP_PM/CC_CASH/PP_CASH), `sender{}`, `receiver{}`, `goodsType`(bm000001..bm000011), `weight` ≥1KG, `offerFee`; `totalQuantity` = koli count. Party limits: name32 mobile30 countryCode20(`IDN`) prov32 city32 area32 address150.
+Signing: header digest `base64(md5(bizContent+privateKey))`; body digest `base64(md5(customerCode+UPPER(md5(pwd+'jadada236t2'))+privateKey))`, 24 chars. Both verified live against the sandbox.
+`LWC_JTC_API::send()` is the only path; `LWC_JTC_Order` owns mapping/validation; customer number in `_lwc_jtc_txlogistic_id`, reused on retry.
+**Sandbox state (verified 2026-10-12):** creds saved (demo creds J0086024191/pwd from manual), env=sandbox; signed `getAddress{}` returns `code:"1" success` (7.5 MB body) — signing+transport correct. Known codes: `145002001` duplicate order (sample ID12345678 already created), `145003083` incomplete sender, `145003050` Illegal parameters (getOrders rejects all variants — contract unknown, manual 3.4.2 is a copy-paste of 3.4.1). **Bug:** `transmit()` truncates >1 MB bodies with a text suffix → invalid JSON → `evaluate_business_response()` reports "not a JSON object" and counts a failure; any interface whose success payload exceeds 1 MB can never log a successful hit (blocks the manual's 3-hits-per-interface joint debugging). Test console: Settings → Shipping → J&T Cargo → **Sandbox Test** tab; sample payloads only for add_order/orders/shipment_track; progress = 20 endpoints × 3 hits.
 
 ## FedEx
-- `LWC_FedEx_API::get_shipment_coverage()` is the sole source of item coverage. An active legacy AWB without `item_ids` blocks new labels. Printed `DESC1` = first customs commodity description.
-- Ship date, carton measurements and label description cannot be edited after creation — cancel and recreate.
-- **Manual carton dimensions round DOWN** to whole cm: `LWC_FedEx_API::floor_dimension_cm()` (`max(1, floor())`), used by both `normalize_package_override()` and `build_override_package()`. Weight is *not* floored (still `round(..., 2)`). The product-derived estimate (`cube_dimensions()`) also floors now — and needs an integer correction because `pow( $v, 1/3 )` lands just below exact cubes (2197 = 13³ → 12.999999999999998): `if ( pow( $side + 1, 3 ) <= $volume_cm3 ) { $side++; }`. This path also feeds checkout rate quotes.
-- Origin: `LWC_FedEx_Shipper_Address` (optional custom address overriding the store address). Toggle `lwc_fedex_shipper_address_enabled` + `lwc_fedex_shipper_address_{name,company,phone,address_1,address_2,city,state,postcode,country}`. `FIELDS` is the single source of truth for labels/required/max lengths. `get_origin_summary()` feeds the metabox.
-- **Two-tier failure policy (deliberate):** rates fall back silently to the store address so checkout never breaks; AWB/label/pickup are *blocked* via `validate_origin_for_shipment()`.
-- Order #32 has an AWB without `item_ids` → its metabox always emits an unrelated `notice-warning`; assert on wording, not on presence.
-- **Declared customs value = invoice grand total** (user decision). `LWC_FedEx_API::get_declared_value_total( $order )` (public, filter `lwc_fedex_declared_value_total`) returns `$order->get_total()` and feeds `customsValue`, `unitPrice` and `totalCustomsValue` — never derive the value from items again (the old per-item path ignored discounts/shipping and was inflated by `ceil()` in `round_for_currency`). Item selection only drives manifest `quantity` + `weight`. Partial shipments still declare the full invoice total (open question).
-- `LWC_Currency_Converter::round_for_currency()` is `ceil()` to whole units, not per-currency decimals.
+- `LWC_FedEx_API::get_shipment_coverage()` = sole item coverage; legacy AWB without `item_ids` blocks new labels. Ship date/dims/DESC1 frozen at creation — cancel+recreate to change.
+- Carton dims round DOWN to whole cm: `floor_dimension_cm()` (weight not floored); `cube_dimensions()` needs integer correction (`pow($v,1/3)`: 13³=2197→12.999…).
+- Origin `LWC_FedEx_Shipper_Address` (toggle `lwc_fedex_shipper_address_enabled` + `lwc_fedex_shipper_address_*`); two-tier policy: rates fall back to store address silently, AWB/label/pickup blocked via `validate_origin_for_shipment()`. Order #32 has an AWB without `item_ids` (metabox notice-warning expected).
+- **Declared customs value = invoice grand total** (`get_declared_value_total()`, filter `lwc_fedex_declared_value_total`); item selection only drives manifest qty+weight.
+- `LWC_Currency_Converter::round_for_currency()` = ceil to whole units.
 
 ## Currency, promos, checkout
-- Base IDR; configured `USD=15000`. Desty REST conversion lives in `LWC_Currency_Converter`, uses the frozen order rate.
-- Promo % and shipping caps use separate meta keys; read via `LWC_Promo_Discounts::get_maximum_discount()`.
-- Checkout uses the **Checkout Block** (React), so `woocommerce_before_checkout_form` never fires and `.lwc-checkout-promos` never exists there. `promo/promo-dashboard.js` injects into the first *visible* `.wc-block-components-totals-coupon`.
-- WooCommerce scopes checkout with `@container` queries on `.wp-block-woocommerce-checkout` at 700px, not viewport media queries — match it or it desyncs. Below 700px a second summary (`checkout-order-summary-block-fill-wrapper`) appears; `promo/promo-dashboard.css` hides the sidebar title there.
-- Customer-history metabox: `LWC_Currency_Converter` overrides `woocommerce/templates/order/customer-history.php` via `wc_get_template` (admin + resolvable order only) and re-aggregates via `get_customer_history_for_currency()`. JNE pickup sender name = site title, ≤50 chars.
+Base IDR, USD=15000; frozen order rate. Promo keys via `LWC_Promo_Discounts::get_maximum_discount()`. Checkout Block (React): `woocommerce_before_checkout_form` never fires; promo JS injects into the first visible `.wc-block-components-totals-coupon`; WC scopes with @container at 700px (below 700px a second summary appears; CSS hides its title). Customer-history metabox overrides the template via `wc_get_template`.
 
-## Blocksy Complement (separate plugin)
-`lovecatz-blocksy-complement`, prefix `lbc_`, text domain `lbc-blocksy`, `LBC_VERSION`. Soft deps: Blocksy + Woo.
-- **Blocksy discovers header/footer elements by directory scan.** `blocksy:header:settings` only adds panel options. Each element needs `blocksy-header-items/<id>/{config,options,view}.php` appended via `blocksy:header:items-root-paths`. Never hook `blocksy:header:items-paths` with a parent dir (globbed → unavailable elements leak).
-- `view.php` is `require`d inside `blocksy_render_view()`'s `extract()` → sees `$atts`, `$device`, `$item_id`, `$panel_type`, `$section_id`, `$row_id`, `$attr`. Registry is a singleton because shims have no plugin handle.
-- Item settings live in the `header_placements` theme mod as a flat `items` list of `{id, values}` per section — not standalone mods.
-- Detection: `function_exists('blocksy_default_akg')`. Autoloader: `LBC_Foo_Bar` → `includes/class-lbc-foo-bar.php`, `LBC_Element_Baz` → `includes/elements/class-lbc-element-baz.php`.
-- Child theme `wp-content/themes/blocksy-child-ddistillers/` carries the dark-mode variable bridge.
-- **Harness safety:** never call `set_theme_mod()` — a crashed run once overwrote the site header config. Inject state via reflection; wrap theme switches in `register_shutdown_function()`.
+**Discounts are registered-customer only** (since 1.0.99, no toggle — ask before adding one): `LWC_Promo_Discounts::discounts_require_account()` is the single gate; it is false for anyone logged in AND for `is_admin()`/cron/WP-CLI so staff and jobs still use coupons. Server enforcement lives on `woocommerce_coupon_is_valid`+`woocommerce_coupon_error` (priority 5, inside `WC_Discounts::is_coupon_valid()` — the one path shared by cart AJAX, checkout block and Store API). Session coupons restored after logout are dropped on `woocommerce_cart_loaded_from_session` (WC does not re-validate restored coupons). UI enforcement: `LWC_Promo_Dashboard::hide_native_coupon_ui_for_guests()` filters `woocommerce_coupons_enabled` (frontend class only), which also drives the Cart/Checkout blocks' `couponsEnabled`; `get_checkout_coupon_data()` returns `array()` for guests; JS renders only the login invite for guests. Test caveat: `WC_Coupon::get_code()` is lower-cased.
 
-## ddistillers theme (FSE) — design & editability
-- Sections are **file-based block patterns** in `wp-content/themes/ddistillers/patterns/`, composed by `templates/front-page.html` via `wp:pattern`. 16 registered (15 sections + `page-home` full page).
-- File-based patterns are **read-only in the Site Editor until "Detach pattern"**; the full-page pattern and per-section inserter entries are the editable routes.
-- All colours are theme.json presets, read through `--wp--preset--color--*` custom props in `block-styles.css` → Styles → Colours re-skins everything. Never hard-code hex in patterns.
-- Fonts declared twice on purpose: theme.json `fontFace` for the Site Editor, `functions.php` enqueue for the front end.
-- `add_editor_style()` must list both `style.css` and `assets/css/block-styles.css` or the Site Editor is not WYSIWYG.
-- Core's Shortcode block never runs `do_shortcode()` in block templates — `functions.php` filters `render_block_core/shortcode`. RFQ form is `[dd_rfq_form]` (renders once per request; a `static` guard returns '' on a second call).
-- Traceability + Quality share one pattern (`traceability.php`); the `#quality` anchor sits on a nested group.
+**Guest promo CTA → My Account** (since 1.1.0): `LWC_Promo_Dashboard::get_promo_login_url()` is the single URL builder — `my-account?redirect_to=<cart|checkout>`; `add_query_arg()` encodes once, so never pre-encode the value. WC's My Account templates (9.9.0) have **no** hidden `redirect` field and post to the current URL (no `action`), so the plugin injects one via `woocommerce_login_form`/`woocommerce_register_form`; the destination is then applied by `woocommerce_login_redirect` + `woocommerce_registration_redirect`. Open-redirect guard: `wp_validate_redirect( $url, '' )` returns `''` for a foreign host or non-http scheme — empty means "reject". `render_checkout_coupons()` uses a `static $rendered` flag = one render per request, and that static is shared across instances (not per-instance), so harnesses must run each mode in its own process.
+
+## Blocksy complement (separate plugin)
+Prefix `lbc_`, text domain `lbc-blocksy`. Blocksy discovers header/footer elements by directory scan — each element needs `blocksy-header-items/<id>/{config,options,view}.php` appended via `blocksy:header:items-root-paths` (never `items-paths` with a parent dir). `view.php` sees extracted `$atts/$device/$item_id/$panel_type/$section_id/$row_id/$attr`. Item settings live in the `header_placements` theme mod. Detection: `function_exists('blocksy_default_akg')`. Child theme `blocksy-child-ddistillers` carries the dark-mode bridge. **Harness: never call `set_theme_mod()`** — inject via reflection, wrap theme switches in `register_shutdown_function()`.
+
+## ddistillers theme (FSE)
+Sections = file-based block patterns in `themes/ddistillers/patterns/`, composed by `templates/front-page.html` via `wp:pattern` (16 registered). File patterns are read-only in the Site Editor until "Detach pattern". Colours are theme.json presets via `--wp--preset--color--*` in `block-styles.css`; never hard-code hex. Fonts declared twice (theme.json `fontFace` + `functions.php` enqueue). `add_editor_style()` must list both style.css and assets/css/block-styles.css. Shortcode block needs a `render_block_core/shortcode` filter; RFQ = `[dd_rfq_form]`.

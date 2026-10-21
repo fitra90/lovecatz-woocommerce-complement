@@ -31,6 +31,31 @@
 	opacity: .72;
 }
 
+/* Guest view of the account coupon tab: the login/register button is the
+ * only thing a visitor without an account can act on. */
+.lwc-promo-dashboard-actions {
+	margin: 20px 0 0;
+}
+
+.lwc-promo-dashboard-actions .button,
+.lwc-promo-dashboard-actions .button:visited {
+	display: inline-block;
+	padding: 11px 20px;
+	border: 1px solid var(--lwc-promo-accent);
+	border-radius: 7px;
+	background: var(--lwc-promo-accent);
+	color: #fff !important;
+	font-weight: 700;
+	line-height: 1.3;
+	text-decoration: none !important;
+}
+
+.lwc-promo-dashboard-actions .button:hover,
+.lwc-promo-dashboard-actions .button:focus {
+	filter: brightness(.92);
+	color: #fff !important;
+}
+
 .lwc-promo-dashboard-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -103,6 +128,10 @@
 .lwc-checkout-account-promo__content span { margin-top: 2px; color: #477064; font-size: 12px; line-height: 1.35; }
 .lwc-checkout-account-promo__link { white-space: nowrap; border-radius: 6px; background: #0f766e; color: #fff !important; padding: 8px 10px; font-size: 12px; font-weight: 700; text-decoration: none !important; }
 .lwc-checkout-account-promo__link:hover, .lwc-checkout-account-promo__link:focus { background: #115e59; color: #fff; }
+/* This is the only coupon affordance a guest sees, so it is dressed as the
+ * primary call to action of the cart/checkout summary. */
+.lwc-guest-promo-login { border-color: #0f766e; background: #f0fdfa; box-shadow: 0 6px 18px rgba(15, 118, 110, .12); }
+.lwc-guest-promo-login .lwc-checkout-account-promo__link { padding: 10px 14px; font-size: 13px; }
 @media (max-width: 480px) { .lwc-checkout-account-promo { grid-template-columns: 38px minmax(0, 1fr); } .lwc-checkout-account-promo__link { grid-column: 1 / -1; text-align: center; } }
 .lwc-open-coupon-modal span { font-size: 22px; line-height: 12px; }
 /* On phones the picker sits between the order-summary items, where a plain

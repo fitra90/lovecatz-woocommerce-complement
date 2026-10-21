@@ -1,0 +1,893 @@
+<style>/* Self-hosted variable fonts (latin). Bricolage Grotesque for display, Figtree for text. */
+@font-face{font-family:'Newsreader';src:url(fonts/newsreader.woff2) format('woff2');font-weight:200 800;font-style:normal;font-display:swap}
+@font-face{font-family:'Newsreader';src:url(fonts/newsreader-italic.woff2) format('woff2');font-weight:200 800;font-style:italic;font-display:swap}
+@font-face{font-family:'Figtree';src:url(fonts/figtree.woff2) format('woff2');font-weight:300 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Figtree';src:url(fonts/figtree-italic.woff2) format('woff2');font-weight:300 900;font-style:italic;font-display:swap}
+/* DDistillers — homepage v2. Tokens come from Logo & Colours v1 (Mar 2026). */
+:root{
+  --green:#004e52;          /* Tropical green: logo, trust */
+  --green-deep:#00373a;
+  --green-wash:#0b6064;
+  --gold:#e8ae1e;           /* Golden yellow: the oil */
+  --gold-soft:#f7e3a6;
+  --fresh:#afca0b;          /* Fresh green: new leaves, used sparingly */
+  --warm:#fffdee;           /* Warm white page ground */
+  --oat:#f6f1d6;
+  --ink:#0d2f31;
+  --muted:#41605f;
+  --line:rgba(0,78,82,.16);
+  --line-strong:rgba(0,78,82,.34);
+  --on-green:#e9f1dd;
+  --on-green-muted:#cfe6c6;
+
+  --r-s:10px; --r-m:18px; --r-l:30px;
+  --shadow:0 1px 0 rgba(0,55,58,.04),0 14px 34px -14px rgba(0,55,58,.28);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --f-display:'Newsreader','Iowan Old Style',Georgia,serif;
+  --f-body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+
+  --s1:.5rem; --s2:1rem; --s3:1.5rem; --s4:2.5rem; --s5:4rem; --s6:6.5rem;
+  --wrap:1240px;
+  --nav-h:72px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--nav-h) + 16px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--warm);color:var(--ink);font-family:var(--f-body);font-size:1.0625rem;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+img,svg{display:block;max-width:100%}
+a{color:inherit;text-underline-offset:.22em;text-decoration-thickness:1px}
+p{margin:0}
+h1,h2,h3,h4{font-family:var(--f-display);font-weight:600;letter-spacing:-.03em;line-height:1.06;margin:0;text-wrap:balance;color:var(--green)}
+h1{font-size:clamp(2.4rem,5vw,4.4rem);font-weight:700;letter-spacing:-.04em;line-height:1}
+h2{font-size:clamp(2rem,4.2vw,3.5rem)}
+h3{font-size:1.3rem;letter-spacing:-.02em}
+::selection{background:var(--gold);color:var(--green-deep)}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px;border-radius:6px}
+.on-green :focus-visible,.dark :focus-visible{outline-color:var(--gold)}
+html{scrollbar-color:var(--green) var(--oat)}
+::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:var(--oat)}::-webkit-scrollbar-thumb{background:var(--green);border-radius:8px;border:3px solid var(--oat)}
+.wrap{width:min(var(--wrap),100% - 2*clamp(1rem,4vw,2.5rem));margin-inline:auto}
+.skip{position:absolute;left:1rem;top:-4rem;background:var(--green);color:var(--warm);padding:.7rem 1.1rem;border-radius:var(--r-s);z-index:100;transition:top .2s}
+.skip:focus{top:1rem}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.lead{font-size:clamp(1.08rem,1.5vw,1.28rem);line-height:1.55;color:var(--ink);max-width:46ch}
+.muted{color:var(--muted)}
+.measure{max-width:62ch}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;min-height:48px;padding:.8rem 1.5rem;border-radius:999px;font:600 1rem/1 var(--f-body);text-decoration:none;border:1.5px solid transparent;cursor:pointer;transition:transform .25s var(--ease),background-color .2s,color .2s,border-color .2s,box-shadow .25s var(--ease)}
+.btn:active{transform:translateY(1px) scale(.985)}
+.btn-primary{background:var(--green);color:var(--warm)}
+.btn-primary:hover{background:var(--green-deep);box-shadow:0 10px 24px -10px rgba(0,55,58,.6);transform:translateY(-2px)}
+.btn-gold{background:var(--gold);color:var(--green-deep)}
+.btn-gold:hover{background:#f2bc3a;transform:translateY(-2px);box-shadow:0 10px 24px -10px rgba(232,174,30,.8)}
+.btn-line{border-color:var(--line-strong);color:var(--green);background:transparent}
+.btn-line:hover{border-color:var(--green);background:rgba(0,78,82,.06)}
+.dark .btn-line{border-color:rgba(233,241,221,.4);color:var(--on-green)}
+.dark .btn-line:hover{border-color:var(--on-green);background:rgba(255,255,255,.07)}
+.tlink{display:inline-flex;align-items:center;gap:.4rem;font-weight:600;color:var(--green);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:.28em;transition:text-decoration-color .2s,gap .25s var(--ease)}
+.tlink:hover{text-decoration-color:var(--green);gap:.7rem}
+.dark .tlink{color:var(--on-green)}
+.arr{width:1.05em;height:1.05em;flex:none}
+
+/* Header */
+.site-head{position:sticky;top:0;z-index:50;background:rgba(255,253,238,.94);backdrop-filter:saturate(1.2) blur(10px);border-bottom:1px solid var(--line)}
+.nav{height:var(--nav-h);display:flex;align-items:center;gap:2rem}
+.brand{display:block;flex:none}
+.brand img{height:30px;width:auto}
+.menu{display:flex;gap:1.6rem;margin-left:auto;align-items:center}
+.menu a{font-weight:500;font-size:.95rem;text-decoration:none;color:var(--ink);padding:.4rem 0;border-bottom:2px solid transparent;transition:border-color .2s}
+.menu a:hover{border-color:var(--gold)}
+.menu a[aria-current="true"]{border-color:var(--green)}
+.nav-tools{display:flex;align-items:center;gap:.9rem}
+.lang{display:inline-flex;border:1.5px solid var(--line-strong);border-radius:999px;padding:3px;font-weight:600;font-size:.82rem}
+.lang a{padding:.3rem .7rem;border-radius:999px;text-decoration:none;color:var(--muted);min-height:28px;display:grid;place-items:center}
+.lang a[aria-current="true"]{background:var(--green);color:var(--warm)}
+.nav-shop{font-weight:600;font-size:.95rem;text-decoration:none;color:var(--green)}
+.nav-shop:hover{text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px}
+.nav .btn{min-height:42px;padding:.55rem 1.15rem;font-size:.95rem}
+.burger{display:none;width:48px;height:48px;border:1.5px solid var(--line-strong);border-radius:50%;background:transparent;color:var(--green);cursor:pointer;place-items:center}
+.burger span{display:block;width:18px;height:2px;background:currentColor;position:relative;border-radius:2px}
+.burger span::before,.burger span::after{content:"";position:absolute;left:0;width:18px;height:2px;background:currentColor;border-radius:2px;transition:transform .25s var(--ease)}
+.burger span::before{top:-6px}.burger span::after{top:6px}
+.burger[aria-expanded="true"] span{background:transparent}
+.burger[aria-expanded="true"] span::before{transform:translateY(6px) rotate(45deg)}
+.burger[aria-expanded="true"] span::after{transform:translateY(-6px) rotate(-45deg)}
+
+/* Photo slots: drop real SBI-DD photos into assets/photos/ */
+.ph{position:relative;margin:0;overflow:hidden;background:var(--green);isolation:isolate;border-radius:var(--r-l)}
+.ph::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--img,none) center/cover no-repeat}
+.ph .art{position:absolute;inset:0;width:100%;height:100%;z-index:-2}
+.ph figcaption{position:absolute;left:1rem;bottom:1rem;right:1rem;font-size:.82rem;line-height:1.4;color:var(--on-green);text-shadow:0 1px 10px rgba(0,30,32,.6)}
+.ph.has-cap::after{content:"";position:absolute;inset:auto 0 0 0;height:55%;background:linear-gradient(to top,rgba(0,40,43,.62),transparent);z-index:-1;pointer-events:none}
+
+/* Hero */
+.hero{position:relative;padding:clamp(2rem,5vw,4rem) 0 0;overflow:clip}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:clamp(2rem,5vw,4.5rem);align-items:end}
+.hero-copy{padding-bottom:clamp(2rem,5vw,4rem)}
+.hero h1 .l{display:block}
+.hero h1 .accent{color:var(--green);background:linear-gradient(var(--gold),var(--gold)) 0 94%/calc(var(--u,1)*100%) .13em no-repeat;-webkit-box-decoration-break:clone;box-decoration-break:clone;padding-bottom:.04em}
+.hero .lead{margin-top:var(--s3)}
+.hero-ctas{display:flex;flex-wrap:wrap;align-items:center;gap:.8rem 1rem;margin-top:var(--s4)}
+.hero-ctas .sep{width:1px;height:24px;background:var(--line-strong);margin:0 .4rem}
+.value-proof{display:flex;flex-wrap:wrap;gap:.35rem 1.4rem;margin-top:var(--s3);padding:0;list-style:none;font-size:.95rem;font-weight:500;color:var(--muted)}
+.value-proof li{display:flex;align-items:center;gap:.55rem}
+.value-proof li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.hero-visual{position:relative;align-self:stretch;min-height:clamp(420px,46vw,620px);margin-bottom:clamp(2rem,5vw,4rem)}
+.hero-visual .ph{position:absolute;inset:0;border-radius:var(--r-l) var(--r-l) var(--r-l) 120px}
+.corner-promise{position:absolute;top:1.1rem;right:1.1rem;background:var(--warm);color:var(--green);font:600 .78rem/1.3 var(--f-body);letter-spacing:.01em;padding:.55rem .95rem;border-radius:999px;z-index:3}
+.chain{position:absolute;left:clamp(-3.5rem,-4vw,-1rem);bottom:clamp(1rem,3vw,2.4rem);z-index:3;background:var(--warm);border-radius:var(--r-m);padding:1.15rem 1.35rem 1.2rem;box-shadow:var(--shadow);width:min(320px,86%)}
+.chain h2{font:600 .78rem/1 var(--f-body);letter-spacing:.06em;color:var(--muted);margin-bottom:.9rem;text-transform:none}
+.chain ol{list-style:none;margin:0;padding:0;position:relative}
+.chain ol::before{content:"";position:absolute;left:5px;top:8px;bottom:8px;width:2px;background:var(--line-strong);transform-origin:top;transform:scaleY(var(--u,1))}
+.chain li{position:relative;padding-left:1.7rem;font-weight:600;font-size:.95rem;color:var(--green);line-height:1.2;padding-block:.34rem}
+.chain li::before{content:"";position:absolute;left:0;top:.5rem;width:12px;height:12px;border-radius:50%;background:var(--warm);border:2.5px solid var(--green)}
+.chain li:last-child::before{background:var(--gold);border-color:var(--green)}
+
+/* Audience fork */
+.fork{position:relative;z-index:4;margin-top:calc(-1 * clamp(1.6rem,3vw,2.4rem))}
+.fork-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:1rem}
+.door{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:1.5rem 1.75rem;border-radius:var(--r-m);text-decoration:none;transition:transform .3s var(--ease),box-shadow .3s var(--ease);box-shadow:var(--shadow)}
+.door:hover{transform:translateY(-3px)}
+.door b{display:block;font:600 1.3rem/1.15 var(--f-display);letter-spacing:-.02em}
+.door span.d{display:block;margin-top:.35rem;font-size:.95rem;line-height:1.4}
+.door-b2b{background:var(--green);color:var(--warm)}
+.door-b2b b{color:var(--warm)}
+.door-b2b span.d{color:var(--on-green-muted)}
+.door-b2c{background:var(--gold);color:var(--green-deep)}
+.door-b2c b{color:var(--green-deep)}
+.door .go{flex:none;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:rgba(255,253,238,.14);transition:transform .3s var(--ease)}
+.door-b2c .go{background:rgba(0,55,58,.12)}
+.door:hover .go{transform:translateX(4px)}
+
+/* Proof bar */
+.proof{padding:var(--s5) 0 var(--s4)}
+.proof-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+.proof-item{padding:0 1.6rem;border-left:1px solid var(--line-strong)}
+.proof-item:first-child{border-left:0;padding-left:0}
+.proof-item svg{width:30px;height:30px;color:var(--green);margin-bottom:.9rem}
+.proof-item b{display:block;font:600 1.12rem/1.2 var(--f-display);letter-spacing:-.02em;color:var(--green)}
+.proof-item p{margin-top:.4rem;font-size:.95rem;color:var(--muted);line-height:1.5}
+
+/* Section scaffolding */
+.sec{padding:clamp(4rem,9vw,7.5rem) 0}
+.sec-oat{background:var(--oat)}
+.dark{background:var(--green);color:var(--on-green)}
+.dark h2,.dark h3,.dark h4{color:var(--warm)}
+.dark .muted{color:var(--on-green-muted)}
+.sec-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);gap:clamp(1.5rem,4vw,4rem);align-items:end;margin-bottom:var(--s5)}
+.sec-head p{color:var(--muted);max-width:52ch}
+.dark .sec-head p{color:var(--on-green-muted)}
+
+/* Pitch */
+.pitch{padding:var(--s4) 0 var(--s6)}
+.pitch-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(2rem,5vw,5rem);align-items:start}
+.pitch-short{font:600 clamp(1.7rem,3.2vw,2.7rem)/1.14 var(--f-display);letter-spacing:-.03em;color:var(--green);text-wrap:balance}
+.pitch-short em{font-style:normal;background:linear-gradient(transparent 62%,var(--gold-soft) 62%)}
+.pitch-long p+p{margin-top:1rem}
+.pillars{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.6rem;padding:0;list-style:none}
+.pillars li{padding:.5rem 1rem;border-radius:999px;border:1.5px solid var(--line-strong);font-weight:600;font-size:.92rem;color:var(--green)}
+
+/* Portfolio ledger */
+.cats{border-top:2px solid var(--green)}
+.cat{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) auto;gap:1rem 2.5rem;align-items:start;padding:1.7rem .5rem;border-bottom:1px solid var(--line);position:relative;transition:background-color .25s,padding .35s var(--ease)}
+.cat:hover{background:rgba(247,227,166,.28);padding-inline:1.1rem}
+.cat h3{display:flex;align-items:center;gap:.8rem;font-size:clamp(1.35rem,2.2vw,1.8rem)}
+.cat h3::before{content:"";width:13px;height:13px;border-radius:50%;background:var(--c,var(--gold));flex:none}
+.cat .what{margin-top:.55rem;color:var(--muted);font-size:1rem;max-width:34ch}
+.cat .items{display:flex;flex-wrap:wrap;gap:.4rem .45rem;margin:0;padding:0;list-style:none}
+.cat .items li{padding:.28rem .75rem;border-radius:999px;background:var(--oat);font-size:.9rem;font-weight:500}
+.sec-oat .cat .items li{background:var(--warm)}
+.cat .use{margin-top:.8rem;font-size:.9rem;color:var(--muted)}
+.cat .tlink{white-space:nowrap;margin-top:.2rem}
+.cat-wide{background:linear-gradient(90deg,rgba(232,174,30,.14),transparent 70%)}
+
+/* Retail band */
+.retail{margin-top:var(--s5);border-radius:var(--r-l);background:var(--oat);padding:clamp(1.5rem,3.5vw,2.6rem);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:2rem;align-items:center;position:relative;overflow:hidden}
+.retail h3{font-size:clamp(1.5rem,2.6vw,2.1rem)}
+.retail p{margin-top:.6rem;color:var(--muted);max-width:48ch}
+.sec-oat .retail{background:var(--warm)}
+.retail .acts{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:flex-end}
+.retail .btn-line{background:var(--warm)}
+.retail .note{grid-column:1/-1;font-size:.92rem;border-top:1px solid var(--line-strong);padding-top:1rem;color:var(--muted)}
+
+/* Featured ledger */
+.ledger{width:100%;border-collapse:collapse;margin-top:1rem}
+.ledger caption{text-align:left}
+.ledger th{font:600 .8rem/1.2 var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--on-green-muted);text-align:left;padding:.9rem 1rem;border-bottom:1.5px solid rgba(233,241,221,.35)}
+.ledger td{padding:1.15rem 1rem;border-bottom:1px solid rgba(233,241,221,.16);vertical-align:top;font-size:1rem;transition:background-color .2s}
+.ledger tbody tr:hover td{background:rgba(255,255,255,.06)}
+.ledger .nm{font:600 1.3rem/1.15 var(--f-display);letter-spacing:-.02em;color:var(--warm)}
+.ledger .lat{display:block;font-style:italic;font-size:.88rem;color:var(--on-green-muted);margin-top:.2rem}
+.tier{display:inline-block;padding:.25rem .7rem;border-radius:999px;font-size:.82rem;font-weight:600;white-space:nowrap}
+.tier-hv{background:var(--fresh);color:#1b2b00}
+.tier-sp{background:var(--gold);color:var(--green-deep)}
+.tier-rare{background:transparent;color:var(--gold-soft);border:1.5px solid var(--gold)}
+.ledger .tlink{white-space:nowrap}
+.ledger-note{margin-top:1.4rem;font-size:.92rem;color:var(--on-green-muted);max-width:70ch}
+
+/* Why */
+.why{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 clamp(2rem,6vw,6rem)}
+.why-item{padding:1.6rem 0;border-top:1px solid var(--line-strong)}
+.why-item h3{font-size:1.22rem}
+.why-item p{margin-top:.5rem;color:var(--muted);max-width:44ch;font-size:1rem}
+.why-note{margin-top:1.2rem;font-weight:600;color:var(--green)}
+
+/* Sample to scale */
+.ladder{display:grid;gap:1.1rem;margin-top:1rem}
+.rung{display:grid;grid-template-columns:minmax(0,.62fr) minmax(0,1.38fr);gap:1.6rem;align-items:center}
+.rung .who b{display:block;font:600 1.18rem/1.2 var(--f-display);letter-spacing:-.02em;color:var(--warm)}
+.rung .who span{display:block;font-size:.92rem;color:var(--on-green-muted);margin-top:.2rem}
+.bar{position:relative;height:56px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;width:var(--w);border-radius:999px;background:var(--gold);color:var(--green-deep);display:flex;align-items:center;padding:0 1.2rem;font:600 1rem/1 var(--f-body);white-space:nowrap;transform-origin:left;transform:scaleX(var(--u,1))}
+.bar i span{transform:scaleX(calc(1 / max(var(--u,1),.001)));transform-origin:left}
+.rung:nth-child(2) .bar i{background:#efc457}.rung:nth-child(3) .bar i{background:var(--fresh);color:#1b2b00}.rung:nth-child(4) .bar i{background:var(--warm)}
+.cap{margin-top:var(--s4);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(1.5rem,4vw,4rem);align-items:center;padding-top:var(--s4);border-top:1px solid rgba(233,241,221,.2)}
+.cap p{color:var(--on-green-muted);max-width:56ch}
+.cap .acts{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.4rem}
+
+/* Trace + Quality */
+.tq{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,6vw,6rem)}
+.tq h2{font-size:clamp(1.9rem,3.4vw,2.9rem)}
+.tq .intro{margin-top:1rem;color:var(--muted)}
+.trace{list-style:none;margin:2rem 0 0;padding:0;position:relative}
+.trace::before{content:"";position:absolute;left:8px;top:12px;bottom:12px;width:2px;background:var(--line-strong)}
+.trace li{position:relative;padding:.5rem 0 .5rem 2.2rem;font-weight:500}
+.trace li::before{content:"";position:absolute;left:0;top:.85rem;width:18px;height:18px;border-radius:50%;background:var(--warm);border:3px solid var(--green)}
+.trace li:last-child::before{background:var(--gold)}
+.trace small{display:block;font-weight:400;color:var(--muted);font-size:.9rem}
+.callout{margin-top:1.6rem;padding:1.1rem 1.3rem;border-radius:var(--r-m);background:var(--oat);font-size:.95rem;color:var(--ink)}
+.docs{list-style:none;margin:2rem 0 0;padding:0}
+.docs li{display:grid;grid-template-columns:minmax(0,.42fr) minmax(0,.58fr);gap:1rem;padding:1.05rem 0;border-top:1px solid var(--line-strong)}
+.docs li:last-child{border-bottom:1px solid var(--line-strong)}
+.docs b{font:600 1.08rem/1.25 var(--f-display);letter-spacing:-.02em;color:var(--green)}
+.docs span{color:var(--muted);font-size:.97rem}
+.docs .halal{display:inline-block;background:var(--green);color:var(--warm);border-radius:999px;padding:.05rem .6rem;font-size:.82rem;font-weight:600;margin-left:.4rem}
+
+/* Network */
+.net{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(2rem,6vw,6rem);align-items:start}
+.net-big{position:sticky;top:calc(var(--nav-h) + 24px)}
+.net-big p{margin-top:1.2rem;color:var(--on-green-muted);max-width:40ch}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 clamp(1.5rem,4vw,3rem);margin:0}
+.stats div{padding:1.15rem 0;border-top:1px solid rgba(233,241,221,.22)}
+.stats dt small{font:600 .95rem/1 var(--f-body);letter-spacing:0;color:var(--gold);margin-left:.3rem}
+.stats dt{font:600 clamp(1.9rem,3.2vw,2.7rem)/1 var(--f-display);letter-spacing:-.04em;color:var(--warm);font-variant-numeric:tabular-nums}
+.stats dd{margin:.35rem 0 0;color:var(--on-green-muted);font-size:.95rem}
+.fine{margin-top:1.6rem;font-size:.88rem;color:var(--on-green-muted);max-width:68ch}
+
+/* Applications */
+.apps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 clamp(2rem,6vw,6rem);border-top:2px solid var(--green)}
+.apps li{border-bottom:1px solid var(--line)}
+.apps a{display:grid;grid-template-columns:1fr auto;gap:.2rem 1rem;padding:1.25rem .3rem;text-decoration:none;transition:padding .35s var(--ease),background-color .25s}
+.apps a:hover{padding-inline:.9rem;background:rgba(247,227,166,.3)}
+.apps b{font:600 1.28rem/1.2 var(--f-display);letter-spacing:-.02em;color:var(--green)}
+.apps span{grid-column:1;color:var(--muted);font-size:.95rem}
+.apps svg{grid-row:1/3;grid-column:2;align-self:center;color:var(--green)}
+.apps .cond{font-size:.85rem;color:var(--muted);font-style:italic}
+
+/* Responsible growth */
+.rg-top{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(2rem,6vw,6rem);align-items:end}
+.rg-top .lead{margin-top:1.3rem}
+.rg-acts{display:flex;flex-wrap:wrap;gap:.8rem 1.4rem;margin-top:1.6rem;align-items:center}
+.progs{display:grid;grid-template-columns:1.35fr 1fr 1fr;grid-template-rows:auto auto;gap:1rem;margin-top:var(--s5)}
+.prog{position:relative;border-radius:var(--r-l);overflow:hidden;min-height:300px;display:flex;flex-direction:column;justify-content:flex-end;padding:1.5rem;color:var(--warm);isolation:isolate}
+.prog:first-child{grid-row:span 2;min-height:420px}
+.prog .ph{position:absolute;inset:0;border-radius:0;z-index:-1}
+.prog::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,40,43,.86) 8%,rgba(0,40,43,.2) 62%);z-index:-1}
+.prog h3{color:var(--warm);font-size:1.35rem}
+.prog p{margin-top:.5rem;font-size:.95rem;line-height:1.5;color:#e3ecd8;max-width:40ch}
+.prog .stat{display:block;font:700 2.2rem/1 var(--f-display);letter-spacing:-.04em;color:var(--gold);margin-bottom:.5rem}
+.prog-bk{background:var(--gold);color:var(--green-deep);grid-column:span 2}
+.prog-bk::after{display:none}
+.prog-bk h3,.prog-bk p{color:var(--green-deep)}
+
+/* Map */
+.map{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,.65fr);gap:clamp(1.5rem,4vw,3rem);align-items:center}
+.map-art{background:var(--oat);border-radius:var(--r-l);padding:1.2rem}
+.map-art svg{width:100%;height:auto}
+.map-art .isl{fill:#cfd9bd}
+.map-art .pin circle{fill:var(--gold);stroke:var(--green);stroke-width:2}
+.map-art text{font:600 16px var(--f-body);fill:var(--green-deep);paint-order:stroke;stroke:var(--oat);stroke-width:5px;stroke-linejoin:round}
+.map-list{list-style:none;margin:0;padding:0}
+.map-list li{padding:.8rem 0;border-top:1px solid var(--line-strong);display:flex;justify-content:space-between;gap:1rem;font-weight:600;color:var(--green);font-size:.98rem}
+.map-list li span{font-weight:400;color:var(--muted);text-align:right;font-style:italic;font-size:.9rem}
+.map-cap{margin-top:.8rem;font-size:.85rem;color:var(--muted)}
+
+/* Insights */
+.ins{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.2rem}
+.brief{display:flex;flex-direction:column;border-radius:var(--r-m);overflow:hidden;background:var(--oat)}
+.brief-art{aspect-ratio:16/10;background:var(--green);position:relative;display:grid;place-items:center;overflow:hidden}
+.brief-art svg{width:100%;height:100%}
+.brief-body{padding:1.4rem 1.4rem 1.6rem;display:flex;flex-direction:column;gap:.6rem;flex:1}
+.brief-body h3{font-size:1.2rem}
+.brief-body p{color:var(--muted);font-size:.97rem}
+.brief-body .tlink{margin-top:auto;padding-top:.6rem}
+
+/* RFQ */
+.rfq{padding:clamp(4rem,9vw,7rem) 0}
+.rfq-grid{display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:clamp(2rem,5vw,5rem);align-items:start}
+.rfq-side{position:sticky;top:calc(var(--nav-h) + 24px)}
+.rfq-side p{color:var(--on-green-muted);margin-top:1.1rem;max-width:44ch}
+.rfq-after{list-style:none;margin:1.8rem 0 0;padding:0;display:grid;gap:.7rem}
+.rfq-after li{display:flex;gap:.8rem;align-items:flex-start;color:var(--on-green);font-size:.97rem}
+.rfq-after li::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--gold);margin-top:.55rem}
+.rfq-side .acts{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.8rem}
+.panel{background:var(--warm);color:var(--ink);border-radius:var(--r-l);padding:clamp(1.3rem,3vw,2.2rem)}
+.tabs{display:inline-grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:999px;background:var(--oat);margin-bottom:1.6rem;width:100%}
+.tabs button{min-height:46px;border:0;border-radius:999px;background:transparent;font:600 .95rem/1.1 var(--f-body);color:var(--muted);cursor:pointer;padding:.5rem 1rem;transition:background-color .2s,color .2s}
+.tabs button[aria-selected="true"]{background:var(--green);color:var(--warm)}
+.tabs button:not([aria-selected="true"]):hover{color:var(--green);background:rgba(0,78,82,.07)}
+.panel h3{font-size:1.5rem;color:var(--green)}
+.panel .tlink{color:var(--green)}
+.panel .sub{color:var(--muted);margin:.4rem 0 1.4rem;font-size:.98rem}
+.chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.4rem;border:0;padding:0}
+.chips legend{font-weight:600;font-size:.88rem;margin-bottom:.5rem;padding:0;float:left;width:100%}
+.chips label{position:relative}
+.chips input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.chips span{display:inline-flex;align-items:center;min-height:44px;padding:.5rem 1.05rem;border-radius:999px;border:1.5px solid var(--line-strong);font-weight:600;font-size:.93rem;color:var(--green);transition:background-color .2s,color .2s,border-color .2s}
+.chips input:checked+span{background:var(--green);color:var(--warm);border-color:var(--green)}
+.chips input:focus-visible+span{outline:3px solid var(--gold);outline-offset:2px}
+.chips input:not(:checked)+span:hover{border-color:var(--green)}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 1.1rem}
+.fgrid .full{grid-column:1/-1}
+.fld label,.fld .lbl{display:block;font-weight:600;font-size:.88rem;margin-bottom:.35rem;color:var(--green)}
+.fld .req{color:#8a5a00}
+.fld input,.fld select,.fld textarea{width:100%;min-height:48px;padding:.7rem .9rem;border:1.5px solid var(--line-strong);border-radius:var(--r-s);background:#fff;font:400 1rem/1.3 var(--f-body);color:var(--ink);transition:border-color .2s,box-shadow .2s;caret-color:var(--green)}
+.fld textarea{min-height:104px;resize:vertical}
+.fld input::placeholder,.fld textarea::placeholder{color:#6d807e}
+.fld input:hover,.fld select:hover,.fld textarea:hover{border-color:var(--green)}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(232,174,30,.55)}
+.fld [aria-invalid="true"]{border-color:#a8321b;background:#fff7f4}
+.fld .err{display:none;margin-top:.3rem;font-size:.86rem;color:#8c2814;font-weight:500}
+.fld [aria-invalid="true"]~.err{display:block}
+.fld .hint{margin-top:.3rem;font-size:.84rem;color:var(--muted)}
+.checks{display:flex;flex-wrap:wrap;gap:.5rem .9rem;margin:0;padding:0;border:0}
+.checks legend{font-weight:600;font-size:.88rem;margin-bottom:.45rem;padding:0;color:var(--green)}
+.checks label{display:inline-flex;align-items:center;gap:.5rem;font-size:.93rem;min-height:36px;cursor:pointer}
+.checks input{width:18px;height:18px;accent-color:var(--green)}
+.submit-row{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.5rem;margin-top:1.6rem}
+.fine-p{font-size:.84rem;color:var(--muted);max-width:44ch}
+.ok{display:none;margin-top:1.2rem;padding:1.1rem 1.3rem;border-radius:var(--r-m);background:#e9f3d2;color:var(--green-deep);font-weight:500}
+.ok.show{display:block}
+.ok b{display:block;font-family:var(--f-display);font-size:1.15rem;margin-bottom:.2rem}
+.shop-list{display:grid;gap:.8rem;margin-top:1.2rem}
+.shop-list a{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.1rem 1.3rem;border-radius:var(--r-m);border:1.5px solid var(--line-strong);text-decoration:none;font-weight:600;color:var(--green);transition:background-color .2s,border-color .2s,transform .3s var(--ease)}
+.shop-list a:hover{background:var(--oat);border-color:var(--green);transform:translateX(3px)}
+.shop-list a small{display:block;font-weight:400;color:var(--muted);font-size:.88rem}
+.shop-list a:first-child{background:var(--gold);border-color:var(--gold);color:var(--green-deep)}
+.shop-list a:first-child small{color:var(--green-deep)}
+[hidden]{display:none!important}
+
+/* Footer */
+.foot{background:var(--green-deep);color:var(--on-green-muted);padding:clamp(3rem,6vw,5rem) 0 2rem}
+.foot-grid{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:2.5rem}
+.foot img{height:32px;width:auto}
+.foot p{font-size:.95rem;max-width:36ch;margin-top:1.2rem}
+.foot h2{font:600 .85rem/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem}
+.foot ul{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.foot a{color:var(--on-green);text-decoration:none;font-size:.97rem}
+.foot a:hover{text-decoration:underline;text-decoration-color:var(--gold)}
+.foot-bottom{margin-top:3rem;padding-top:1.4rem;border-top:1px solid rgba(233,241,221,.16);display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;font-size:.86rem}
+.foot-bottom a{margin-right:1.2rem}
+
+/* Motion: one authored moment (hero) + soft section reveal. Everything is visible by default. */
+@media (prefers-reduced-motion:no-preference){
+  .js .hero h1 .l{animation:rise .9s var(--ease) both}
+  .js .hero h1 .l:nth-child(2){animation-delay:.08s}
+  .js .hero h1 .l:nth-child(3){animation-delay:.16s}
+  .js .hero .lead,.js .hero-ctas,.js .value-proof{animation:rise .9s var(--ease) .28s both}
+  .js .hero-visual .ph{animation:reveal 1.2s var(--ease) .1s both}
+  .js .chain{animation:rise .9s var(--ease) .55s both}
+  .js .hero h1 .accent{--u:0;animation:draw 1s var(--ease) .75s forwards}
+  .js .chain ol{--u:0;animation:draw 1.2s var(--ease) .9s forwards}
+  .js .rv{opacity:0;transform:translateY(22px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+  .js .rv.in{opacity:1;transform:none}
+  .js .bar{--u:0}
+  .js .ladder.in .bar{--u:1}
+  .js .bar i{transition:transform 1.3s var(--ease)}
+  .js .ladder.in .rung:nth-child(2) .bar i{transition-delay:.12s}
+  .js .ladder.in .rung:nth-child(3) .bar i{transition-delay:.24s}
+  .js .ladder.in .rung:nth-child(4) .bar i{transition-delay:.36s}
+}
+@keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@keyframes reveal{from{clip-path:inset(0 0 100% 0 round 30px)}to{clip-path:inset(0 0 0 0 round 30px)}}
+@keyframes draw{to{--u:1}}
+@property --u{syntax:'<number>';inherits:true;initial-value:1}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+
+/* Responsive */
+@media (max-width:1080px){
+  .menu{display:none}
+  .burger{display:grid;margin-left:auto}
+  .nav-tools .nav-shop{display:none}
+  .nav{gap:1rem}
+  .menu.open{display:flex;position:absolute;top:var(--nav-h);left:0;right:0;flex-direction:column;align-items:stretch;gap:0;padding:.5rem clamp(1rem,4vw,2.5rem) 1.2rem;background:var(--warm);border-bottom:1px solid var(--line);margin:0;box-shadow:0 20px 30px -20px rgba(0,55,58,.4)}
+  .menu.open a{padding:.95rem 0;border-bottom:1px solid var(--line);font-size:1.05rem}
+  .menu.open .m-shop{display:block}
+  .hero-grid{grid-template-columns:1fr}
+  .hero-visual{min-height:440px;margin-inline:0;order:-1;margin-bottom:0}
+  .hero-copy{padding-top:var(--s4)}
+  .chain{left:1rem}
+  .fork{margin-top:0;padding-top:0}
+  .fork-grid{grid-template-columns:1fr}
+  .proof-grid{grid-template-columns:repeat(2,1fr);gap:2rem 0}
+  .proof-item:nth-child(3){border-left:0;padding-left:0}
+  .sec-head,.pitch-grid,.tq,.net,.rg-top,.map,.rfq-grid,.cap,.retail{grid-template-columns:1fr}
+  .net-big,.rfq-side{position:static}
+  .progs{grid-template-columns:1fr 1fr}
+  .prog:first-child{grid-column:1/-1;grid-row:auto;min-height:340px}
+  .ins{grid-template-columns:1fr}
+  .retail .acts{justify-content:flex-start}
+  .foot-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  body{font-size:1rem}
+  .m-hide{display:none}
+  .nav-tools .btn{display:none}
+  .cat{grid-template-columns:1fr;padding:1.4rem .2rem}
+  .cat:hover{padding-inline:.2rem}
+  .ledger thead{display:none}
+  .ledger,.ledger tbody,.ledger tr,.ledger td{display:block;width:100%}
+  .ledger tr{padding:1.1rem 0;border-bottom:1px solid rgba(233,241,221,.2)}
+  .ledger td{border:0;padding:.25rem 0}
+  .ledger td[data-l]::before{content:attr(data-l) " · ";font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--on-green-muted)}
+  .why,.apps,.stats,.fgrid{grid-template-columns:1fr}
+  .rung{grid-template-columns:1fr;gap:.6rem}
+  .docs li{grid-template-columns:1fr;gap:.2rem}
+  .progs{grid-template-columns:1fr}
+  .hero-ctas .sep{display:none}
+  .proof-grid{grid-template-columns:1fr}
+  .proof-item{border-left:0;padding-left:0;border-top:1px solid var(--line-strong);padding-top:1.4rem}
+  .proof-item:first-child{border-top:0;padding-top:0}
+  .foot-grid{grid-template-columns:1fr}
+  .corner-promise{font-size:.72rem}
+  .chain{width:calc(100% - 2rem)}
+  .map-list li{flex-direction:column;gap:.1rem}
+  .map-list li span{text-align:left}
+}
+
+/* ───── v3 editorial layer (Aesop-like restraint: full-bleed photography, light serif, square edges, hairlines) ───── */
+:root{--r-s:2px;--r-m:2px;--r-l:2px;--shadow:none;--nav-h:64px;--line:rgba(0,55,58,.18)}
+body{font-size:1rem;line-height:1.62}
+h1,h2,h3,h4{font-family:var(--f-display);font-weight:300;letter-spacing:-.012em;line-height:1.12}
+h1{font-size:clamp(2.7rem,5.8vw,5.2rem);font-weight:300;letter-spacing:-.022em;line-height:1.02}
+h2{font-size:clamp(1.9rem,3.2vw,2.9rem)}
+h3{font-size:1.4rem}
+.proof-item b,.door b,.ledger .nm,.docs b,.stats dt,.apps b,.rung .who b,.pitch-short,.prog .stat,.map-list li,.tabs button,.cap h3{font-weight:400}
+.btn{border-radius:2px;min-height:46px;padding:.75rem 1.6rem;font-size:.92rem;font-weight:500;letter-spacing:.01em}
+.btn:hover{transform:none}.btn-primary:hover,.btn-gold:hover{transform:none;box-shadow:none}
+.tlink{font-weight:500;text-decoration-thickness:1px;text-decoration-color:currentColor}
+.tlink:hover{text-decoration-color:var(--gold)}
+.lang,.lang a,.tier,.pillars li,.chips span,.tabs,.tabs button,.burger,.door .go,.bar,.bar i{border-radius:2px}
+.value-proof li::before{width:5px;height:5px}
+
+/* header: quiet, opaque */
+.site-head{background:var(--warm);backdrop-filter:none}
+.menu{gap:1.5rem}.menu a{font-size:.88rem}
+.nav-shop{font-size:.88rem;font-weight:500}
+.nav .btn{min-height:38px;padding:.45rem 1.1rem;font-size:.85rem}
+.lang{border:0;padding:0;gap:.1rem}
+.lang a{padding:.2rem .45rem;min-height:0;font-size:.82rem;letter-spacing:.04em}
+.lang a[aria-current="true"]{background:none;color:var(--green);text-decoration:underline;text-underline-offset:.35em}
+
+/* hero: one full-bleed photograph, text set low-left */
+.hero{padding:0;overflow:visible}
+.hero-stage{position:relative;min-height:min(90svh,860px);display:flex;align-items:flex-end;color:var(--warm);isolation:isolate;background:var(--green-deep);overflow:hidden}
+.hero-stage>.ph{position:absolute;inset:0;border-radius:0;z-index:-2}
+.hero-stage::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to top,rgba(0,32,35,.86) 0%,rgba(0,32,35,.42) 46%,rgba(0,32,35,.12) 100%)}
+.hero-inner{position:relative;width:min(var(--wrap),100% - 2*clamp(1rem,4vw,2.5rem));margin-inline:auto;padding:clamp(6rem,14vw,10rem) 0 clamp(1.8rem,3vw,2.6rem)}
+.corner-promise{position:absolute;top:1.6rem;right:clamp(1rem,4vw,2.5rem);background:none;color:var(--warm);padding:0;font:500 .8rem/1.3 var(--f-body);letter-spacing:.04em;z-index:3;max-width:22ch;text-align:right}
+.hero-copy{padding:0;max-width:44rem}
+.hero h1{color:var(--warm)}
+.hero h1 .accent{color:var(--gold-soft);font-style:italic;background:none;padding:0}
+.hero .lead{color:#eaf1df;font-size:1.05rem;max-width:40ch;margin-top:1.4rem}
+.hero-ctas{margin-top:2rem}
+.hero .btn-primary{background:var(--warm);color:var(--green-deep)}
+.hero .btn-primary:hover{background:#fff}
+.hero .btn-gold{background:transparent;color:var(--warm);border-color:rgba(255,253,238,.7)}
+.hero .btn-gold:hover{background:rgba(255,253,238,.12)}
+.hero .tlink{color:var(--warm)}
+.hero .hero-ctas .sep{background:rgba(255,253,238,.4)}
+.hero .value-proof{color:#d6e5d0;margin-top:1.6rem}
+.chain{position:static;width:auto;background:none;box-shadow:none;padding:1.3rem 0 0;margin-top:clamp(2.2rem,5vw,3.6rem);border-top:1px solid rgba(255,253,238,.35);display:flex;flex-wrap:wrap;align-items:center;gap:.8rem 2rem;border-radius:0;left:auto;bottom:auto}
+.chain h2{margin:0;color:rgba(255,253,238,.72);font:500 .78rem/1 var(--f-body);letter-spacing:.05em}
+.chain ol{display:flex;flex-wrap:wrap;gap:.5rem 0}
+.chain ol::before{display:none}
+.chain li{padding:0;color:var(--warm);font-weight:400;font-size:.92rem;display:flex;align-items:center;gap:.55rem}
+.chain li::before{position:static;width:6px;height:6px;border:0;background:var(--gold);border-radius:50%;flex:none}
+.chain li:not(:last-child)::after{content:"";width:clamp(14px,3vw,34px);height:1px;background:rgba(255,253,238,.45);margin:0 .75rem 0 .35rem}
+
+/* audience doors: two full-width photographic tiles */
+.fork{margin:0;padding:0;width:100%}
+.fork-grid{width:100%;gap:2px;grid-template-columns:1fr 1fr;background:var(--warm)}
+.door{position:relative;min-height:clamp(280px,32vw,420px);padding:2rem clamp(1.2rem,3vw,2.6rem);align-items:flex-end;border-radius:0;box-shadow:none;overflow:hidden;isolation:isolate;background:var(--green-deep);color:var(--warm)}
+.door:hover{transform:none}
+.door .ph{position:absolute;inset:0;border-radius:0;z-index:-2;transition:transform 1.4s var(--ease)}
+.door:hover .ph{transform:scale(1.035)}
+.door::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to top,rgba(0,32,35,.78),transparent 72%)}
+.door b{font:300 clamp(1.6rem,2.6vw,2.3rem)/1.12 var(--f-display);letter-spacing:-.015em;color:var(--warm)}
+.door span.d{color:#e4eedb;font-size:.95rem;max-width:38ch}
+.door-b2b b,.door-b2c b{color:var(--warm)}.door-b2b span.d,.door-b2c span.d{color:#e4eedb}
+.door .go,.door-b2c .go{background:none;border:1px solid rgba(255,253,238,.6);width:44px;height:44px;color:var(--warm)}
+
+/* proof, pitch */
+.proof{padding:clamp(3rem,6vw,5rem) 0 clamp(2rem,4vw,3rem)}
+.proof-item b{font-size:1.3rem;letter-spacing:-.01em}
+.pitch-short{font-weight:300;font-size:clamp(1.7rem,3vw,2.6rem);line-height:1.18;letter-spacing:-.015em}
+.pitch-short em{font-style:italic;background:none}
+.pillars li{border-radius:0;border-color:var(--line-strong);font-weight:500;font-size:.85rem;padding:.45rem .9rem}
+
+/* portfolio: quiet ledger, items as running text */
+.cats{border-top:1px solid var(--green)}
+.cat h3{font-size:clamp(1.5rem,2.3vw,2rem);font-weight:300}
+.cat h3::before{width:8px;height:8px}
+.cat .items{gap:0}
+.cat .items li{background:none;padding:0;border-radius:0;font-size:.97rem}
+.cat .items li+li::before{content:"·";margin:0 .6rem;color:var(--muted)}
+.sec-oat .cat .items li{background:none}
+.retail{background:var(--oat);border-radius:0}
+.sec-oat .retail{background:var(--warm)}
+.retail h3{font-weight:300}
+
+/* ledger, ladder */
+.ledger .nm{font-size:1.35rem;font-weight:300}
+.tier{font-weight:500;font-size:.78rem;padding:.2rem .6rem}
+.bar{height:auto;background:none;overflow:visible;border-bottom:1px solid rgba(233,241,221,.2)}
+.bar i{position:relative;inset:auto;display:block;width:var(--w);height:auto;padding:0 0 .65rem;background:none!important;color:var(--warm);border-bottom:2px solid var(--gold);font:400 1.05rem/1.2 var(--f-body);margin-bottom:-1px}
+.rung:nth-child(3) .bar i{border-color:var(--fresh)}.rung:nth-child(4) .bar i{border-color:var(--warm)}
+.rung .who b{font-size:1.35rem}
+
+/* impact, insights, map: square, editorial captions */
+.prog{border-radius:0}
+.prog h3{font-weight:300;font-size:1.5rem}
+.prog .stat{font-weight:300;font-size:2.4rem}
+.map-art{border-radius:0}
+.brief{background:transparent;border-radius:0}
+.brief-art{border-radius:0}
+.brief-body{padding:1.2rem 0 0}
+.brief-body h3{font-size:1.35rem}
+.panel{border-radius:0}
+.tabs{background:none;border:1px solid var(--line-strong);padding:0;gap:0}
+.tabs button{border-radius:0}
+.chips span{border-radius:0}
+.callout{border-radius:0}
+.ok{border-radius:0}
+.shop-list a{border-radius:0}
+.shop-list a:hover{transform:none}
+
+@media (prefers-reduced-motion:no-preference){
+  .js .hero-stage>.ph{animation:fadein 1.6s var(--ease) both}
+  .js .hero h1 .accent{animation:none}
+}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@media (max-width:1080px){
+  .hero-stage{min-height:min(92svh,780px)}
+  .corner-promise{display:none}
+  .fork-grid{grid-template-columns:1fr}
+  .door{min-height:300px}
+}
+@media (max-width:760px){
+  .chain{flex-direction:column;align-items:flex-start}
+  .chain li:not(:last-child)::after{display:none}
+  .chain ol{flex-direction:column;gap:.45rem}
+  .hero-inner{padding-top:7rem}
+}
+.rung:nth-child(3) .bar i,.rung:nth-child(4) .bar i{color:var(--warm)}
+</style><div id="dd-template">
+<a class="skip" href="#main">Lewati ke konten</a>
+
+<main id="main">
+<section class="hero" id="top">
+<div class="hero-stage">
+<figure class="ph " style="--img:url(assets/photos/hero.jpg)" role="img" aria-label="Kebun sereh wangi di Brebes dengan petani saat panen"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g7" cx="0.75" cy="0.3" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g7)"/><path d="M117 520 Q129 401 150 304 Q135 411 128 520Z" fill="#0b6064" opacity="0.23"/><path d="M231 520 Q216 301 185 122 Q221 311 242 520Z" fill="#6fa11d" opacity="0.20"/><path d="M14 520 Q37 365 79 238 Q44 375 26 520Z" fill="#2f8a52" opacity="0.15"/><path d="M383 520 Q384 345 378 201 Q397 355 411 520Z" fill="#6fa11d" opacity="0.11"/><path d="M100 520 Q79 402 39 305 Q87 412 115 520Z" fill="#6fa11d" opacity="0.30"/><path d="M19 520 Q3 346 -31 203 Q9 356 31 520Z" fill="#2f8a52" opacity="0.27"/><path d="M-3 520 Q13 394 39 291 Q22 404 15 520Z" fill="#2f8a52" opacity="0.18"/><path d="M380 520 Q367 373 341 253 Q374 383 393 520Z" fill="#afca0b" opacity="0.29"/><path d="M221 520 Q251 352 300 214 Q262 362 244 520Z" fill="#afca0b" opacity="0.17"/><path d="M26 520 Q45 366 78 240 Q51 376 38 520Z" fill="#afca0b" opacity="0.22"/><path d="M391 520 Q401 411 414 321 Q413 421 415 520Z" fill="#0b6064" opacity="0.30"/><path d="M277 520 Q286 343 300 197 Q296 353 295 520Z" fill="#0b6064" opacity="0.30"/><path d="M177 520 Q155 333 110 181 Q167 343 200 520Z" fill="#e8ae1e" opacity="0.26"/><path d="M100 520 Q113 370 136 247 Q118 380 110 520Z" fill="#6fa11d" opacity="0.21"/><path d="M241 520 Q227 356 198 222 Q235 366 256 520Z" fill="#e8ae1e" opacity="0.28"/><path d="M143 520 Q121 306 77 131 Q130 316 161 520Z" fill="#6fa11d" opacity="0.23"/><path d="M332 520 Q322 307 301 133 Q331 317 349 520Z" fill="#e8ae1e" opacity="0.19"/><path d="M394 520 Q377 401 343 304 Q385 411 408 520Z" fill="#e8ae1e" opacity="0.16"/><path d="M339 520 Q329 397 306 296 Q335 407 352 520Z" fill="#2f8a52" opacity="0.23"/><path d="M220 520 Q236 295 263 111 Q246 305 239 520Z" fill="#afca0b" opacity="0.25"/><path d="M170 520 Q204 306 262 131 Q215 316 192 520Z" fill="#e8ae1e" opacity="0.23"/><path d="M150 520 Q161 407 180 315 Q167 417 161 520Z" fill="#6fa11d" opacity="0.12"/><path d="M168 520 Q177 406 192 314 Q183 416 180 520Z" fill="#2f8a52" opacity="0.24"/><path d="M12 520 Q-12 373 -61 253 Q1 383 38 520Z" fill="#6fa11d" opacity="0.25"/><path d="M250 520 Q261 295 278 111 Q270 305 268 520Z" fill="#e8ae1e" opacity="0.13"/><path d="M411 520 Q413 359 414 228 Q419 369 423 520Z" fill="#0b6064" opacity="0.12"/><path d="M296 520 Q313 358 340 225 Q323 368 315 520Z" fill="#2f8a52" opacity="0.15"/><path d="M127 520 Q159 330 214 174 Q171 340 151 520Z" fill="#afca0b" opacity="0.17"/><path d="M280 520 Q275 387 262 277 Q281 397 293 520Z" fill="#2f8a52" opacity="0.29"/><path d="M208 520 Q222 355 243 219 Q232 365 229 520Z" fill="#6fa11d" opacity="0.29"/><path d="M328 520 Q346 313 378 144 Q353 323 342 520Z" fill="#0b6064" opacity="0.22"/><path d="M292 520 Q315 290 354 102 Q325 300 311 520Z" fill="#2f8a52" opacity="0.15"/><path d="M387 520 Q421 362 480 233 Q435 372 415 520Z" fill="#0b6064" opacity="0.33"/><path d="M7 520 Q10 408 10 315 Q18 418 23 520Z" fill="#2f8a52" opacity="0.22"/><path d="M338 520 Q353 358 377 225 Q366 368 362 520Z" fill="#afca0b" opacity="0.12"/><path d="M371 520 Q391 318 425 152 Q401 328 390 520Z" fill="#0b6064" opacity="0.14"/><path d="M9 520 Q28 296 58 113 Q37 306 27 520Z" fill="#afca0b" opacity="0.28"/><path d="M293 520 Q272 399 232 299 Q279 409 305 520Z" fill="#6fa11d" opacity="0.32"/><path d="M236 520 Q241 342 244 197 Q254 352 263 520Z" fill="#2f8a52" opacity="0.14"/><path d="M27 520 Q62 419 122 337 Q73 429 48 520Z" fill="#6fa11d" opacity="0.23"/><path d="M164 520 Q188 306 230 131 Q195 316 178 520Z" fill="#0b6064" opacity="0.16"/><path d="M191 520 Q185 320 169 157 Q194 330 210 520Z" fill="#afca0b" opacity="0.30"/><path d="M370 520 Q373 374 373 255 Q383 384 391 520Z" fill="#e8ae1e" opacity="0.32"/><path d="M338 520 Q317 305 277 129 Q324 315 350 520Z" fill="#e8ae1e" opacity="0.22"/><path d="M315 520 Q336 341 371 194 Q342 351 328 520Z" fill="#2f8a52" opacity="0.13"/><path d="M289 520 Q283 348 268 206 Q293 358 309 520Z" fill="#afca0b" opacity="0.23"/></svg></figure>
+<div class="corner-promise">Asal Otentik · Mutu Konsisten · Pasokan Andal</div>
+<div class="hero-inner">
+<div class="hero-copy">
+<h1><span class="l">Bahan Alami Indonesia</span><span class="l">yang Dapat Ditelusuri.</span><span class="l"><span class="accent">Dari Sumber ke Industri.</span></span></h1>
+<p class="lead">DDistillers memasok minyak atsiri, minyak pembawa, hidrosol, isolat alami, minyak absolut, oleoresin, minyak RBD, dan bahan alami spesialis pilihan asal Indonesia untuk industri dan pemilik merek di seluruh dunia.</p>
+<div class="hero-ctas">
+<a class="btn btn-primary" href="#portfolio">Jelajahi bahan</a>
+<a class="btn btn-gold" href="#rfq" data-intent="quote">Minta penawaran</a>
+<span class="sep m-hide" aria-hidden="true"></span>
+<a class="tlink" href="#rfq" data-intent="sample">Minta sampel</a>
+<a class="tlink" href="#rfq" data-intent="catalogue">Unduh katalog</a>
+</div>
+<ul class="value-proof"><li>Asal otentik</li><li>Mutu konsisten</li><li>Dokumentasi relevan</li><li>Pasokan fleksibel</li></ul>
+</div>
+<div class="chain"><h2>Dari kebun ke pembeli</h2>
+<ol><li>Asal botani</li><li>Petani atau pengumpul</li><li>Penyulingan</li><li>Quality control</li><li>Pembeli global</li></ol></div>
+</div>
+</div>
+<div class="fork"><div class="fork-grid">
+<a class="door door-b2b" href="#rfq" data-audience="b2b"><figure class="ph " style="--img:url(assets/photos/door-business.jpg)"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g21" cx="0.3" cy="0.3" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g21)"/><path d="M43 520 Q56 330 77 174 Q66 340 62 520Z" fill="#e8ae1e" opacity="0.15"/><path d="M328 520 Q332 353 336 217 Q339 363 343 520Z" fill="#0b6064" opacity="0.10"/><path d="M379 520 Q362 364 327 237 Q374 374 402 520Z" fill="#afca0b" opacity="0.32"/><path d="M164 520 Q185 290 221 101 Q194 300 181 520Z" fill="#0b6064" opacity="0.21"/><path d="M204 520 Q220 329 244 173 Q234 339 231 520Z" fill="#afca0b" opacity="0.11"/><path d="M25 520 Q27 299 27 117 Q37 309 45 520Z" fill="#e8ae1e" opacity="0.18"/><path d="M34 520 Q38 333 41 180 Q51 343 59 520Z" fill="#6fa11d" opacity="0.12"/><path d="M60 520 Q91 293 143 107 Q102 303 84 520Z" fill="#2f8a52" opacity="0.28"/><path d="M405 520 Q414 412 426 323 Q424 422 425 520Z" fill="#0b6064" opacity="0.19"/><path d="M378 520 Q376 304 370 127 Q385 314 394 520Z" fill="#e8ae1e" opacity="0.21"/><path d="M107 520 Q99 357 78 224 Q111 367 132 520Z" fill="#e8ae1e" opacity="0.14"/><path d="M-28 520 Q-17 412 -1 323 Q-8 422 -9 520Z" fill="#0b6064" opacity="0.24"/><path d="M218 520 Q201 339 167 191 Q208 349 231 520Z" fill="#0b6064" opacity="0.18"/><path d="M127 520 Q117 342 98 197 Q123 352 138 520Z" fill="#6fa11d" opacity="0.12"/><path d="M311 520 Q328 372 355 250 Q339 382 333 520Z" fill="#6fa11d" opacity="0.32"/><path d="M149 520 Q183 290 242 103 Q193 300 169 520Z" fill="#e8ae1e" opacity="0.31"/><path d="M195 520 Q227 333 281 180 Q234 343 210 520Z" fill="#e8ae1e" opacity="0.23"/><path d="M322 520 Q327 319 331 154 Q340 329 347 520Z" fill="#0b6064" opacity="0.11"/><path d="M261 520 Q250 416 224 332 Q258 426 278 520Z" fill="#6fa11d" opacity="0.31"/><path d="M405 520 Q408 323 409 161 Q415 333 420 520Z" fill="#2f8a52" opacity="0.33"/><path d="M368 520 Q403 358 463 225 Q416 368 394 520Z" fill="#6fa11d" opacity="0.19"/><path d="M358 520 Q358 342 355 196 Q368 352 378 520Z" fill="#0b6064" opacity="0.30"/><path d="M30 520 Q13 343 -24 199 Q24 353 53 520Z" fill="#6fa11d" opacity="0.19"/><path d="M389 520 Q400 418 417 334 Q411 428 411 520Z" fill="#2f8a52" opacity="0.30"/><path d="M153 520 Q175 331 211 176 Q187 341 178 520Z" fill="#6fa11d" opacity="0.13"/><path d="M13 520 Q-13 409 -64 317 Q-4 419 31 520Z" fill="#afca0b" opacity="0.13"/><path d="M260 520 Q267 404 275 310 Q275 414 276 520Z" fill="#6fa11d" opacity="0.22"/><path d="M247 520 Q272 397 318 296 Q279 407 260 520Z" fill="#afca0b" opacity="0.28"/><path d="M240 520 Q258 354 290 219 Q264 364 251 520Z" fill="#e8ae1e" opacity="0.32"/><path d="M178 520 Q197 413 232 325 Q204 423 191 520Z" fill="#0b6064" opacity="0.27"/><path d="M397 520 Q416 341 448 195 Q423 351 411 520Z" fill="#0b6064" opacity="0.14"/><path d="M330 520 Q334 315 338 147 Q344 325 350 520Z" fill="#afca0b" opacity="0.23"/><path d="M196 520 Q229 324 288 164 Q237 334 211 520Z" fill="#2f8a52" opacity="0.27"/><path d="M306 520 Q317 396 334 295 Q325 406 321 520Z" fill="#afca0b" opacity="0.15"/><path d="M114 520 Q92 290 49 102 Q98 300 126 520Z" fill="#e8ae1e" opacity="0.12"/><path d="M191 520 Q208 296 235 113 Q219 306 214 520Z" fill="#2f8a52" opacity="0.21"/><path d="M146 520 Q131 368 102 244 Q137 378 157 520Z" fill="#6fa11d" opacity="0.20"/><path d="M92 520 Q91 343 84 199 Q100 353 110 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M136 520 Q151 357 173 223 Q165 367 163 520Z" fill="#e8ae1e" opacity="0.12"/><path d="M49 520 Q59 372 75 250 Q66 382 63 520Z" fill="#2f8a52" opacity="0.21"/><path d="M263 520 Q281 308 310 134 Q292 318 285 520Z" fill="#e8ae1e" opacity="0.16"/><path d="M136 520 Q163 340 208 192 Q177 350 163 520Z" fill="#afca0b" opacity="0.34"/><path d="M40 520 Q69 394 119 292 Q81 404 63 520Z" fill="#6fa11d" opacity="0.12"/><path d="M3 520 Q37 381 95 267 Q49 391 27 520Z" fill="#afca0b" opacity="0.21"/><path d="M405 520 Q406 399 404 300 Q417 409 427 520Z" fill="#2f8a52" opacity="0.19"/><path d="M272 520 Q304 387 361 277 Q312 397 288 520Z" fill="#6fa11d" opacity="0.16"/></svg></figure><div><b>Saya membeli untuk bisnis atau merek</b><span class="d">Penawaran, sampel mulai 2 ml, spesifikasi, dan dokumen per batch.</span></div><span class="go"><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+<a class="door door-b2c" href="#rfq" data-audience="b2c"><figure class="ph " style="--img:url(assets/photos/door-personal.jpg)"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g33" cx="0.8" cy="0.7" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g33)"/><path d="M223 520 Q247 338 288 188 Q255 348 238 520Z" fill="#2f8a52" opacity="0.26"/><path d="M369 520 Q384 396 407 295 Q395 406 390 520Z" fill="#2f8a52" opacity="0.22"/><path d="M186 520 Q200 384 223 272 Q205 394 197 520Z" fill="#2f8a52" opacity="0.20"/><path d="M187 520 Q199 414 218 327 Q211 424 210 520Z" fill="#0b6064" opacity="0.20"/><path d="M382 520 Q397 348 421 207 Q403 358 394 520Z" fill="#0b6064" opacity="0.11"/><path d="M410 520 Q386 290 340 102 Q395 300 426 520Z" fill="#6fa11d" opacity="0.26"/><path d="M195 520 Q191 379 179 263 Q202 389 217 520Z" fill="#e8ae1e" opacity="0.23"/><path d="M49 520 Q26 406 -22 314 Q39 416 74 520Z" fill="#2f8a52" opacity="0.28"/><path d="M343 520 Q323 413 282 325 Q335 423 367 520Z" fill="#e8ae1e" opacity="0.10"/><path d="M90 520 Q76 394 46 291 Q87 404 112 520Z" fill="#e8ae1e" opacity="0.21"/><path d="M315 520 Q318 343 319 198 Q331 353 340 520Z" fill="#afca0b" opacity="0.22"/><path d="M186 520 Q206 371 242 249 Q212 381 198 520Z" fill="#afca0b" opacity="0.31"/><path d="M379 520 Q400 337 432 188 Q413 347 405 520Z" fill="#6fa11d" opacity="0.30"/><path d="M369 520 Q374 325 377 165 Q385 335 392 520Z" fill="#0b6064" opacity="0.31"/><path d="M176 520 Q180 365 185 239 Q188 375 191 520Z" fill="#e8ae1e" opacity="0.31"/><path d="M137 520 Q132 321 118 158 Q146 331 164 520Z" fill="#6fa11d" opacity="0.14"/><path d="M369 520 Q405 379 464 263 Q418 389 396 520Z" fill="#0b6064" opacity="0.14"/><path d="M332 520 Q359 364 401 236 Q372 374 359 520Z" fill="#2f8a52" opacity="0.31"/><path d="M256 520 Q278 416 313 332 Q291 426 282 520Z" fill="#e8ae1e" opacity="0.10"/><path d="M10 520 Q21 385 36 275 Q31 395 31 520Z" fill="#6fa11d" opacity="0.15"/><path d="M56 520 Q35 341 -11 194 Q46 351 79 520Z" fill="#e8ae1e" opacity="0.10"/><path d="M405 520 Q380 331 329 177 Q394 341 432 520Z" fill="#afca0b" opacity="0.20"/><path d="M333 520 Q306 403 255 307 Q312 413 343 520Z" fill="#2f8a52" opacity="0.29"/><path d="M68 520 Q66 406 56 313 Q78 416 93 520Z" fill="#0b6064" opacity="0.28"/><path d="M401 520 Q425 321 466 159 Q430 331 411 520Z" fill="#0b6064" opacity="0.10"/><path d="M244 520 Q225 378 185 262 Q233 388 260 520Z" fill="#e8ae1e" opacity="0.18"/><path d="M301 520 Q329 385 377 275 Q339 395 320 520Z" fill="#0b6064" opacity="0.30"/><path d="M12 520 Q-5 366 -42 241 Q7 376 36 520Z" fill="#e8ae1e" opacity="0.23"/><path d="M117 520 Q89 324 34 163 Q94 334 128 520Z" fill="#6fa11d" opacity="0.14"/><path d="M126 520 Q120 388 104 279 Q133 398 151 520Z" fill="#e8ae1e" opacity="0.10"/><path d="M236 520 Q269 345 326 203 Q276 355 251 520Z" fill="#0b6064" opacity="0.28"/><path d="M44 520 Q37 292 22 105 Q43 302 56 520Z" fill="#e8ae1e" opacity="0.33"/><path d="M119 520 Q93 314 43 146 Q100 324 133 520Z" fill="#2f8a52" opacity="0.29"/><path d="M39 520 Q52 300 72 120 Q64 310 62 520Z" fill="#e8ae1e" opacity="0.30"/><path d="M54 520 Q83 395 132 292 Q92 405 72 520Z" fill="#0b6064" opacity="0.30"/><path d="M95 520 Q88 370 70 248 Q97 380 113 520Z" fill="#e8ae1e" opacity="0.24"/><path d="M327 520 Q323 362 314 233 Q329 372 338 520Z" fill="#6fa11d" opacity="0.28"/><path d="M96 520 Q75 312 32 142 Q81 322 110 520Z" fill="#6fa11d" opacity="0.18"/><path d="M335 520 Q324 404 300 308 Q337 414 359 520Z" fill="#e8ae1e" opacity="0.33"/><path d="M372 520 Q379 300 390 120 Q385 310 384 520Z" fill="#afca0b" opacity="0.31"/><path d="M365 520 Q363 351 355 213 Q373 361 386 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M187 520 Q180 354 163 218 Q190 364 207 520Z" fill="#0b6064" opacity="0.23"/><path d="M234 520 Q249 300 274 119 Q258 310 251 520Z" fill="#6fa11d" opacity="0.10"/><path d="M344 520 Q372 381 417 267 Q385 391 371 520Z" fill="#6fa11d" opacity="0.31"/><path d="M107 520 Q140 416 198 331 Q147 426 122 520Z" fill="#2f8a52" opacity="0.20"/><path d="M385 520 Q364 375 322 256 Q369 385 396 520Z" fill="#2f8a52" opacity="0.18"/></svg></figure><div><b>Saya membeli untuk pribadi</b><span class="d">Botol kecil, siap pakai. Dikirim ke seluruh Indonesia.</span></div><span class="go"><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a>
+</div></div>
+</section>
+
+<section class="proof" aria-label="Bukti"><div class="wrap proof-grid">
+<div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg><b>Asal otentik</b><p>Pemasok terdaftar, dengan desa dan wilayah tercatat.</p></div>
+<div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0c0-4.2 6-10.6 6-10.6z"/><path d="M9.2 14.2l2 2 3.6-3.8"/></svg><b>Mutu konsisten</b><p>Quality control per batch dan spesifikasi untuk tiap produk.</p></div>
+<div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h7.5L19 8v12.5H7z"/><path d="M14 3.5V8.5h5M10 13h6M10 16.5h6"/></svg><b>Dokumentasi relevan</b><p>Spesifikasi, SDS/MSDS, dan sertifikasi halal. COA per batch.</p></div>
+<div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5L12 4l8.5 4.5v7L12 20l-8.5-4.5z"/><path d="M3.5 8.5L12 13l8.5-4.5M12 13v7"/></svg><b>Pasokan fleksibel</b><p>Dari sampel evaluasi 2 ml hingga volume industri.</p></div>
+</div></section>
+
+<section class="pitch" id="about"><div class="wrap pitch-grid">
+<div class="rv"><p class="pitch-short">Dari asal-usul Indonesia ke industri global, DDistillers menghadirkan <em>bahan alami yang dapat ditelusuri</em> dengan mutu konsisten, dokumentasi relevan, dan pasokan fleksibel.</p>
+<ul class="pillars"><li>Integritas asal</li><li>Disiplin proses</li><li>Keandalan pasar</li></ul></div>
+<div class="pitch-long measure rv"><p>Melalui jaringan petani, pencari bahan baku hutan, penyuling, dan pekerja produksi yang mapan, kami menyediakan minyak atsiri, minyak pembawa, hidrosol, isolat alami, minyak absolut, oleoresin, minyak RBD, dan bahan alami spesialis pilihan.</p>
+<p>Pendekatan kami memadukan transparansi asal, quality control per batch, dokumentasi teknis yang relevan, kuantitas fleksibel, dan kemitraan pasokan yang terhubung dengan pasar, dari sampel evaluasi hingga volume industri.</p>
+<p class="muted" style="font-size:.95rem">DDistillers adalah merek bahan baku dari PT. Syailendra Bumi Investama (SBI), bagian dari Syailendra Group.</p></div>
+</div></section>
+
+<section class="sec sec-oat" id="portfolio"><div class="wrap">
+<div class="sec-head"><h2>Sembilan kategori, masing-masing ditentukan oleh identitas dan spesifikasinya.</h2>
+<p>Bahan alami otentik yang dipasok sesuai identitas, proses, asal, dan spesifikasi produk yang jelas. Minyak atsiri dipasok sebagai minyak 100% alami, mentah, dan tidak dimodifikasi kecuali spesifikasi menyatakan lain.</p></div>
+<div class="cats"><article class="cat rv" style="--c:#d9722e"><div><h3>Minyak Atsiri</h3><p class="what">Minyak aromatik 100% alami, mentah dan tidak dimodifikasi.</p></div><div><ul class="items"><li>Nilam Sulawesi</li><li>Sereh Wangi Jawa</li><li>Daun Cengkeh</li><li>Biji Pala</li><li>Kayu Putih</li></ul><p class="use">Fragrance · Kosmetik · Aromaterapi</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Nilam Sulawesi" aria-label="Jelajahi kategori: Minyak Atsiri">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#3d4745"><div><h3>Minyak Pembawa</h3><p class="what">Minyak dasar cold-press untuk perawatan kulit, pijat, dan formulasi.</p></div><div><ul class="items"><li>Biji Kelor</li><li>Virgin Coconut Oil</li><li>Kemiri</li></ul><p class="use">Skincare · Pijat · Formulasi</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Biji Kelor" aria-label="Jelajahi kategori: Minyak Pembawa">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#2f9aa3"><div><h3>Hidrosol</h3><p class="what">Air aromatik hasil penyulingan uap.</p></div><div><ul class="items"><li>Mawar</li><li>Sereh Wangi</li><li>Kayu Putih</li></ul><p class="use">Mist · Toner · Wellness</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Mawar" aria-label="Jelajahi kategori: Hidrosol">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#7b5cb8"><div><h3>Isolat Alami</h3><p class="what">Molekul alami tunggal untuk flavour, fragrance, dan perawatan.</p></div><div><ul class="items"><li>Citronellal</li><li>Eugenol</li><li>Geraniol</li></ul><p class="use">Flavour · Fragrance · Perawatan diri</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Citronellal" aria-label="Jelajahi kategori: Isolat Alami">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#c63f72"><div><h3>Minyak Absolut</h3><p class="what">Absolut hasil ekstraksi pelarut dengan karakter bunga yang otentik.</p></div><div><ul class="items"><li>Melati</li><li>Kamboja</li><li>Kenanga</li></ul><p class="use">Parfum · Perfumery</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Melati" aria-label="Jelajahi kategori: Minyak Absolut">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#a3462c"><div><h3>Oleoresin</h3><p class="what">Ekstrak flavour dan warna yang terkonsentrasi.</p></div><div><ul class="items"><li>Pala</li><li>Cengkeh</li><li>Jahe</li></ul><p class="use">Pangan &amp; flavour · Herbal</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Pala" aria-label="Jelajahi kategori: Oleoresin">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#8d7a5e"><div><h3>Minyak RBD</h3><p class="what">Minyak refined, bleached, dan deodorised dengan spesifikasi stabil.</p></div><div><ul class="items"><li>RBD Kelapa</li></ul><p class="use">Sabun · Home care</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="RBD Kelapa" aria-label="Jelajahi kategori: Minyak RBD">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#1f8a6d"><div><h3>Ekstrak CO₂</h3><p class="what">Ekstrak superkritis yang menjaga profil botani secara utuh.</p></div><div><ul class="items"><li>Jahe CO₂</li><li>Kunyit CO₂</li></ul><p class="use">Herbal · Perawatan premium</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Jahe CO₂" aria-label="Jelajahi kategori: Ekstrak CO₂">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article><article class="cat rv" style="--c:#e8ae1e"><div><h3>Bahan Alami Spesialis</h3><p class="what">Botani asal langka, dikonfirmasi satu per satu sesuai ketersediaan.</p></div><div><ul class="items"><li>Cendana Kupang</li><li>Kulit Massoia</li><li>Daun Jeruk Purut</li></ul><p class="use">Terbatas · Dikutip per batch</p></div><a class="tlink" href="#rfq" data-intent="quote" data-product="Cendana Kupang" aria-label="Jelajahi kategori: Bahan Alami Spesialis">Jelajahi kategori<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></article></div>
+<aside class="retail rv" aria-labelledby="retail-h"><div><h3 id="retail-h">Membeli untuk pribadi atau usaha rumahan?</h3><p>Botol kecil dan produk alami siap pakai tersedia di toko online kami serta di Shopee dan Tokopedia, dikirim ke seluruh Indonesia.</p></div>
+<div class="acts"><a class="btn btn-primary" href="https://www.ddistillers.com/shop/">Belanja ritel</a><a class="btn btn-line" href="https://shopee.co.id/">Shopee</a><a class="btn btn-line" href="https://www.tokopedia.com/">Tokopedia</a></div>
+<p class="note">Memproduksi untuk dijual? Tanyakan kemasan 100 ml hingga 5 kg untuk usaha kecil. <a class="tlink" href="#rfq" data-intent="quote">Minta penawaran</a></p></aside>
+</div></section>
+
+<section class="sec dark" id="featured"><div class="wrap">
+<div class="sec-head"><h2>Sepuluh bahan yang paling sering dicari pembeli.</h2>
+<p>Minyak volume besar ditampilkan dalam kemasan yang lazim diperdagangkan. Bahan spesialis dan asal langka ditampilkan dalam ukuran yang benar-benar tersedia.</p></div>
+<table class="ledger"><caption class="sr">Bahan Indonesia unggulan</caption>
+<thead><tr><th scope="col">Bahan</th><th scope="col">Asal</th><th scope="col">Pasokan</th><th scope="col">Kemasan umum</th><th scope="col"><span class="sr">Aksi</span></th></tr></thead>
+<tbody><tr><td data-l="Bahan"><span class="nm">Nilam Sulawesi</span><span class="lat">Pogostemon cablin</span></td><td data-l="Asal">Sulawesi</td><td data-l="Pasokan"><span class="tier tier-hv">Volume besar</span></td><td data-l="Kemasan umum">1 L aluminium/SS · 5–20 kg · drum</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Patchouli Sulawesi">Minta sampel<span class="sr"> — Nilam Sulawesi</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Sereh Wangi Jawa</span><span class="lat">Cymbopogon winterianus</span></td><td data-l="Asal">Jawa · Brebes</td><td data-l="Pasokan"><span class="tier tier-hv">Volume besar</span></td><td data-l="Kemasan umum">1 L aluminium/SS · 5–20 kg · drum</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Java Citronella">Minta sampel<span class="sr"> — Sereh Wangi Jawa</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Kayu Putih</span><span class="lat">Melaleuca cajuputi</span></td><td data-l="Asal">Maluku</td><td data-l="Pasokan"><span class="tier tier-hv">Volume besar</span></td><td data-l="Kemasan umum">1 L aluminium/SS · 5–20 kg · drum</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Cajuput">Minta sampel<span class="sr"> — Kayu Putih</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Daun Cengkeh</span><span class="lat">Syzygium aromaticum</span></td><td data-l="Asal">Jawa · Sulawesi</td><td data-l="Pasokan"><span class="tier tier-hv">Volume besar</span></td><td data-l="Kemasan umum">1 L aluminium/SS · 5–20 kg · drum</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Clove Leaf">Minta sampel<span class="sr"> — Daun Cengkeh</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Biji Pala</span><span class="lat">Myristica fragrans</span></td><td data-l="Asal">Banda · Maluku</td><td data-l="Pasokan"><span class="tier tier-hv">Volume besar</span></td><td data-l="Kemasan umum">1 L aluminium/SS · 5–20 kg · drum</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Nutmeg Seed">Minta sampel<span class="sr"> — Biji Pala</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Biji Kelor</span><span class="lat">Moringa oleifera</span></td><td data-l="Asal">NTT · Sulawesi</td><td data-l="Pasokan"><span class="tier tier-sp">Spesialis</span></td><td data-l="Kemasan umum">100–500 ml · 1 L jika tersedia</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Moringa Seed">Minta sampel<span class="sr"> — Biji Kelor</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Virgin Coconut Oil</span><span class="lat">Cocos nucifera</span></td><td data-l="Asal">Seluruh Indonesia</td><td data-l="Pasokan"><span class="tier tier-sp">Spesialis</span></td><td data-l="Kemasan umum">100–500 ml · 1 L · RBD juga tersedia</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Virgin Coconut Oil">Minta sampel<span class="sr"> — Virgin Coconut Oil</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Daun Jeruk Purut</span><span class="lat">Citrus hystrix</span></td><td data-l="Asal">Jawa</td><td data-l="Pasokan"><span class="tier tier-sp">Spesialis</span></td><td data-l="Kemasan umum">100–500 ml · 1 L jika tersedia</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Kaffir Lime Leaf">Minta sampel<span class="sr"> — Daun Jeruk Purut</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Kulit Massoia</span><span class="lat">Cryptocarya massoy</span></td><td data-l="Asal">Papua</td><td data-l="Pasokan"><span class="tier tier-rare">Asal langka</span></td><td data-l="Kemasan umum">Ukuran yang tersedia, dikonfirmasi per batch</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Massoia Bark">Minta sampel<span class="sr"> — Kulit Massoia</span></a></td></tr><tr><td data-l="Bahan"><span class="nm">Cendana Kupang</span><span class="lat">Santalum album</span></td><td data-l="Asal">Kupang · NTT</td><td data-l="Pasokan"><span class="tier tier-rare">Asal langka</span></td><td data-l="Kemasan umum">Ukuran yang tersedia, dikonfirmasi per batch</td><td><a class="tlink" href="#rfq" data-intent="sample" data-product="Sandalwood Kupang">Minta sampel<span class="sr"> — Cendana Kupang</span></a></td></tr></tbody></table>
+<p class="ledger-note">Bahan spesialis dan asal langka tersedia dalam jumlah yang lebih terbatas dan dikonfirmasi satu per satu. Kuantitas bergantung pada musim, spesifikasi, dan stok.</p>
+</div></section>
+
+<section class="sec" id="why"><div class="wrap">
+<div class="sec-head"><h2>Mengapa pembeli memilih DDistillers</h2>
+<p>Bukti yang dapat Anda periksa sebelum memesan.</p></div>
+<div class="why"><div class="why-item rv"><h3>Asal Indonesia yang otentik</h3><p>Akses langsung ke bahan alami dari beragam wilayah botani Indonesia.</p></div><div class="why-item rv"><h3>Pasokan fleksibel, dari sampel hingga skala industri</h3><p>Kuantitas evaluasi mulai 2 ml, lalu volume usaha kecil, profesional, dan industri sesuai ketersediaan.</p></div><div class="why-item rv"><h3>Dukungan mutu dan dokumentasi</h3><p>Spesifikasi produk, SDS/MSDS, sertifikasi halal, COA per batch, dan GC/MS atas permintaan.</p></div><div class="why-item rv"><h3>Pasokan terlacak dan terkontrol per batch</h3><p>Pemasok, asal, penyulingan, QC, batch, kemasan, dan pengiriman tercatat sepanjang proses.</p></div><div class="why-item rv"><h3>Portofolio bahan alami yang luas</h3><p>Sembilan kategori, dari minyak atsiri hingga ekstrak CO₂ dan bahan spesialis.</p></div><div class="why-item rv"><h3>Jaringan pasokan Indonesia yang mapan</h3><p>2.300+ petani, ±100 pencari bahan baku, dan ±460 penyuling dan pekerja di 230 titik penyulingan.</p></div><div class="why-item rv"><h3>Kemitraan pemasok yang terhubung dengan pasar</h3><p>Mekanisme harga yang disepakati, pembayaran di muka atau pembiayaan bahan baku bila berlaku, dan pembayaran cepat setelah pengiriman.</p></div><div class="why-item rv"><h3>Pertumbuhan yang bertanggung jawab dan sirkular</h3><p>Rehabilitasi lahan, budidaya aromatik yang tangguh, pemanfaatan biomassa, dan dukungan pendidikan.</p></div></div>
+<p class="why-note">Nilai yang kompetitif, didukung sumber langsung, kuantitas fleksibel, dan jaringan pasokan yang mapan.</p>
+</div></section>
+
+<section class="sec dark" id="supply"><div class="wrap">
+<div class="sec-head"><h2>Mulai dari 2 ml. Tingkatkan hingga pasokan industri.</h2>
+<p>Bahan yang sama, dalam kuantitas yang sesuai tahap Anda. Evaluasi dahulu, lalu naik seiring produk Anda berkembang.</p></div>
+<div class="ladder">
+<div class="rung"><div class="who"><b>Evaluasi</b><span>Uji identitas, aroma, dan spesifikasi</span></div><div class="bar"><i style="--w:24%"><span>mulai 2 ml</span></i></div></div>
+<div class="rung"><div class="who"><b>Usaha kecil</b><span>Produksi awal dan uji OEM</span></div><div class="bar"><i style="--w:48%"><span>100 ml – 5 kg</span></i></div></div>
+<div class="rung"><div class="who"><b>Profesional</b><span>Batch terkonsolidasi dengan QC dan dokumen</span></div><div class="bar"><i style="--w:74%"><span>20 kg hingga drum</span></i></div></div>
+<div class="rung"><div class="who"><b>Industri</b><span>Minyak volume besar pilihan</span></div><div class="bar"><i style="--w:100%"><span>hingga 20 MT per bulan*</span></i></div></div>
+</div>
+<div class="cap"><div><h3>Kapasitas jaringan potensial, dinyatakan apa adanya</h3></div>
+<div><p>* Jaringan pasokan kami memiliki potensi kapasitas hingga 20 MT per bulan untuk minyak volume besar pilihan seperti sereh wangi, nilam, daun cengkeh, biji pala, dan kayu putih, bergantung pada musim, spesifikasi, ketersediaan stok, dan jadwal pesanan. Bahan spesialis dan asal langka tersedia dalam jumlah lebih terbatas dan dikonfirmasi satu per satu.</p>
+<div class="acts"><a class="btn btn-gold" href="#rfq" data-intent="quote">Cek ketersediaan</a><a class="btn btn-line" href="#rfq" data-intent="sample">Minta sampel</a></div></div></div>
+</div></section>
+
+<section class="sec" id="traceability"><div class="wrap tq">
+<div><h2>Asal yang dapat ditelusuri. Pasokan terkontrol per batch.</h2>
+<p class="intro measure">Kami menerapkan keterlacakan operasional mulai dari pemasok terdaftar dan wilayah asal, melalui penyulingan, quality control, konsolidasi batch, pengemasan, hingga pengiriman.</p>
+<ol class="trace"><li>Pemasok terdaftar<small>Identitas tercatat</small></li><li>Desa dan wilayah asal</li><li>Kebun atau titik pengumpulan</li><li>Lokasi dan tanggal penyulingan</li><li>Nomor batch dan hasil QC</li><li>Catatan blending atau konsolidasi</li><li>Kemasan dan tanggal pengiriman</li></ol>
+<p class="callout">Kami sedang menambahkan pencatatan tanggal panen dan pengumpulan, serta mengembangkan Digital Product Passport untuk menghubungkan seluruh catatan menjadi jejak bukti yang dapat diverifikasi.</p></div>
+<div id="quality"><h2>Dokumen teknis dan kepatuhan yang relevan.</h2>
+<p class="intro measure">Dokumentasi publik mencakup spesifikasi, SDS/MSDS, dan sertifikasi halal. Pemeriksaan organoleptik dan fisik internal didukung uji laboratorium eksternal bila diperlukan.</p>
+<ul class="docs"><li><b>Spesifikasi produk</b><span>Terbuka untuk tiap produk: identitas, proses, asal, dan batas mutu.</span></li><li><b>SDS / MSDS</b><span>Informasi keselamatan dan penanganan untuk pembeli industri.</span></li><li><b>Sertifikasi halal<span class=halal>302 varian</span></b><span>Varian produk bersertifikat halal yang aktif.</span></li><li><b>COA per batch</b><span>Diberikan bersama pesanan terkonfirmasi, spesifik untuk batch yang dikirim.</span></li><li><b>GC/MS</b><span>Dapat diatur atas permintaan. Mungkin ada biaya tambahan.</span></li><li><b>Uji organoleptik dan fisik</b><span>Pemeriksaan internal, didukung uji laboratorium eksternal bila diperlukan.</span></li></ul>
+<p style="margin-top:1.4rem"><a class="tlink" href="#rfq" data-intent="docs">Minta dokumen untuk produk<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p></div>
+</div></section>
+
+<section class="sec dark" id="network"><div class="wrap net">
+<div class="net-big rv"><h2>Jaringan pasokan dan komersial yang luas.</h2><p>Dibangun bersama petani, pengumpul, dan penyuling di seluruh Indonesia, serta pembeli yang mereka pasok.</p>
+<p class="fine">Angka menggambarkan jaringan pasokan dan komersial DDistillers yang diperluas. Volume dan aktivitas produksi bervariasi menurut jenis botani, musim, spesifikasi, ketersediaan stok, dan permintaan pasar.</p></div>
+<dl class="stats"><div><dt>230</dt><dd>Titik penyulingan aktif</dd></div><div><dt>2.300+</dt><dd>Petani</dd></div><div><dt>±100</dt><dd>Pencari bahan baku hutan</dd></div><div><dt>±460</dt><dd>Penyuling dan pekerja penyulingan</dd></div><div><dt>302</dt><dd>Varian produk bersertifikat halal aktif</dd></div><div><dt>11</dt><dd>Pasar ekspor terjangkau</dd></div><div><dt>20 MT</dt><dd>Per bulan, potensi kapasitas jaringan untuk minyak volume besar pilihan</dd></div><div><dt>7.000+</dt><dd>Pelanggan terdaftar</dd></div></dl>
+</div></section>
+
+<section class="sec" id="applications"><div class="wrap">
+<div class="sec-head"><h2>Cari berdasarkan industri Anda, bukan hanya jenis minyak.</h2>
+<p>Pembeli biasanya memulai dari produk yang sedang dibuat. Pilih aplikasi Anda dan sampaikan kebutuhannya.</p></div>
+<ul class="apps"><li class="rv"><a href="#rfq" data-intent="quote"><b>Kosmetik &amp; Perawatan Diri</b><span>Spesifikasi stabil, pasangan minyak pembawa dan atsiri.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Fragrance &amp; Perfumery</b><span>Nilam, cendana, massoia, dan kenanga.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Aromaterapi &amp; Wellness</b><span>Minyak mentah dan hidrosol dengan asal yang jelas.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Sabun &amp; Home Care</b><span>Sereh wangi, kayu putih, dan basis RBD untuk lini volume.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Pangan &amp; Flavour</b><span>Oleoresin dan isolat.<br><span class=cond>Jika produk dan regulasi setempat mengizinkan</span></span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Herbal &amp; Produk Alami</b><span>Kelor, virgin coconut oil, jahe CO₂.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Distribusi Bahan Baku</b><span>Batch terkonsolidasi dan restock yang dapat diandalkan.</span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li><li class="rv"><a href="#rfq" data-intent="quote"><b>Private Label / OEM</b><span>Tanyakan kesiapan terkini kepada tim ekspor.<br><span class=cond>Tersedia setelah fasilitas siap</span></span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></li></ul>
+</div></section>
+
+<section class="sec sec-oat" id="impact"><div class="wrap">
+<div class="rg-top"><div><h2>Mengubah Kekayaan Alam Indonesia menjadi Kehidupan yang Lebih Baik</h2>
+<p class="lead">Kami percaya bahwa kekayaan alam Indonesia harus menciptakan nilai bukan hanya bagi industri dan pemilik merek, tetapi juga bagi petani, pencari bahan baku hutan, penyuling, pekerja, keluarga, dan bentang alam di balik setiap bahan alami.</p>
+<div class="rg-acts"><a class="btn btn-primary" href="#impact-programs">Lihat dampak kami</a></div></div>
+<div><h3 style="font-size:clamp(1.4rem,2.4vw,2rem)">Pertumbuhan bisnis yang menguatkan kehidupan</h3>
+<p class="muted" style="margin-top:.8rem">Pertumbuhan komersial harus menciptakan nilai melampaui transaksi. Melalui pengembangan lahan produktif, pelatihan pemasok, pemanfaatan sirkular biomassa pascasuling, dan Beasiswa Kehidupan, kami berupaya menguatkan manusia dan bentang alam di balik bahan alami kami.</p></div></div>
+<div class="progs" id="impact-programs"><article class="prog rv"><figure class="ph " style="--img:url(assets/photos/rg-brebes.jpg)" role="img" aria-label="Kebun sereh wangi di Brebes"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g40" cx="0.3" cy="0.3" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g40)"/><path d="M174 520 Q149 305 98 129 Q156 315 189 520Z" fill="#6fa11d" opacity="0.33"/><path d="M28 520 Q56 375 105 256 Q65 385 45 520Z" fill="#6fa11d" opacity="0.11"/><path d="M-7 520 Q13 394 43 292 Q25 404 19 520Z" fill="#2f8a52" opacity="0.11"/><path d="M106 520 Q101 388 86 280 Q113 398 130 520Z" fill="#2f8a52" opacity="0.26"/><path d="M356 520 Q386 408 437 317 Q399 418 381 520Z" fill="#0b6064" opacity="0.18"/><path d="M72 520 Q55 401 19 303 Q63 411 88 520Z" fill="#e8ae1e" opacity="0.30"/><path d="M316 520 Q326 400 341 302 Q335 410 335 520Z" fill="#6fa11d" opacity="0.22"/><path d="M231 520 Q239 341 252 194 Q245 351 243 520Z" fill="#afca0b" opacity="0.25"/><path d="M55 520 Q57 389 56 282 Q66 399 73 520Z" fill="#0b6064" opacity="0.25"/><path d="M240 520 Q269 361 316 231 Q282 371 267 520Z" fill="#6fa11d" opacity="0.34"/><path d="M2 520 Q-16 416 -53 331 Q-7 426 19 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M22 520 Q5 324 -28 164 Q11 334 33 520Z" fill="#6fa11d" opacity="0.22"/><path d="M372 520 Q394 363 432 234 Q401 373 385 520Z" fill="#0b6064" opacity="0.14"/><path d="M263 520 Q259 398 246 299 Q271 408 287 520Z" fill="#6fa11d" opacity="0.11"/><path d="M-7 520 Q-19 354 -47 219 Q-8 364 16 520Z" fill="#0b6064" opacity="0.34"/><path d="M104 520 Q129 388 170 280 Q141 398 128 520Z" fill="#afca0b" opacity="0.33"/><path d="M331 520 Q316 336 282 186 Q328 346 355 520Z" fill="#0b6064" opacity="0.11"/><path d="M143 520 Q144 333 140 179 Q153 343 163 520Z" fill="#2f8a52" opacity="0.11"/><path d="M197 520 Q188 343 165 199 Q199 353 220 520Z" fill="#2f8a52" opacity="0.23"/><path d="M379 520 Q354 343 305 199 Q363 353 396 520Z" fill="#afca0b" opacity="0.27"/><path d="M-18 520 Q16 353 73 216 Q30 363 10 520Z" fill="#0b6064" opacity="0.17"/><path d="M394 520 Q380 399 348 300 Q390 409 415 520Z" fill="#0b6064" opacity="0.10"/><path d="M307 520 Q318 377 335 259 Q327 387 326 520Z" fill="#6fa11d" opacity="0.26"/><path d="M100 520 Q89 357 64 224 Q98 367 118 520Z" fill="#e8ae1e" opacity="0.22"/><path d="M72 520 Q70 342 62 196 Q80 352 92 520Z" fill="#e8ae1e" opacity="0.32"/><path d="M383 520 Q385 311 386 141 Q392 321 397 520Z" fill="#6fa11d" opacity="0.30"/><path d="M382 520 Q388 364 396 236 Q395 374 396 520Z" fill="#afca0b" opacity="0.24"/><path d="M246 520 Q276 303 328 125 Q288 313 269 520Z" fill="#2f8a52" opacity="0.13"/><path d="M412 520 Q434 363 472 235 Q439 373 422 520Z" fill="#afca0b" opacity="0.33"/><path d="M301 520 Q300 399 292 301 Q310 409 322 520Z" fill="#6fa11d" opacity="0.27"/><path d="M160 520 Q191 409 247 318 Q199 419 175 520Z" fill="#e8ae1e" opacity="0.10"/><path d="M131 520 Q121 403 95 308 Q134 413 157 520Z" fill="#afca0b" opacity="0.19"/><path d="M235 520 Q235 417 232 332 Q242 427 250 520Z" fill="#2f8a52" opacity="0.28"/><path d="M402 520 Q416 406 437 312 Q426 416 423 520Z" fill="#6fa11d" opacity="0.16"/><path d="M238 520 Q259 355 294 221 Q268 365 256 520Z" fill="#afca0b" opacity="0.15"/><path d="M28 520 Q7 350 -35 211 Q14 360 41 520Z" fill="#e8ae1e" opacity="0.25"/><path d="M104 520 Q92 310 67 139 Q101 320 122 520Z" fill="#6fa11d" opacity="0.27"/><path d="M187 520 Q163 317 116 151 Q168 327 198 520Z" fill="#0b6064" opacity="0.13"/><path d="M393 520 Q401 367 413 241 Q408 377 406 520Z" fill="#e8ae1e" opacity="0.18"/><path d="M25 520 Q28 299 27 118 Q41 309 51 520Z" fill="#0b6064" opacity="0.11"/><path d="M310 520 Q329 404 359 310 Q337 414 326 520Z" fill="#2f8a52" opacity="0.20"/><path d="M293 520 Q301 358 312 226 Q310 368 311 520Z" fill="#6fa11d" opacity="0.19"/><path d="M346 520 Q380 309 440 137 Q391 319 367 520Z" fill="#e8ae1e" opacity="0.18"/><path d="M48 520 Q38 306 14 132 Q47 316 68 520Z" fill="#afca0b" opacity="0.25"/><path d="M35 520 Q52 349 81 210 Q61 359 52 520Z" fill="#e8ae1e" opacity="0.17"/><path d="M413 520 Q421 398 434 299 Q427 408 424 520Z" fill="#afca0b" opacity="0.30"/></svg></figure><span class="stat">40 ha</span><h3>Lahan aromatik yang tangguh</h3><p>Sekitar 40 hektare lahan marginal di Brebes dikembangkan untuk budidaya sereh wangi bersama lebih dari 100 petani.</p></article><article class="prog rv"><figure class="ph " style="--img:url(assets/photos/rg-training.jpg)" role="img" aria-label="Sesi pelatihan penyulingan"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g41" cx="0.5" cy="0.3" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g41)"/><path d="M134 520 Q120 391 88 285 Q133 401 161 520Z" fill="#0b6064" opacity="0.24"/><path d="M213 520 Q233 370 265 248 Q243 380 234 520Z" fill="#afca0b" opacity="0.29"/><path d="M162 520 Q146 401 110 303 Q157 411 185 520Z" fill="#2f8a52" opacity="0.14"/><path d="M228 520 Q238 405 253 311 Q247 415 246 520Z" fill="#6fa11d" opacity="0.17"/><path d="M2 520 Q5 373 8 254 Q15 383 22 520Z" fill="#afca0b" opacity="0.10"/><path d="M376 520 Q409 330 468 175 Q415 340 387 520Z" fill="#2f8a52" opacity="0.18"/><path d="M-21 520 Q-19 345 -20 201 Q-7 355 4 520Z" fill="#e8ae1e" opacity="0.11"/><path d="M33 520 Q33 333 27 180 Q44 343 55 520Z" fill="#e8ae1e" opacity="0.22"/><path d="M68 520 Q48 410 5 319 Q62 420 95 520Z" fill="#2f8a52" opacity="0.20"/><path d="M297 520 Q326 350 376 210 Q337 360 318 520Z" fill="#6fa11d" opacity="0.18"/><path d="M324 520 Q343 326 375 168 Q355 336 346 520Z" fill="#afca0b" opacity="0.30"/><path d="M405 520 Q435 328 485 171 Q443 338 423 520Z" fill="#afca0b" opacity="0.27"/><path d="M234 520 Q263 366 311 240 Q277 376 262 520Z" fill="#e8ae1e" opacity="0.16"/><path d="M128 520 Q148 360 180 230 Q160 370 152 520Z" fill="#0b6064" opacity="0.12"/><path d="M210 520 Q199 298 173 117 Q207 308 227 520Z" fill="#2f8a52" opacity="0.27"/><path d="M136 520 Q157 304 192 128 Q169 314 159 520Z" fill="#6fa11d" opacity="0.15"/><path d="M67 520 Q69 391 68 286 Q76 401 81 520Z" fill="#2f8a52" opacity="0.34"/><path d="M222 520 Q215 401 199 303 Q222 411 237 520Z" fill="#afca0b" opacity="0.26"/><path d="M335 520 Q354 362 385 233 Q360 372 349 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M402 520 Q425 303 465 126 Q430 313 412 520Z" fill="#6fa11d" opacity="0.24"/><path d="M254 520 Q267 353 288 217 Q274 363 267 520Z" fill="#afca0b" opacity="0.27"/><path d="M-8 520 Q7 333 33 180 Q14 343 5 520Z" fill="#0b6064" opacity="0.20"/><path d="M98 520 Q94 387 83 278 Q101 397 112 520Z" fill="#0b6064" opacity="0.13"/><path d="M244 520 Q243 366 236 240 Q252 376 263 520Z" fill="#afca0b" opacity="0.30"/><path d="M193 520 Q180 343 152 197 Q187 353 207 520Z" fill="#afca0b" opacity="0.21"/><path d="M80 520 Q89 359 101 227 Q97 369 97 520Z" fill="#2f8a52" opacity="0.25"/><path d="M-20 520 Q-34 321 -63 158 Q-21 331 4 520Z" fill="#0b6064" opacity="0.18"/><path d="M229 520 Q201 365 148 237 Q208 375 242 520Z" fill="#e8ae1e" opacity="0.25"/><path d="M40 520 Q45 335 51 183 Q50 345 51 520Z" fill="#0b6064" opacity="0.30"/><path d="M246 520 Q252 347 258 206 Q259 357 261 520Z" fill="#afca0b" opacity="0.27"/><path d="M202 520 Q219 344 246 199 Q228 354 221 520Z" fill="#afca0b" opacity="0.24"/><path d="M52 520 Q57 397 61 297 Q68 407 75 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M-25 520 Q-31 380 -48 266 Q-19 390 -0 520Z" fill="#0b6064" opacity="0.23"/><path d="M262 520 Q261 322 252 159 Q273 332 287 520Z" fill="#0b6064" opacity="0.12"/><path d="M144 520 Q145 400 144 302 Q152 410 159 520Z" fill="#afca0b" opacity="0.32"/><path d="M343 520 Q372 379 423 264 Q380 389 359 520Z" fill="#6fa11d" opacity="0.30"/><path d="M-9 520 Q17 365 61 238 Q30 375 16 520Z" fill="#afca0b" opacity="0.13"/><path d="M370 520 Q362 294 342 109 Q374 304 395 520Z" fill="#0b6064" opacity="0.29"/><path d="M399 520 Q428 322 478 159 Q440 332 423 520Z" fill="#e8ae1e" opacity="0.29"/><path d="M183 520 Q200 388 226 279 Q210 398 203 520Z" fill="#6fa11d" opacity="0.17"/><path d="M366 520 Q392 389 434 281 Q403 399 390 520Z" fill="#6fa11d" opacity="0.23"/><path d="M333 520 Q326 379 307 263 Q339 389 359 520Z" fill="#0b6064" opacity="0.17"/><path d="M13 520 Q48 309 110 137 Q56 319 28 520Z" fill="#2f8a52" opacity="0.20"/><path d="M207 520 Q206 326 198 167 Q220 336 234 520Z" fill="#e8ae1e" opacity="0.19"/><path d="M237 520 Q235 333 230 181 Q242 343 251 520Z" fill="#afca0b" opacity="0.30"/><path d="M102 520 Q85 372 51 251 Q94 382 119 520Z" fill="#2f8a52" opacity="0.12"/></svg></figure><span class="stat">2018</span><h3>Pelatihan dan penguatan kapasitas</h3><p>Budidaya, penyulingan, pascasuling, produk hilir, dan produksi sirkular sejak 2018.</p></article><article class="prog rv"><figure class="ph " style="--img:url(assets/photos/rg-biomass.jpg)" role="img" aria-label="Biomassa pascasuling"><svg class="art" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><radialGradient id="g42" cx="0.7" cy="0.3" r=".75"><stop offset="0" stop-color="#e8ae1e" stop-opacity=".55"/><stop offset=".55" stop-color="#0b6064" stop-opacity=".25"/><stop offset="1" stop-color="#00373a" stop-opacity="0"/></radialGradient></defs><rect width="400" height="520" fill="#004e52"/><rect width="400" height="520" fill="url(#g42)"/><path d="M254 520 Q244 418 221 334 Q251 428 268 520Z" fill="#2f8a52" opacity="0.28"/><path d="M11 520 Q-15 365 -66 239 Q-8 375 25 520Z" fill="#afca0b" opacity="0.22"/><path d="M218 520 Q235 326 263 168 Q244 336 236 520Z" fill="#0b6064" opacity="0.21"/><path d="M325 520 Q350 420 391 338 Q361 430 347 520Z" fill="#6fa11d" opacity="0.18"/><path d="M66 520 Q45 320 3 157 Q54 330 83 520Z" fill="#0b6064" opacity="0.19"/><path d="M236 520 Q255 314 287 146 Q265 324 255 520Z" fill="#e8ae1e" opacity="0.33"/><path d="M2 520 Q16 382 38 270 Q29 392 28 520Z" fill="#6fa11d" opacity="0.19"/><path d="M282 520 Q269 415 241 329 Q277 425 298 520Z" fill="#6fa11d" opacity="0.12"/><path d="M349 520 Q352 371 353 249 Q365 381 374 520Z" fill="#0b6064" opacity="0.14"/><path d="M61 520 Q94 386 151 276 Q105 396 83 520Z" fill="#6fa11d" opacity="0.25"/><path d="M208 520 Q209 389 208 281 Q216 399 222 520Z" fill="#2f8a52" opacity="0.32"/><path d="M71 520 Q91 378 125 262 Q96 388 82 520Z" fill="#0b6064" opacity="0.30"/><path d="M146 520 Q177 412 231 324 Q188 422 167 520Z" fill="#6fa11d" opacity="0.27"/><path d="M259 520 Q290 369 343 245 Q299 379 278 520Z" fill="#6fa11d" opacity="0.16"/><path d="M299 520 Q319 350 352 211 Q328 360 317 520Z" fill="#0b6064" opacity="0.24"/><path d="M71 520 Q74 289 78 101 Q80 299 82 520Z" fill="#afca0b" opacity="0.11"/><path d="M37 520 Q53 400 80 302 Q64 410 58 520Z" fill="#2f8a52" opacity="0.19"/><path d="M406 520 Q442 351 503 213 Q454 361 431 520Z" fill="#afca0b" opacity="0.10"/><path d="M269 520 Q260 350 238 211 Q271 360 291 520Z" fill="#e8ae1e" opacity="0.13"/><path d="M38 520 Q58 421 90 339 Q69 431 61 520Z" fill="#6fa11d" opacity="0.33"/><path d="M191 520 Q205 407 226 314 Q218 417 216 520Z" fill="#6fa11d" opacity="0.22"/><path d="M35 520 Q44 320 54 157 Q56 330 59 520Z" fill="#afca0b" opacity="0.23"/><path d="M235 520 Q215 357 174 223 Q223 367 252 520Z" fill="#0b6064" opacity="0.34"/><path d="M80 520 Q87 389 97 282 Q92 399 91 520Z" fill="#afca0b" opacity="0.28"/><path d="M399 520 Q381 351 343 212 Q392 361 421 520Z" fill="#6fa11d" opacity="0.33"/><path d="M90 520 Q88 306 83 131 Q95 316 104 520Z" fill="#6fa11d" opacity="0.23"/><path d="M285 520 Q300 368 325 244 Q309 378 302 520Z" fill="#e8ae1e" opacity="0.32"/><path d="M23 520 Q18 391 4 286 Q28 401 44 520Z" fill="#6fa11d" opacity="0.16"/><path d="M-22 520 Q-47 328 -96 170 Q-42 338 -11 520Z" fill="#0b6064" opacity="0.11"/><path d="M4 520 Q18 390 42 283 Q25 400 18 520Z" fill="#2f8a52" opacity="0.13"/><path d="M225 520 Q227 389 229 282 Q236 399 242 520Z" fill="#e8ae1e" opacity="0.12"/><path d="M130 520 Q156 367 201 241 Q162 377 141 520Z" fill="#afca0b" opacity="0.26"/><path d="M1 520 Q23 325 61 165 Q29 335 13 520Z" fill="#2f8a52" opacity="0.15"/><path d="M170 520 Q160 365 138 239 Q167 375 185 520Z" fill="#e8ae1e" opacity="0.32"/><path d="M325 520 Q305 308 263 135 Q316 318 346 520Z" fill="#afca0b" opacity="0.23"/><path d="M400 520 Q425 299 469 118 Q432 309 413 520Z" fill="#6fa11d" opacity="0.22"/><path d="M355 520 Q337 302 300 123 Q342 312 365 520Z" fill="#e8ae1e" opacity="0.19"/><path d="M93 520 Q114 329 147 173 Q126 339 118 520Z" fill="#e8ae1e" opacity="0.26"/><path d="M38 520 Q73 382 132 269 Q83 392 58 520Z" fill="#0b6064" opacity="0.23"/><path d="M-8 520 Q-1 344 6 200 Q12 354 18 520Z" fill="#2f8a52" opacity="0.14"/><path d="M4 520 Q16 396 32 295 Q27 406 26 520Z" fill="#afca0b" opacity="0.16"/><path d="M389 520 Q397 346 409 203 Q402 356 400 520Z" fill="#2f8a52" opacity="0.12"/><path d="M218 520 Q208 379 186 264 Q219 389 240 520Z" fill="#0b6064" opacity="0.18"/><path d="M146 520 Q138 332 118 179 Q145 342 162 520Z" fill="#afca0b" opacity="0.28"/><path d="M-22 520 Q-15 339 -5 191 Q-9 349 -10 520Z" fill="#2f8a52" opacity="0.23"/><path d="M84 520 Q114 298 165 116 Q127 308 110 520Z" fill="#6fa11d" opacity="0.19"/></svg></figure><span class="stat">50+</span><h3>Menuju penyulingan tanpa limbah</h3><p>Lebih dari 50 penyuling mengolah biomassa pascasuling menjadi kompos, pakan fermentasi, dan wood pellet.</p></article><article class="prog prog-bk rv"><h3>Beasiswa Kehidupan</h3><p>Dukungan pendidikan bulanan bagi anak-anak keluarga akar rumput, dari PAUD hingga perguruan tinggi.</p><p style="margin-top:1rem"><a class="tlink" style="color:var(--green-deep);text-decoration-color:var(--green-deep)" href="#impact">Pelajari Beasiswa Kehidupan<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p></article></div>
+</div></section>
+
+<section class="sec" id="origins"><div class="wrap map">
+<div><h2 style="margin-bottom:1.5rem">Beragam asal. Satu sistem yang dapat ditelusuri.</h2>
+<div class="map-art rv"><svg viewBox="0 0 980 360" role="img" aria-labelledby="mapt"><title id="mapt">Indonesia origin map (illustrative)</title><path class="isl" d="M40.3 32.0 L84.7 40.1 L141.3 80.5 L205.9 125.0 L256.4 195.7 L252.4 262.3 L226.1 264.3 L175.6 226.0 L131.2 175.5 L104.9 114.9 L58.4 74.5Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M240.2 282.5 L272.6 266.4 L306.9 276.5 L347.3 284.5 L389.7 284.5 L426.1 302.7 L426.1 320.9 L357.4 312.8 L296.8 302.7 L246.3 286.6Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M317.0 114.9 L357.4 114.9 L397.8 84.6 L458.4 60.3 L498.8 58.3 L494.8 125.0 L515.0 135.1 L488.7 165.4 L468.5 215.9 L448.3 226.0 L418.0 213.8 L367.5 205.8 L337.2 201.7 L317.0 155.3 L315.0 135.1Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M539.2 120.9 L636.2 112.8 L640.2 122.9 L579.6 135.1 L605.9 163.3 L569.5 165.4 L595.8 205.8 L583.6 246.2 L559.4 215.9 L555.4 195.7 L529.1 215.9 L527.1 256.3 L537.2 258.3 L533.1 169.4 L517.0 141.1Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M761.4 161.3 L822.0 163.3 L852.3 211.8 L912.9 181.5 L963.4 197.7 L963.4 329.0 L912.9 310.8 L896.7 262.3 L832.1 230.0 L791.7 228.0 L795.7 197.7 L765.4 175.5Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M438.2 310.8 L519.0 312.8 L595.8 316.9 L589.7 324.9 L519.0 327.0 L438.2 322.9Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M609.9 351.2 L680.6 314.8 L680.6 331.0 L624.0 357.3Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M690.7 112.8 L712.9 114.9 L708.9 157.3 L694.7 153.2Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M700.8 205.8 L757.4 203.7 L753.3 215.9 L700.8 215.9Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><path class="isl" d="M662.4 209.8 L684.6 211.8 L680.6 223.9 L664.4 221.9Z" stroke="#fffdee" stroke-width="1.5" stroke-linejoin="round"/><g class="pin"><circle cx="563.4" cy="177.5" r="6.5"/><text x="553.4" y="163.5" text-anchor="end">Nilam · Sulawesi</text></g><g class="pin"><circle cx="319.0" cy="284.5" r="6.5"/><text x="317.0" y="312.5" text-anchor="middle">Sereh wangi · Brebes</text></g><g class="pin"><circle cx="672.5" cy="215.9" r="6.5"/><text x="662.5" y="199.9" text-anchor="end">Kayu putih · Maluku</text></g><g class="pin"><circle cx="739.2" cy="236.1" r="6.5"/><text x="743.2" y="262.1" text-anchor="start">Pala · Banda</text></g><g class="pin"><circle cx="611.9" cy="351.2" r="6.5"/><text x="601.9" y="377.2" text-anchor="middle">Cendana · Kupang</text></g><g class="pin"><circle cx="902.8" cy="230.0" r="6.5"/><text x="892.8" y="216.0" text-anchor="middle">Massoia · Papua</text></g></svg></div>
+<p class="map-cap">Peta ilustrasi. Setiap batch terhubung ke pemasok, desa, lokasi penyulingan, dan tanggalnya.</p></div>
+<ul class="map-list"><li>Nilam<span>Pogostemon cablin · Sulawesi</span></li><li>Sereh Wangi Jawa<span>C. winterianus · Brebes</span></li><li>Kayu Putih<span>M. cajuputi · Maluku</span></li><li>Biji Pala<span>M. fragrans · Banda</span></li><li>Cendana<span>S. album · Kupang</span></li><li>Kulit Massoia<span>C. massoy · Papua</span></li></ul>
+</div></section>
+
+<section class="sec sec-oat" id="insights"><div class="wrap">
+<div class="sec-head"><h2>Jawaban pengadaan, sebelum Anda bertanya.</h2>
+<p>Ringkasan teknis singkat bagi pembeli yang perlu membandingkan pemasok dan menjelaskan pilihannya secara internal.</p></div>
+<div class="ins"><article class="brief rv"><div class="brief-art"><svg viewBox="0 0 400 250" aria-hidden="true"><rect width="400" height="250" fill="#004e52"/><circle cx="330" cy="40" r="120" fill="#0b6064" opacity=".6"/><g fill="none" stroke="#fffdee" stroke-width="2" opacity=".9"><rect x="120" y="40" width="160" height="200" rx="12"/><path d="M145 90h110M145 120h110M145 150h70"/><path d="M155 205l16 16 36-40" stroke="#e8ae1e" stroke-width="5"/></g></svg></div><div class="brief-body"><h3>COA vs GC/MS: apa yang perlu diminta</h3><p>COA batch menyertai pesanan terkonfirmasi dan GC/MS diatur atas permintaan. Apa yang dibuktikan masing-masing, dan apa yang tidak.</p><a class="tlink" href="#rfq" data-intent="docs">Minta ringkasan ini<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></article><article class="brief rv"><div class="brief-art"><svg viewBox="0 0 400 250" aria-hidden="true"><rect width="400" height="250" fill="#004e52"/><circle cx="330" cy="40" r="120" fill="#0b6064" opacity=".6"/><g fill="none" stroke="#fffdee" stroke-width="2"><path d="M110 200 Q150 60 190 200Z"/><path d="M215 200 Q255 60 295 200Z" stroke="#e8ae1e" stroke-width="4"/><circle cx="200" cy="225" r="0"/></g></svg></div><div class="brief-body"><h3>Atsiri, absolut, oleoresin, RBD</h3><p>“Murni” berarti hal berbeda untuk tiap produk. Prosesnya yang menentukan klaim, sehingga kami menyatakannya per kategori.</p><a class="tlink" href="#rfq" data-intent="docs">Minta ringkasan ini<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></article><article class="brief rv"><div class="brief-art"><svg viewBox="0 0 400 250" aria-hidden="true"><rect width="400" height="250" fill="#004e52"/><circle cx="330" cy="40" r="120" fill="#0b6064" opacity=".6"/><g fill="none" stroke="#fffdee" stroke-width="2"><path d="M70 210 Q130 60 200 130 T330 70"/></g><g fill="#e8ae1e"><circle cx="70" cy="210" r="7"/><circle cx="200" cy="130" r="7"/><circle cx="330" cy="70" r="7"/></g></svg></div><div class="brief-body"><h3>Merencanakan pasokan musiman dan lead time</h3><p>Musim, spesifikasi, stok, dan jadwal pesanan menentukan apa yang mungkin pada volume industri. Cara merencanakannya.</p><a class="tlink" href="#rfq" data-intent="docs">Minta ringkasan ini<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></article></div>
+</div></section>
+
+<section class="rfq dark" id="rfq"><div class="wrap rfq-grid">
+<div class="rfq-side"><h2>Mencari bahan alami Indonesia yang andal?</h2>
+<p>Sampaikan produk, spesifikasi, kuantitas, aplikasi, dan tujuan pengiriman yang Anda butuhkan. Tim kami akan menjawab dengan ketersediaan, dokumentasi, pilihan sampel, dan ketentuan komersial.</p>
+<ul class="rfq-after"><li>Email konfirmasi dan nomor inquiry Anda</li><li>Katalog kami</li><li>Perkiraan waktu respons</li><li>Kontak penjualan lokal atau ekspor Anda</li></ul>
+</div>
+<div class="panel">
+<div class="tabs" role="tablist" aria-label="Saya membeli sebagai"><button role="tab" id="tab-b2b" aria-selected="true" aria-controls="pane-b2b">Bisnis atau merek</button><button role="tab" id="tab-b2c" aria-selected="false" aria-controls="pane-b2c" tabindex="-1">Pribadi</button></div>
+
+<div id="pane-b2b" role="tabpanel" aria-labelledby="tab-b2b">
+<h3>Minta penawaran atau sampel</h3><p class="sub">Kolom bertanda * wajib diisi. Sisanya membantu kami menjawab dalam satu balasan.</p>
+<form id="rfq-form" novalidate>
+<fieldset class="chips"><legend>Apa yang Anda butuhkan?</legend>
+<label><input type="radio" name="intent" value="quote" checked><span>Penawaran</span></label>
+<label><input type="radio" name="intent" value="sample"><span>Sampel evaluasi</span></label>
+<label><input type="radio" name="intent" value="catalogue"><span>Katalog</span></label>
+<label><input type="radio" name="intent" value="docs"><span>Dokumen</span></label></fieldset>
+<div class="fgrid">
+<div class="fld"><label for="f-name">Nama <span class="req">*</span></label><input id="f-name" name="name" autocomplete="name" required><p class="err" id="e-name">Masukkan nama Anda.</p></div>
+<div class="fld"><label for="f-co">Perusahaan <span class="req">*</span></label><input id="f-co" name="company" autocomplete="organization" required><p class="err" id="e-co">Masukkan perusahaan atau merek Anda.</p></div>
+<div class="fld"><label for="f-country">Negara <span class="req">*</span></label><input id="f-country" name="country" autocomplete="country-name" required><p class="err" id="e-country">Masukkan negara tujuan.</p></div>
+<div class="fld"><label for="f-mail">Email bisnis <span class="req">*</span></label><input id="f-mail" name="email" type="email" autocomplete="email" placeholder="name@company.com" required><p class="err" id="e-mail">Masukkan email yang valid, misalnya nama@perusahaan.com.</p></div>
+<div class="fld"><label for="f-tel">WhatsApp / Telepon</label><input id="f-tel" name="phone" type="tel" autocomplete="tel" placeholder="+62 812 0000 0000"></div>
+<div class="fld"><label for="f-prod">Produk <span class="req">*</span></label><select id="f-prod" name="product" required><option value="">Pilih produk</option><option value="Patchouli Sulawesi">Nilam Sulawesi</option><option value="Java Citronella">Sereh Wangi Jawa</option><option value="Cajuput">Kayu Putih</option><option value="Clove Leaf">Daun Cengkeh</option><option value="Nutmeg Seed">Biji Pala</option><option value="Moringa Seed">Biji Kelor</option><option value="Virgin Coconut Oil">Virgin Coconut Oil</option><option value="Kaffir Lime Leaf">Daun Jeruk Purut</option><option value="Massoia Bark">Kulit Massoia</option><option value="Sandalwood Kupang">Cendana Kupang</option><option value="Other">Lainnya / tidak tercantum</option></select><p class="err" id="e-prod">Pilih produk, atau Lainnya.</p></div>
+<div class="fld"><label for="f-bot">Nama botani</label><input id="f-bot" name="botanical" placeholder="Jika diketahui"></div>
+<div class="fld"><label for="f-qty">Kuantitas <span class="req">*</span></label><input id="f-qty" name="quantity" placeholder="2 ml, 25 kg, 1 MT" required><p class="err" id="e-qty">Masukkan kuantitas, misalnya 25 kg.</p></div>
+<div class="fld"><label for="f-app">Aplikasi</label><select id="f-app" name="application"><option value="">Pilih</option><option>Kosmetik &amp; Perawatan Diri</option><option>Fragrance &amp; Perfumery</option><option>Aromaterapi &amp; Wellness</option><option>Sabun &amp; Home Care</option><option>Pangan &amp; Flavour</option><option>Herbal &amp; Produk Alami</option><option>Distribusi Bahan Baku</option><option>Private Label / OEM</option></select></div>
+<div class="fld"><label for="f-spec">Spesifikasi yang dibutuhkan</label><input id="f-spec" name="spec" placeholder="mis. patchouli alcohol di atas 30%"></div>
+<fieldset class="checks full"><legend>Dokumen yang dibutuhkan</legend>
+<label><input type="checkbox" name="docs" value="Specification" checked> Spesifikasi</label><label><input type="checkbox" name="docs" value="SDS" checked> SDS/MSDS</label><label><input type="checkbox" name="docs" value="COA"> COA batch</label><label><input type="checkbox" name="docs" value="Halal"> Halal</label><label><input type="checkbox" name="docs" value="GCMS"> GC/MS (biaya tambahan)</label></fieldset>
+<div class="fld"><label for="f-pack">Kemasan</label><select id="f-pack" name="packaging"><option value="">Pilih</option><option>Sampel evaluasi 2–15 ml</option><option>100–500 ml</option><option>1 L aluminium / SS</option><option>5–20 kg</option><option>Drum, industri</option></select></div>
+<div class="fld"><label for="f-dest">Tujuan</label><input id="f-dest" name="destination" placeholder="Pelabuhan atau kota"></div>
+<div class="fld"><label for="f-date">Target tanggal pengiriman</label><input id="f-date" name="date" type="date"></div>
+<div class="fld full"><label for="f-msg">Pesan</label><textarea id="f-msg" name="message" placeholder="Spesifikasi, aplikasi, jadwal"></textarea></div>
+</div>
+<div class="submit-row"><button class="btn btn-primary" type="submit" data-busy="Mengirim…">Kirim inquiry</button><p class="fine-p">Data Anda hanya kami gunakan untuk membalas soal ketersediaan, dokumen, sampel, dan ketentuan. <a class="tlink" href="https://www.ddistillers.com/id/kebijakan-privasi/">Kebijakan privasi</a></p></div>
+<div class="ok" id="rfq-ok" tabindex="-1" role="status"><b>Inquiry diterima.</b>Periksa kotak masuk Anda untuk konfirmasi, nomor inquiry, dan katalog kami.</div>
+<div class="ok" id="rfq-fail" tabindex="-1" role="alert" style="background:#fbe6df;color:#6b1f0f"><b>Inquiry Anda belum terkirim.</b>Data Anda masih ada di formulir. Coba lagi sebentar lagi.</div>
+</form></div>
+
+<div id="pane-b2c" role="tabpanel" aria-labelledby="tab-b2c" hidden>
+<h3>Belanja untuk pribadi</h3><p class="sub">Botol kecil dan produk alami siap pakai, dikirim ke seluruh Indonesia. Pilih tempat Anda lebih suka memesan.</p>
+<div class="shop-list"><a href="https://www.ddistillers.com/shop/"><span>Toko online DDistillers<small>Seluruh produk ritel</small></span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<a href="https://shopee.co.id/"><span>Shopee<small>Pesan lewat marketplace</small></span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<a href="https://www.tokopedia.com/"><span>Tokopedia<small>Pesan lewat marketplace</small></span><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
+<p class="fine-p" style="margin-top:1.4rem">Membeli lebih dari beberapa botol untuk produk yang Anda jual? <a class="tlink" href="#tab-b2b" data-audience="b2b">Kirim inquiry bisnis</a></p>
+</div>
+</div>
+</div></section>
+</main>
+
+<footer class="foot"><div class="wrap">
+<div class="foot-grid">
+<div><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjU1LjQzIDQxMy4xNCAyMTMuNDUgMzMuNTMiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iRERpc3RpbGxlcnMiPjxwYXRoIGZpbGw9IiNmZmZkZWUiIGQ9Ik0gNjguMjUzOTA2IDQzOS4yNDIxODggQyA3My42MTMyODEgNDM5LjI0MjE4OCA3Ni43MjY1NjIgNDM1LjM1MTU2MiA3Ni43MjY1NjIgNDMwLjgxNjQwNiBDIDc2LjcyNjU2MiA0MjYuMDk3NjU2IDczLjg5MDYyNSA0MjIuNDMzNTk0IDY4LjMwMDc4MSA0MjIuNDMzNTk0IEwgNjMuMzA4NTk0IDQyMi40MzM1OTQgTCA2My4zMDg1OTQgNDM5LjI0MjE4OCBaIE0gNTUuNDMzNTk0IDQxNS41NjY0MDYgTCA2OC4yNTM5MDYgNDE1LjU2NjQwNiBDIDc3Ljg3NSA0MTUuNTY2NDA2IDg0Ljc4OTA2MiA0MjEuMzM1OTM4IDg0Ljc4OTA2MiA0MzAuODE2NDA2IEMgODQuNzg5MDYyIDQ0MC4yOTY4NzUgNzcuODc1IDQ0Ni4xMTMyODEgNjguMzAwNzgxIDQ0Ni4xMTMyODEgTCA1NS40MzM1OTQgNDQ2LjExMzI4MSBaIE0gNTUuNDMzNTk0IDQxNS41NjY0MDYgIE0gMTIwLjkyMTg3NSA0MjMuOTkyMTg4IEwgMTI3Ljk3MjY1NiA0MjMuOTkyMTg4IEwgMTI3Ljk3MjY1NiA0NDYuMTEzMjgxIEwgMTIwLjkyMTg3NSA0NDYuMTEzMjgxIFogTSAxMjAuNDE3OTY5IDQxNy4xNjc5NjkgQyAxMjAuNDE3OTY5IDQxNC45MjU3ODEgMTIyLjIwMzEyNSA0MTMuMTM2NzE5IDEyNC40NDUzMTIgNDEzLjEzNjcxOSBDIDEyNi42OTE0MDYgNDEzLjEzNjcxOSAxMjguNDc2NTYyIDQxNC45MjU3ODEgMTI4LjQ3NjU2MiA0MTcuMTY3OTY5IEMgMTI4LjQ3NjU2MiA0MTkuNDE0MDYyIDEyNi42OTE0MDYgNDIxLjE5OTIxOSAxMjQuNDQ1MzEyIDQyMS4xOTkyMTkgQyAxMjIuMjAzMTI1IDQyMS4xOTkyMTkgMTIwLjQxNzk2OSA0MTkuNDE0MDYyIDEyMC40MTc5NjkgNDE3LjE2Nzk2OSAgTSAxMzQuMTU2MjUgNDM4LjQxNzk2OSBDIDEzNS44MDQ2ODggNDM5Ljg4MjgxMiAxMzkuMzMyMDMxIDQ0MS4zNTE1NjIgMTQxLjk0MTQwNiA0NDEuMzUxNTYyIEMgMTQ0LjA0Njg3NSA0NDEuMzUxNTYyIDE0NC45MTc5NjkgNDQwLjY2NDA2MiAxNDQuOTE3OTY5IDQzOS43MDMxMjUgQyAxNDQuOTE3OTY5IDQzOC41NTg1OTQgMTQzLjQwNjI1IDQzOC4xNDQ1MzEgMTQxLjExNzE4OCA0MzcuNzc3MzQ0IEMgMTM3LjM1OTM3NSA0MzcuMTM2NzE5IDEzMi4wNDY4NzUgNDM2LjM1OTM3NSAxMzIuMDQ2ODc1IDQzMC43MjI2NTYgQyAxMzIuMDQ2ODc1IDQyNi44MzIwMzEgMTM1LjM5MDYyNSA0MjMuNDQxNDA2IDE0MS41MjczNDQgNDIzLjQ0MTQwNiBDIDE0NS4yMzgyODEgNDIzLjQ0MTQwNiAxNDguMzk4NDM4IDQyNC42MzI4MTIgMTUwLjc4MTI1IDQyNi4zNzUgTCAxNDguMDc4MTI1IDQzMS4wNDY4NzUgQyAxNDYuNzUgNDI5Ljc2MTcxOSAxNDQuMjMwNDY5IDQyOC42MTcxODggMTQxLjU3NDIxOSA0MjguNjE3MTg4IEMgMTM5LjkyNTc4MSA0MjguNjE3MTg4IDEzOC43ODEyNSA0MjkuMTY3OTY5IDEzOC43ODEyNSA0MzAuMTI4OTA2IEMgMTM4Ljc4MTI1IDQzMS4xMzY3MTkgMTM5Ljk3MjY1NiA0MzEuNTAzOTA2IDE0Mi4zMDg1OTQgNDMxLjkxNDA2MiBDIDE0Ni4wNjI1IDQzMi41NTg1OTQgMTUxLjY0ODQzOCA0MzMuNDcyNjU2IDE1MS42NDg0MzggNDM5LjMzNTkzOCBDIDE1MS42NDg0MzggNDQzLjU0Njg3NSAxNDcuOTQxNDA2IDQ0Ni42NjQwNjIgMTQxLjU3NDIxOSA0NDYuNjY0MDYyIEMgMTM3LjYzNjcxOSA0NDYuNjY0MDYyIDEzMy41NTg1OTQgNDQ1LjMzNTkzOCAxMzEuMjIyNjU2IDQ0My4yNzM0MzggWiBNIDEzNC4xNTYyNSA0MzguNDE3OTY5ICBNIDE1Ni41MDM5MDYgNDQwLjE2MDE1NiBMIDE1Ni41MDM5MDYgNDMwLjEyODkwNiBMIDE1Mi44Mzk4NDQgNDMwLjEyODkwNiBMIDE1Mi44Mzk4NDQgNDIzLjk5MjE4OCBMIDE1Ni41MDM5MDYgNDIzLjk5MjE4OCBMIDE1Ni41MDM5MDYgNDE3Ljk0NTMxMiBMIDE2My41MTE3MTkgNDE3Ljk0NTMxMiBMIDE2My41MTE3MTkgNDIzLjk5MjE4OCBMIDE2OCA0MjMuOTkyMTg4IEwgMTY4IDQzMC4xMjg5MDYgTCAxNjMuNTExNzE5IDQzMC4xMjg5MDYgTCAxNjMuNTExNzE5IDQzOC4xOTE0MDYgQyAxNjMuNTExNzE5IDQzOS40NzI2NTYgMTY0LjI0MjE4OCA0NDAuNDMzNTk0IDE2NS40ODA0NjkgNDQwLjQzMzU5NCBDIDE2Ni4yNTc4MTIgNDQwLjQzMzU5NCAxNjcuMDM1MTU2IDQ0MC4xNjAxNTYgMTY3LjI2NTYyNSA0MzkuODgyODEyIEwgMTY4LjY0MDYyNSA0NDUuMTk5MjE5IEMgMTY3Ljc2OTUzMSA0NDYuMDE5NTMxIDE2Ni4wMzEyNSA0NDYuNjY0MDYyIDE2My40MTc5NjkgNDQ2LjY2NDA2MiBDIDE1OC45Mjk2ODggNDQ2LjY2NDA2MiAxNTYuNTAzOTA2IDQ0NC40MTc5NjkgMTU2LjUwMzkwNiA0NDAuMTYwMTU2ICBNIDE3MS45ODA0NjkgNDIzLjk5MjE4OCBMIDE3OS4wMzUxNTYgNDIzLjk5MjE4OCBMIDE3OS4wMzUxNTYgNDQ2LjExMzI4MSBMIDE3MS45ODA0NjkgNDQ2LjExMzI4MSBaIE0gMTcxLjQ3NjU2MiA0MTcuMTY3OTY5IEMgMTcxLjQ3NjU2MiA0MTQuOTI1NzgxIDE3My4yNjU2MjUgNDEzLjEzNjcxOSAxNzUuNTA3ODEyIDQxMy4xMzY3MTkgQyAxNzcuNzUzOTA2IDQxMy4xMzY3MTkgMTc5LjUzOTA2MiA0MTQuOTI1NzgxIDE3OS41MzkwNjIgNDE3LjE2Nzk2OSBDIDE3OS41MzkwNjIgNDE5LjQxNDA2MiAxNzcuNzUzOTA2IDQyMS4xOTkyMTkgMTc1LjUwNzgxMiA0MjEuMTk5MjE5IEMgMTczLjI2NTYyNSA0MjEuMTk5MjE5IDE3MS40NzY1NjIgNDE5LjQxNDA2MiAxNzEuNDc2NTYyIDQxNy4xNjc5NjkgIE0gMTg0LjM5MDYyNSA0MTUuNTY2NDA2IEwgMTkxLjQ0NTMxMiA0MTUuNTY2NDA2IEwgMTkxLjQ0NTMxMiA0NDYuMTEzMjgxIEwgMTg0LjM5MDYyNSA0NDYuMTEzMjgxIFogTSAxODQuMzkwNjI1IDQxNS41NjY0MDYgIE0gMTk2LjU3NDIxOSA0MTUuNTY2NDA2IEwgMjAzLjYyNSA0MTUuNTY2NDA2IEwgMjAzLjYyNSA0NDYuMTEzMjgxIEwgMTk2LjU3NDIxOSA0NDYuMTEzMjgxIFogTSAxOTYuNTc0MjE5IDQxNS41NjY0MDYgIE0gMjE0Ljc1MzkwNiA0MzIuNjk1MzEyIEwgMjIzLjg2NzE4OCA0MzIuNjk1MzEyIEMgMjIzLjY4MzU5NCA0MzEuMTM2NzE5IDIyMi41MzkwNjIgNDI4Ljg5NDUzMSAyMTkuMjg5MDYyIDQyOC44OTQ1MzEgQyAyMTYuMjE4NzUgNDI4Ljg5NDUzMSAyMTUuMDI3MzQ0IDQzMS4wODk4NDQgMjE0Ljc1MzkwNiA0MzIuNjk1MzEyIE0gMjE5LjI4OTA2MiA0MjMuNDQxNDA2IEMgMjI1LjgzOTg0NCA0MjMuNDQxNDA2IDIzMC42MDE1NjIgNDI4LjI1IDIzMC42MDE1NjIgNDM1Ljc2MTcxOSBMIDIzMC42MDE1NjIgNDM3LjI3MzQzOCBMIDIxNC44NDc2NTYgNDM3LjI3MzQzOCBDIDIxNS4yNTc4MTIgNDM5LjMzNTkzOCAyMTcuMTc5Njg4IDQ0MS4yMTQ4NDQgMjIwLjQ4MDQ2OSA0NDEuMjE0ODQ0IEMgMjIyLjQ0OTIxOSA0NDEuMjE0ODQ0IDIyNC42NDg0MzggNDQwLjQzMzU5NCAyMjUuODgyODEyIDQzOS4zMzU5MzggTCAyMjguODU5Mzc1IDQ0My43MzA0NjkgQyAyMjYuNjYwMTU2IDQ0NS43MDMxMjUgMjIzIDQ0Ni42NjQwNjIgMjE5LjYwOTM3NSA0NDYuNjY0MDYyIEMgMjEyLjc4NTE1NiA0NDYuNjY0MDYyIDIwNy41MTk1MzEgNDQyLjIyMjY1NiAyMDcuNTE5NTMxIDQzNS4wMzEyNSBDIDIwNy41MTk1MzEgNDI4LjYxNzE4OCAyMTIuMzc1IDQyMy40NDE0MDYgMjE5LjI4OTA2MiA0MjMuNDQxNDA2ICBNIDIzMy42MjEwOTQgNDIzLjk5MjE4OCBMIDI0MC42NzU3ODEgNDIzLjk5MjE4OCBMIDI0MC42NzU3ODEgNDI2Ljc4NTE1NiBDIDI0Mi4xNDA2MjUgNDI1IDI0NC45MzM1OTQgNDIzLjQ0MTQwNiAyNDcuNTg5ODQ0IDQyMy40NDE0MDYgTCAyNDcuNTg5ODQ0IDQzMC4yNjU2MjUgQyAyNDcuMTc5Njg4IDQzMC4xMjg5MDYgMjQ2LjU4MjAzMSA0MzAuMDM5MDYyIDI0NS44NTE1NjIgNDMwLjAzOTA2MiBDIDI0NC4wMTk1MzEgNDMwLjAzOTA2MiAyNDEuNTg5ODQ0IDQzMC44MTY0MDYgMjQwLjY3NTc4MSA0MzIuMDk3NjU2IEwgMjQwLjY3NTc4MSA0NDYuMTEzMjgxIEwgMjMzLjYyMTA5NCA0NDYuMTEzMjgxIFogTSAyMzMuNjIxMDk0IDQyMy45OTIxODggIE0gMjUxLjM5MDYyNSA0MzguNDE3OTY5IEMgMjUzLjAzOTA2MiA0MzkuODgyODEyIDI1Ni41NjY0MDYgNDQxLjM1MTU2MiAyNTkuMTc1NzgxIDQ0MS4zNTE1NjIgQyAyNjEuMjg1MTU2IDQ0MS4zNTE1NjIgMjYyLjE1MjM0NCA0NDAuNjY0MDYyIDI2Mi4xNTIzNDQgNDM5LjcwMzEyNSBDIDI2Mi4xNTIzNDQgNDM4LjU1ODU5NCAyNjAuNjQwNjI1IDQzOC4xNDQ1MzEgMjU4LjM1MTU2MiA0MzcuNzc3MzQ0IEMgMjU0LjU5NzY1NiA0MzcuMTM2NzE5IDI0OS4yODUxNTYgNDM2LjM1OTM3NSAyNDkuMjg1MTU2IDQzMC43MjI2NTYgQyAyNDkuMjg1MTU2IDQyNi44MzIwMzEgMjUyLjYyODkwNiA0MjMuNDQxNDA2IDI1OC43NjU2MjUgNDIzLjQ0MTQwNiBDIDI2Mi40NzI2NTYgNDIzLjQ0MTQwNiAyNjUuNjMyODEyIDQyNC42MzI4MTIgMjY4LjAxNTYyNSA0MjYuMzc1IEwgMjY1LjMxMjUgNDMxLjA0Njg3NSBDIDI2My45ODQzNzUgNDI5Ljc2MTcxOSAyNjEuNDY0ODQ0IDQyOC42MTcxODggMjU4LjgwODU5NCA0MjguNjE3MTg4IEMgMjU3LjE2MDE1NiA0MjguNjE3MTg4IDI1Ni4wMTU2MjUgNDI5LjE2Nzk2OSAyNTYuMDE1NjI1IDQzMC4xMjg5MDYgQyAyNTYuMDE1NjI1IDQzMS4xMzY3MTkgMjU3LjIwNzAzMSA0MzEuNTAzOTA2IDI1OS41NDI5NjkgNDMxLjkxNDA2MiBDIDI2My4zMDA3ODEgNDMyLjU1ODU5NCAyNjguODg2NzE5IDQzMy40NzI2NTYgMjY4Ljg4NjcxOSA0MzkuMzM1OTM4IEMgMjY4Ljg4NjcxOSA0NDMuNTQ2ODc1IDI2NS4xNzU3ODEgNDQ2LjY2NDA2MiAyNTguODA4NTk0IDQ0Ni42NjQwNjIgQyAyNTQuODcxMDk0IDQ0Ni42NjQwNjIgMjUwLjc5Njg3NSA0NDUuMzM1OTM4IDI0OC40NjA5MzggNDQzLjI3MzQzOCBaIE0gMjUxLjM5MDYyNSA0MzguNDE3OTY5ICBNIDEwMS41OTc2NTYgNDE5LjEyNSBDIDk4Ljg2NzE4OCA0MjQuNDE3OTY5IDkzLjk3NjU2MiA0MjcuNjkxNDA2IDk0LjY1NjI1IDQzMy40OTIxODggQyA5NC45MDIzNDQgNDM1LjYyODkwNiA5NS45NDUzMTIgNDM3LjA1ODU5NCA5Ny4xNDQ1MzEgNDM4LjAxMTcxOSBDIDk5LjcyMjY1NiA0NDAuMDU4NTk0IDEwMy40NzY1NjIgNDQwLjA1ODU5NCAxMDYuMDUwNzgxIDQzOC4wMTE3MTkgQyAxMDcuMjUzOTA2IDQzNy4wNTg1OTQgMTA4LjI5Mjk2OSA0MzUuNjI4OTA2IDEwOC41NDI5NjkgNDMzLjQ5MjE4OCBDIDEwOS4yMjI2NTYgNDI3LjY5MTQwNiAxMDMuOTIxODc1IDQyNC40MTc5NjkgMTAxLjU5NzY1NiA0MTkuMTI1IE0gODguMDM5MDYyIDQxNS41NjY0MDYgTCAxMDAuODYzMjgxIDQxNS41NjY0MDYgQyAxMTAuNDgwNDY5IDQxNS41NjY0MDYgMTE3LjM5NDUzMSA0MjEuMzM1OTM4IDExNy4zOTQ1MzEgNDMwLjgxNjQwNiBDIDExNy4zOTQ1MzEgNDQwLjI5Njg3NSAxMTAuNDgwNDY5IDQ0Ni4xMTMyODEgMTAwLjkwNjI1IDQ0Ni4xMTMyODEgTCA4OC4wMzkwNjIgNDQ2LjExMzI4MSBaIE0gODguMDM5MDYyIDQxNS41NjY0MDYgIE0gOTguNTU4NTk0IDQzNS42NTYyNSBDIDk3LjgyODEyNSA0MzUuNjI4OTA2IDk3LjQwNjI1IDQzNC41MDM5MDYgOTcuMjAzMTI1IDQzNC4wMzUxNTYgQyA5Ni45OTIxODggNDMzLjQ1NzAzMSA5Ni44Nzg5MDYgNDMyLjkxNDA2MiA5Ni44NDM3NSA0MzIuMzkwNjI1IEwgOTguOTg0Mzc1IDQzMi4zOTA2MjUgQyA5OS4xNDQ1MzEgNDMzLjE2MDE1NiA5OS4yNTM5MDYgNDMzLjcwNzAzMSA5OS41NzgxMjUgNDM0LjU2MjUgQyA5OS44MjAzMTIgNDM1LjI4OTA2MiA5OS4xOTUzMTIgNDM1LjcxODc1IDk4LjU1ODU5NCA0MzUuNjU2MjUgIE0gOTkuMTE3MTg4IDQyOC42NzE4NzUgQyA5OC44MzU5MzggNDI5LjY2NDA2MiA5OC44NDc2NTYgNDMwLjUyMzQzOCA5OC44NjMyODEgNDMxLjMyODEyNSBMIDk2Ljg3ODkwNiA0MzEuMzI4MTI1IEMgOTcuMDc0MjE5IDQyOS44NzEwOTQgOTcuODUxNTYyIDQyOC41NzAzMTIgOTguNzkyOTY5IDQyNy4yODEyNSBDIDEwMS43MzgyODEgNDIzLjI4NTE1NiA5OS45NzY1NjIgNDI2LjE5OTIxOSA5OS4xMTcxODggNDI4LjY3MTg3NSAiLz48L3N2Zz4=" alt="DDistillers" width="204" height="32"><p>Bahan alami Indonesia yang dapat ditelusuri untuk industri dan pemilik merek di seluruh dunia.</p></div>
+<div><h2>Bahan</h2><ul><li><a href="#portfolio">Semua kategori</a></li><li><a href="#featured">Bahan unggulan</a></li><li><a href="#applications">Menurut industri</a></li></ul></div>
+<div><h2>Kepercayaan</h2><ul><li><a href="#traceability">Ketelusuran</a></li><li><a href="#quality">Mutu & dokumen</a></li><li><a href="#network">Jaringan pasokan</a></li></ul></div>
+<div><h2>Beli</h2><ul><li><a href="#rfq" data-intent="quote">Minta penawaran</a></li><li><a href="#rfq" data-intent="sample">Minta sampel</a></li><li><a href="https://www.ddistillers.com/shop/">Belanja ritel</a></li></ul></div>
+</div>
+<div class="foot-bottom"><span>© 2026 DDistillers · PT. Syailendra Bumi Investama · From the Source for Your Success</span>
+<span><a href="https://www.ddistillers.com/id/kebijakan-privasi/">Kebijakan privasi</a><a href="https://www.ddistillers.com/id/syarat-ketentuan/">Syarat & ketentuan</a><a href="index.html" hreflang="en">English</a></span></div>
+</div></footer>
+
+</div><script>/* DDistillers homepage behaviour. No dependencies. */
+(function () {
+  'use strict';
+  var doc = document;
+  doc.documentElement.classList.add('js');
+
+  /* Set this to the WordPress / n8n webhook that receives RFQs. While empty the form validates but does not send. */
+  var FORM_ENDPOINT = window.DD_RFQ_ENDPOINT || (doc.querySelector('meta[name="rfq-endpoint"]') || {}).content || '';
+
+  /* Mobile menu */
+  var burger = doc.getElementById('burger');
+  var menu = doc.getElementById('menu');
+  function setMenu(open) {
+    burger.setAttribute('aria-expanded', String(open));
+    menu.classList.toggle('open', open);
+  }
+  if (burger && menu) {
+    burger.addEventListener('click', function () { setMenu(burger.getAttribute('aria-expanded') !== 'true'); });
+    menu.addEventListener('click', function (e) { if (e.target.tagName === 'A') setMenu(false); });
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape') { setMenu(false); burger.focus(); } });
+  }
+
+  /* Scroll reveal and the sample-to-scale bars */
+  var targets = doc.querySelectorAll('.rv, .ladder');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+    targets.forEach(function (t) { io.observe(t); });
+  } else {
+    targets.forEach(function (t) { t.classList.add('in'); });
+  }
+
+  /* Current section in the nav */
+  var links = [].slice.call(doc.querySelectorAll('.menu a[href^="#"]'));
+  var secs = links.map(function (a) { return doc.querySelector(a.getAttribute('href')); });
+  if ('IntersectionObserver' in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          links.forEach(function (a) { a.removeAttribute('aria-current'); });
+          var i = secs.indexOf(en.target);
+          if (i > -1) links[i].setAttribute('aria-current', 'true');
+        }
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    secs.forEach(function (s) { if (s) spy.observe(s); });
+  }
+
+  /* Audience tabs (business RFQ / personal shop) */
+  var tabs = [].slice.call(doc.querySelectorAll('[role="tab"]'));
+  function showTab(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      doc.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { showTab(t); });
+    t.addEventListener('keydown', function (e) {
+      var n = null;
+      if (e.key === 'ArrowRight') n = tabs[(i + 1) % tabs.length];
+      if (e.key === 'ArrowLeft') n = tabs[(i - 1 + tabs.length) % tabs.length];
+      if (n) { e.preventDefault(); showTab(n); n.focus(); }
+    });
+  });
+
+  /* Links that pre-select the request type, product or audience */
+  var form = doc.getElementById('rfq-form');
+  doc.querySelectorAll('[data-intent],[data-product],[data-audience]').forEach(function (a) {
+    a.addEventListener('click', function () {
+      var aud = a.getAttribute('data-audience');
+      if (aud) { var t = doc.getElementById('tab-' + aud); if (t) showTab(t); return; }
+      var t2 = doc.getElementById('tab-b2b'); if (t2) showTab(t2);
+      var intent = a.getAttribute('data-intent');
+      if (intent && form) { var r = form.querySelector('input[name="intent"][value="' + intent + '"]'); if (r) r.checked = true; }
+      var prod = a.getAttribute('data-product');
+      if (prod && form) { form.elements.product.value = prod; }
+    });
+  });
+
+  /* Form: validate on blur, clear on input, submit by fetch when an endpoint exists */
+  if (form) {
+    var fields = [].slice.call(form.querySelectorAll('[required]'));
+    function validate(el) {
+      var bad = !el.value.trim() || (el.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim()));
+      el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      return !bad;
+    }
+    fields.forEach(function (el) {
+      var err = el.parentNode.querySelector('.err');
+      if (err) { el.setAttribute('aria-describedby', err.id); }
+      el.addEventListener('blur', function () { validate(el); });
+      el.addEventListener('input', function () { if (el.getAttribute('aria-invalid') === 'true') validate(el); });
+      el.addEventListener('change', function () { if (el.getAttribute('aria-invalid') === 'true') validate(el); });
+    });
+    var ok = doc.getElementById('rfq-ok');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var firstBad = null;
+      fields.forEach(function (el) { if (!validate(el) && !firstBad) firstBad = el; });
+      if (firstBad) { firstBad.focus(); return; }
+      var btn = form.querySelector('button[type="submit"]');
+      var label = btn.textContent;
+      btn.disabled = true; btn.textContent = btn.getAttribute('data-busy');
+      var done = function () {
+        btn.disabled = false; btn.textContent = label;
+        ok.classList.add('show'); ok.focus();
+        form.reset();
+        fields.forEach(function (el) { el.removeAttribute('aria-invalid'); });
+      };
+      if (FORM_ENDPOINT) {
+        fetch(FORM_ENDPOINT, { method: 'POST', body: new FormData(form) })
+          .then(function (r) { if (!r.ok) throw new Error(r.status); done(); })
+          .catch(function () {
+            btn.disabled = false; btn.textContent = label;
+            var f = doc.getElementById('rfq-fail'); f.classList.add('show'); f.focus();
+          });
+      } else { setTimeout(done, 450); }
+    });
+  }
+})();
+</script>

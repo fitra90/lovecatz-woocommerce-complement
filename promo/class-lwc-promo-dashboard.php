@@ -25,9 +25,173 @@ class LWC_Promo_Dashboard {
 		add_action( 'woocommerce_before_cart_totals', array( $this, 'render_checkout_coupons' ), 15 );
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'render_checkout_coupons' ), 5 );
 		add_action( 'woocommerce_review_order_before_payment', array( $this, 'render_checkout_coupons' ), 10 );
+		// Cart, checkout, cart block and checkout block all hide their coupon
+		// field when this reports false.
+		add_filter( 'woocommerce_coupons_enabled', array( $this, 'hide_native_coupon_ui_for_guests' ) );
+		// A guest who logs in through the promo invitation returns to the
+		// cart/checkout they came from instead of the account dashboard.
+		add_filter( 'woocommerce_login_redirect', array( $this, 'promo_login_redirect' ), 10, 2 );
+		add_filter( 'woocommerce_registration_redirect', array( $this, 'promo_registration_redirect' ) );
+		// WooCommerce's My Account forms carry no redirect field, so the
+		// destination is repeated in a hidden input for shoppers who arrive
+		// through the promo invitation.
+		add_action( 'woocommerce_login_form', array( $this, 'render_promo_redirect_field' ) );
+		add_action( 'woocommerce_register_form', array( $this, 'render_promo_redirect_field' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 		// Shortcode fallback so admin can place promo dashboard on any page if endpoint rewrites fail.
 		add_shortcode( 'lwc_promo_dashboard', array( $this, 'promo_dashboard_shortcode' ) );
+	}
+
+	/**
+	 * Hide WooCommerce's own coupon form from visitors without an account.
+	 *
+	 * This dashboard class only runs on the frontend, so staff working in
+	 * wp-admin keep the native coupon field everywhere.
+	 *
+	 * @param bool $enabled Whether WooCommerce treats coupons as enabled.
+	 * @return bool
+	 */
+	public function hide_native_coupon_ui_for_guests( $enabled ) {
+		if ( $enabled && ! is_user_logged_in() ) {
+			return false;
+		}
+
+		return $enabled;
+	}
+
+	/**
+	 * Read the destination a guest asked for through the promo invitation.
+	 *
+	 * Only a URL on this site is accepted: wp_validate_redirect() returns an
+	 * empty string for a foreign host or a non-http scheme, which keeps the
+	 * parameter from turning into an open redirect.
+	 *
+	 * @return string Internal URL, or an empty string when nothing valid was requested.
+	 */
+	private function get_requested_promo_redirect() {
+		$requested = '';
+
+		if ( ! empty( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ) {
+			$requested = wp_unslash( $_GET['redirect_to'] );
+		} elseif ( ! empty( $_POST['redirect_to'] ) && is_string( $_POST['redirect_to'] ) ) {
+			$requested = wp_unslash( $_POST['redirect_to'] );
+		}
+
+		if ( ! $requested ) {
+			return '';
+		}
+
+		$validated = wp_validate_redirect( wp_sanitize_redirect( $requested ), '' );
+
+		return $validated ? $validated : '';
+	}
+
+	/**
+	 * Send a guest back to the page they were shopping on after logging in.
+	 *
+	 * WooCommerce's own form honours a POST redirect and the referer, so a
+	 * promo invitation that only passes a query argument would otherwise land
+	 * the new customer on the account dashboard and lose the cart. The
+	 * destination is only accepted when it is a sanitized URL on this site.
+	 *
+	 * @param string  $redirect Destination WooCommerce calculated.
+	 * @param WP_User $user     User that has just logged in.
+	 * @return string
+	 */
+	public function promo_login_redirect( $redirect, $user ) {
+		unset( $user );
+
+		$requested = $this->get_requested_promo_redirect();
+		if ( $requested ) {
+			return $requested;
+		}
+
+		return $redirect;
+	}
+
+	/**
+	 * Send a new customer back to the page they were shopping on after registering.
+	 *
+	 * Registration is the path most promo shoppers take, so it has to honour
+	 * the same destination as the login form.
+	 *
+	 * @param string $redirect Destination WooCommerce calculated.
+	 * @return string
+	 */
+	public function promo_registration_redirect( $redirect ) {
+		$requested = $this->get_requested_promo_redirect();
+		if ( $requested ) {
+			return $requested;
+		}
+
+		return $redirect;
+	}
+
+	/**
+	 * Repeat the requested destination as a hidden form field.
+	 *
+	 * WooCommerce's My Account templates post to the current URL without a
+	 * redirect field, so the query argument would be lost between the form
+	 * and the handler. Only shoppers who actually arrived through the promo
+	 * invitation get the field, so everyone else keeps the stock behaviour.
+	 */
+	public function render_promo_redirect_field() {
+		$requested = $this->get_requested_promo_redirect();
+		if ( ! $requested ) {
+			return;
+		}
+
+		printf(
+			'<input type="hidden" name="redirect" value="%s" />',
+			esc_url( $requested )
+		);
+	}
+
+	/**
+	 * Build the My Account URL shared by every guest promo invitation.
+	 *
+	 * Guests land on the My Account page (login plus registration) with a
+	 * redirect back to the cart or checkout they were shopping on, so signing
+	 * up costs them no progress.
+	 *
+	 * @param string $redirect Page to return to after login; defaults to the current page.
+	 * @return string
+	 */
+	private function get_promo_login_url( $redirect = '' ) {
+		$account = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : '';
+		if ( ! $account ) {
+			$account = wp_login_url();
+		}
+
+		if ( ! $redirect ) {
+			$redirect = is_cart() ? wc_get_cart_url() : wc_get_checkout_url();
+		}
+
+		// add_query_arg() encodes the value itself; pre-encoding here would
+		// double-encode the URL and break the redirect after login.
+		return add_query_arg( 'redirect_to', $redirect, $account );
+	}
+
+	/**
+	 * Render the login invitation for a visitor without an account.
+	 *
+	 * WooCommerce's coupon field is hidden for these shoppers, so the
+	 * invitation stands exactly where they would have typed a code: it says
+	 * that promos exist for members and links to My Account to log in or
+	 * register. It is only shown while at least one promo is actually live.
+	 */
+	private function render_guest_promo_login_prompt() {
+		if ( is_user_logged_in() || ! $this->has_account_only_checkout_promos() ) {
+			return;
+		}
+
+		printf(
+			'<div class="lwc-checkout-account-promo lwc-guest-promo-login"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%%</span><span class="lwc-checkout-account-promo__content"><strong>%1$s</strong><span>%2$s</span></span><a class="lwc-checkout-account-promo__link" href="%3$s">%4$s</a></div>',
+			esc_html__( 'Promo khusus menantimu!', 'lovecatz-wc' ),
+			esc_html__( 'Login atau buat akun gratis untuk melihat dan memakai kupon promo.', 'lovecatz-wc' ),
+			esc_url( $this->get_promo_login_url() ),
+			esc_html__( 'Login / Daftar', 'lovecatz-wc' )
+		);
 	}
 
 	/**
@@ -72,7 +236,7 @@ class LWC_Promo_Dashboard {
 				'couponInputSelector' => '.coupon input[name="coupon_code"], .wc-block-components-totals-coupon input',
 				'applyButtonSelector' => '.coupon .button, .wc-block-components-totals-coupon button[type="submit"]',
 				'checkoutUrl'         => esc_url_raw( wc_get_checkout_url() ),
-				'accountUrl'          => esc_url_raw( add_query_arg( 'redirect_to', wc_get_checkout_url(), wc_get_page_permalink( 'myaccount' ) ) ),
+				'accountUrl'          => esc_url_raw( $this->get_promo_login_url() ),
 				'isGuest'             => ! is_user_logged_in(),
 				'hasAccountPromos'    => $this->has_account_only_checkout_promos(),
 				'coupons'             => $this->get_checkout_coupon_data(),
@@ -105,8 +269,9 @@ class LWC_Promo_Dashboard {
 	}
 
 	/**
-	 * Check whether a guest can be invited to unlock an active account promo.
-	 * Coupon details stay private until the customer signs in.
+	 * Check whether a guest should be invited to unlock an active promo.
+	 * Since every promo now requires an account, any live coupon counts —
+	 * the details stay private until the customer signs in.
 	 *
 	 * @return bool
 	 */
@@ -116,7 +281,11 @@ class LWC_Promo_Dashboard {
 		}
 
 		foreach ( $this->get_promo_coupons() as $coupon ) {
-			if ( $coupon->get_date_expires() && $coupon->get_date_expires()->getTimestamp() < current_time( 'timestamp' ) ) {
+			if ( 'publish' !== $coupon->get_status() ) {
+				continue;
+			}
+
+			if ( $this->is_coupon_expired( $coupon ) ) {
 				continue;
 			}
 
@@ -124,10 +293,7 @@ class LWC_Promo_Dashboard {
 				continue;
 			}
 
-			$eligible_users = array_filter( array_map( 'absint', (array) get_post_meta( $coupon->get_id(), '_lwc_promo_eligible_user_ids', true ) ) );
-			if ( ! empty( $eligible_users ) || ! empty( $coupon->get_email_restrictions() ) ) {
-				return true;
-			}
+			return true;
 		}
 
 		return false;
@@ -163,7 +329,14 @@ class LWC_Promo_Dashboard {
 
 	public function render_coupon_dashboard() {
 		if ( ! is_user_logged_in() ) {
-			echo '<p>' . esc_html__( 'Please log in to see available coupons.', 'lovecatz-wc' ) . '</p>';
+			echo '<div class="lwc-promo-dashboard lwc-promo-dashboard--guest">';
+			echo '<div class="lwc-promo-dashboard-header">';
+			echo '<h2>' . esc_html__( 'Coupons & Promo', 'lovecatz-wc' ) . '</h2>';
+			echo '<p>' . esc_html__( 'Promo coupons are exclusive for registered customers.', 'lovecatz-wc' ) . '</p>';
+			echo '</div>';
+			echo '<p>' . esc_html__( 'Log in or create a free account to see and redeem the promos that are waiting for you.', 'lovecatz-wc' ) . '</p>';
+			echo '<p class="lwc-promo-dashboard-actions"><a class="button" href="' . esc_url( $this->get_promo_login_url() ) . '">' . esc_html__( 'Login / Register', 'lovecatz-wc' ) . '</a></p>';
+			echo '</div>';
 			return;
 		}
 
@@ -205,11 +378,16 @@ class LWC_Promo_Dashboard {
 	public function render_checkout_coupons() {
 		static $rendered = false;
 
-		if ( $rendered || ! is_user_logged_in() ) {
+		if ( $rendered ) {
 			return;
 		}
 
 		$rendered = true;
+
+		if ( ! is_user_logged_in() ) {
+			$this->render_guest_promo_login_prompt();
+			return;
+		}
 
 		$coupons = array_filter(
 			$this->get_promo_coupons(),
@@ -237,11 +415,17 @@ class LWC_Promo_Dashboard {
 	 * Provide selectable coupons plus expired coupons for the current customer.
 	 *
 	 * This data is used by the Checkout Block modal; WooCommerce still validates
-	 * the coupon when its native Apply button is triggered.
+	 * the coupon when its native Apply button is triggered. Guests get nothing:
+	 * the picker never opens for them and the login invitation is driven by
+	 * hasAccountPromos instead.
 	 *
 	 * @return array
 	 */
 	private function get_checkout_coupon_data() {
+		if ( ! is_user_logged_in() ) {
+			return array();
+		}
+
 		$coupons = array();
 		foreach ( $this->get_promo_coupons() as $coupon ) {
 			$expired = $this->is_coupon_expired( $coupon );
@@ -311,8 +495,9 @@ class LWC_Promo_Dashboard {
 
 	/**
 	 * Check a promo can be shown in checkout for the current visitor.
-	 * Guests may see only coupons without account/email restrictions; final
-	 * validation remains WooCommerce's responsibility when applying the code.
+	 * Discounts are a registered-customer benefit, so a guest is never offered
+	 * one; final validation remains WooCommerce's responsibility when applying
+	 * the code.
 	 *
 	 * @param WC_Coupon $coupon        Coupon instance.
 	 * @param bool      $ignore_expiry Whether an expired coupon may remain visible as disabled.
@@ -323,19 +508,11 @@ class LWC_Promo_Dashboard {
 			return false;
 		}
 
-		if ( is_user_logged_in() ) {
-			return $this->is_coupon_available_for_user( $coupon, get_current_user_id(), $ignore_expiry );
-		}
-
-		if ( ! $ignore_expiry && $this->is_coupon_expired( $coupon ) ) {
+		if ( ! is_user_logged_in() ) {
 			return false;
 		}
 
-		if ( $coupon->get_usage_limit() && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
-			return false;
-		}
-
-		return empty( $coupon->get_email_restrictions() );
+		return $this->is_coupon_available_for_user( $coupon, get_current_user_id(), $ignore_expiry );
 	}
 
 	/** Determine whether a coupon has passed its configured expiry date. */

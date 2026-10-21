@@ -34,7 +34,7 @@ class LWC_Promo_Admin {
 		?>
 		<div class="lwc-promo-manager">
 			<div class="lwc-promo-manager-heading">
-				<div><h2><?php echo esc_html( $editing ? __( 'Edit Promo Coupon', 'lovecatz-wc' ) : __( 'Create Promo Coupon', 'lovecatz-wc' ) ); ?></h2><p><?php esc_html_e( 'Create native WooCommerce coupons with customer targeting and card visuals.', 'lovecatz-wc' ); ?></p></div>
+				<div><h2><?php echo esc_html( $editing ? __( 'Edit Promo Coupon', 'lovecatz-wc' ) : __( 'Create Promo Coupon', 'lovecatz-wc' ) ); ?></h2><p><?php esc_html_e( 'Create native WooCommerce coupons with customer targeting and card visuals.', 'lovecatz-wc' ); ?></p><p class="description"><?php esc_html_e( 'Promo coupons are redeemable by registered customers only: guests see no coupon field at cart or checkout and cannot apply a code until they log in or create an account.', 'lovecatz-wc' ); ?></p></div>
 				<?php if ( $editing ) : ?><a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=lovecatz-wc&tab=promo' ) ); ?>"><?php esc_html_e( 'Create new coupon', 'lovecatz-wc' ); ?></a><?php endif; ?>
 			</div>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="lwc-promo-form">

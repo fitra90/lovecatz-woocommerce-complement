@@ -176,6 +176,14 @@
             return;
         }
 
+        /* Coupons are registered-customer only, so a stored code from an
+         * earlier visit is meaningless to a guest and the code cannot be
+         * applied anyway. */
+        if (lwcPromoDashboard.isGuest) {
+            window.localStorage.removeItem(storageKey);
+            return;
+        }
+
         var couponCode = window.localStorage.getItem(storageKey);
         if (!couponCode) {
             return;
@@ -244,21 +252,85 @@
         return fallback;
     }
 
+    function attachPicker(picker) {
+        var couponArea = getCheckoutCouponContainer();
+        if (!couponArea.length) {
+            return;
+        }
+
+        if (couponArea.is('.wc-block-components-totals-coupon')) {
+            couponArea.after(picker);
+        } else if (couponArea.is('.ct-order-review')) {
+            couponArea.prepend(picker);
+        } else {
+            couponArea.append(picker);
+        }
+    }
+
+    function renderGuestInvite() {
+        var existing = $('#lwc-checkout-coupon-picker');
+
+        /* Nothing to show: drop a leftover invite from a previous state so a
+         * login or logout on the same page cannot stack duplicate blocks. */
+        if (!lwcPromoDashboard.hasAccountPromos) {
+            if (existing.length) {
+                existing.remove();
+                $('#lwc-coupon-modal').remove();
+                $('html, body').removeClass('lwc-coupon-modal-open');
+            }
+            return;
+        }
+
+        /* The server already renders this invitation on the classic cart and
+         * checkout screens, so only add it where that server-side prompt is
+         * missing (the Checkout Block, which has no PHP hook to mount it). */
+        if ($('.lwc-checkout-account-promo').length) {
+            return;
+        }
+
+        /* Already rendered: leave it alone so every checkout fragment update
+         * does not rebuild the same block. */
+        if (existing.length && existing.find('.lwc-checkout-account-promo').length) {
+            return;
+        }
+
+        $('#lwc-coupon-modal').remove();
+        $('html, body').removeClass('lwc-coupon-modal-open');
+
+        var invite = '<div class="lwc-checkout-account-promo lwc-guest-promo-login"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%</span>' +
+            '<span class="lwc-checkout-account-promo__content"><strong>Promo khusus menantimu!</strong><span>Login atau buat akun gratis untuk melihat dan memakai kupon promo.</span></span>' +
+            '<a class="lwc-checkout-account-promo__link" href="' + $('<span>').text(lwcPromoDashboard.accountUrl).html() + '">Login / Daftar</a></div>';
+        var picker = '<div id="lwc-checkout-coupon-picker" class="lwc-checkout-coupon-picker">' + invite + '</div>';
+
+        if (existing.length) {
+            existing.replaceWith(picker);
+        } else {
+            attachPicker(picker);
+        }
+    }
+
     function renderCheckoutCouponPicker() {
         if (!isCheckoutLikePage() || typeof lwcPromoDashboard === 'undefined') {
             return;
         }
 
-        var couponArea = getCheckoutCouponContainer();
         var existing = $('#lwc-checkout-coupon-picker');
 
+        /* Coupons are for registered customers only, so a guest is shown the
+         * login invitation and never the promo picker itself. */
+        if (lwcPromoDashboard.isGuest) {
+            renderGuestInvite();
+            return;
+        }
+
         if (existing.length) {
+            var currentArea = getCheckoutCouponContainer();
             /* A checkout update or a container-query flip can leave the picker
              * inside a container that is now hidden (WooCommerce swaps between
              * the sidebar and the mobile fill-wrapper at its 700px container
              * breakpoint). Re-home it when a visible container exists instead
              * of leaving an invisible picker on the page. */
-            if (existing.is(':visible') || !couponArea.length || !couponArea.is(':visible')) {
+            if (existing.is(':visible') || !currentArea.length || !currentArea.is(':visible')) {
                 return;
             }
 
@@ -267,12 +339,12 @@
             $('html, body').removeClass('lwc-coupon-modal-open');
         }
 
+        var couponArea = getCheckoutCouponContainer();
         if (!couponArea.length) {
             return;
         }
 
         var coupons = lwcPromoDashboard.coupons || [];
-        var showAccountInvite = !!(lwcPromoDashboard.isGuest && lwcPromoDashboard.hasAccountPromos);
 
         /* Checkout fragments can remove the trigger without removing a modal
          * that was portalled to <body>. Clear that orphan before rebuilding. */
@@ -309,11 +381,7 @@
             '<div class="lwc-coupon-modal__list">' + modalItems + emptyMessage + '</div>' +
             (coupons.length ? '<div class="lwc-coupon-modal__footer"><span class="lwc-coupon-modal__selection" aria-live="polite">Pilih satu atau lebih kupon</span><button type="button" class="lwc-add-selected-coupons" disabled>Add Coupon</button></div>' : '') +
             '</div></div>';
-        var accountInvite = showAccountInvite ?
-            '<div class="lwc-checkout-account-promo"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%</span>' +
-            '<span class="lwc-checkout-account-promo__content"><strong>Kupon spesial menantimu!</strong><span>Login atau buat akun gratis untuk membuka promo eksklusif.</span></span>' +
-            '<a class="lwc-checkout-account-promo__link" href="' + $('<span>').text(lwcPromoDashboard.accountUrl).html() + '">Login / Daftar</a></div>' : '';
-        var picker = '<div id="lwc-checkout-coupon-picker" class="lwc-checkout-coupon-picker">' + couponPicker + accountInvite + '</div>';
+        var picker = '<div id="lwc-checkout-coupon-picker" class="lwc-checkout-coupon-picker">' + couponPicker + '</div>';
 
         if (couponArea.is('.wc-block-components-totals-coupon')) {
             couponArea.after(picker);

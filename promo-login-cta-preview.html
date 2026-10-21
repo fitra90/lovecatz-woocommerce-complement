@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview — Penanda Login Promo (Guest)</title>
+<style>
+	body {
+		margin: 0;
+		padding: 40px 20px 80px;
+		background: #f6f7f7;
+		color: #1f2937;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.6;
+	}
+	.wrap { max-width: 940px; margin: 0 auto; }
+	h1 { font-size: 26px; margin: 0 0 6px; }
+	.lede { color: #6b7280; margin: 0 0 34px; }
+	section { margin-bottom: 40px; }
+	h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; margin: 0 0 12px; }
+	.frame { background: #fff; border: 1px solid #e3e6e8; border-radius: 12px; padding: 22px; }
+	.frame--cart { max-width: 430px; margin-left: auto; }
+	.frame--block { max-width: 430px; margin-left: auto; }
+	.summary-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px dashed #eceff1; font-size: 14px; }
+	.summary-row.total { border-bottom: 0; border-top: 1px solid #e3e6e8; font-weight: 700; margin-top: 6px; padding-top: 12px; }
+	.note { font-size: 13px; color: #6b7280; margin: 10px 0 0; }
+	.pill { display: inline-block; background: #eef2f1; color: #0f766e; border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+	.link { color: #0f766e; }
+	.lwc-promo-dashboard {
+	--lwc-promo-accent: var(--wp--preset--color--primary, var(--theme-palette-color-1, var(--ast-global-color-0, var(--global-palette1, var(--wc-primary, #2271b1)))));
+	--lwc-promo-surface: var(--wp--preset--color--base, var(--theme-palette-color-8, var(--ast-global-color-5, var(--global-palette9, #fff))));
+	box-sizing: border-box;
+	max-width: 100%;
+	padding: 24px 0;
+	color: inherit;
+}
+
+.lwc-promo-dashboard *,
+.lwc-promo-dashboard *::before,
+.lwc-promo-dashboard *::after {
+	box-sizing: inherit;
+}
+
+.lwc-promo-dashboard-header {
+	margin-bottom: 24px;
+}
+
+.lwc-promo-dashboard-header h2 {
+	margin: 0 0 8px;
+	color: inherit;
+	font-family: inherit;
+	font-size: clamp(1.35rem, 2.5vw, 1.625rem);
+	line-height: 1.25;
+}
+
+.lwc-promo-dashboard-header p {
+	margin: 0;
+	color: inherit;
+	opacity: .72;
+}
+
+/* Guest view of the account coupon tab: the login/register button is the
+ * only thing a visitor without an account can act on. */
+.lwc-promo-dashboard-actions {
+	margin: 20px 0 0;
+}
+
+.lwc-promo-dashboard-actions .button,
+.lwc-promo-dashboard-actions .button:visited {
+	display: inline-block;
+	padding: 11px 20px;
+	border: 1px solid var(--lwc-promo-accent);
+	border-radius: 7px;
+	background: var(--lwc-promo-accent);
+	color: #fff !important;
+	font-weight: 700;
+	line-height: 1.3;
+	text-decoration: none !important;
+}
+
+.lwc-promo-dashboard-actions .button:hover,
+.lwc-promo-dashboard-actions .button:focus {
+	filter: brightness(.92);
+	color: #fff !important;
+}
+
+.lwc-promo-dashboard-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 18px;
+}
+
+/* Keep a single account coupon compact while allowing a responsive card grid. */
+.lwc-promo-dashboard-grid--account {
+	grid-template-columns: repeat(auto-fit, minmax(260px, 340px));
+	justify-content: start;
+	align-items: stretch;
+}
+
+.lwc-promo-card {
+	display: flex;
+	height: 100%;
+	min-width: 0;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid rgba(127, 127, 127, .28);
+	border-radius: var(--theme-border-radius, var(--ast-border-radius, 14px));
+	background: var(--lwc-promo-surface, #fff);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+	color: inherit;
+	cursor: pointer;
+	font-family: inherit;
+	text-align: left;
+	text-decoration: none !important;
+	transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.lwc-promo-card:hover,
+.lwc-promo-card:focus-visible {
+	border-color: var(--lwc-promo-accent, currentColor);
+	box-shadow: 0 10px 26px rgba(0, 0, 0, .11);
+	color: inherit;
+	transform: translateY(-2px);
+}
+
+.lwc-promo-card:focus-visible {
+	outline: 2px solid var(--lwc-promo-accent, currentColor);
+	outline-offset: 3px;
+}
+
+.lwc-promo-card.is-disabled {
+	cursor: not-allowed;
+	filter: grayscale(1);
+	opacity: .62;
+}
+
+.lwc-promo-card.is-disabled:hover {
+	border-color: rgba(127, 127, 127, .28);
+	box-shadow: none;
+	transform: none;
+}
+
+.lwc-checkout-promos {
+	margin: 0 0 28px;
+}
+
+.lwc-checkout-promos h3 {
+	margin: 0 0 12px;
+}
+
+.lwc-checkout-coupon-picker { display: block !important; visibility: visible !important; margin-top: 12px; opacity: 1 !important; }
+.lwc-checkout-coupon-picker .lwc-open-coupon-modal { display: flex !important; visibility: visible !important; width: 100%; align-items: center; justify-content: space-between; padding: 11px 0; color: var(--theme-palette-color-1, #0f766e); background: transparent; border: 0; border-top: 1px solid #e1e5e8; opacity: 1 !important; font: inherit; font-weight: 600; line-height: 1.3; cursor: pointer; text-align: left; }
+.lwc-checkout-account-promo { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid #a7f3d0; border-radius: 9px; background: #ecfdf3; color: #065f46; }
+.lwc-checkout-account-promo__icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; background: #0f766e; color: #fff; font-size: 17px; font-weight: 800; }
+.lwc-checkout-account-promo__content strong, .lwc-checkout-account-promo__content span { display: block; }
+.lwc-checkout-account-promo__content span { margin-top: 2px; color: #477064; font-size: 12px; line-height: 1.35; }
+.lwc-checkout-account-promo__link { white-space: nowrap; border-radius: 6px; background: #0f766e; color: #fff !important; padding: 8px 10px; font-size: 12px; font-weight: 700; text-decoration: none !important; }
+.lwc-checkout-account-promo__link:hover, .lwc-checkout-account-promo__link:focus { background: #115e59; color: #fff; }
+/* This is the only coupon affordance a guest sees, so it is dressed as the
+ * primary call to action of the cart/checkout summary. */
+.lwc-guest-promo-login { border-color: #0f766e; background: #f0fdfa; box-shadow: 0 6px 18px rgba(15, 118, 110, .12); }
+.lwc-guest-promo-login .lwc-checkout-account-promo__link { padding: 10px 14px; font-size: 13px; }
+@media (max-width: 480px) { .lwc-checkout-account-promo { grid-template-columns: 38px minmax(0, 1fr); } .lwc-checkout-account-promo__link { grid-column: 1 / -1; text-align: center; } }
+.lwc-open-coupon-modal span { font-size: 22px; line-height: 12px; }
+/* On phones the picker sits between the order-summary items, where a plain
+ * text row is easy to miss. Give it an explicit button affordance so the
+ * interactive coupon popup is obviously available next to the manual
+ * "Add coupons" input. */
+@media (max-width: 699px) {
+	.lwc-checkout-coupon-picker { margin: 12px 0 6px; }
+	.lwc-checkout-coupon-picker .lwc-open-coupon-modal { padding: 13px 14px; border: 1px solid #0f766e; border-radius: 9px; background: #f0fdfa; font-weight: 700; }
+	.lwc-checkout-coupon-picker .lwc-open-coupon-modal:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+}
+.lwc-coupon-modal[hidden] { display: none; }
+html.lwc-coupon-modal-open, body.lwc-coupon-modal-open { overflow: hidden !important; }
+.lwc-coupon-modal { position: fixed !important; z-index: 2147483647 !important; inset: 0 !important; display: grid; place-items: center; isolation: isolate; padding: 16px; }
+.lwc-coupon-modal__backdrop { position: absolute; z-index: 0; inset: 0; background: rgba(19, 29, 36, .68); }
+.lwc-coupon-modal__panel { position: relative; z-index: 1; display: flex; flex-direction: column; width: min(100%, 540px); max-height: min(680px, calc(100dvh - 32px)); overflow: hidden; overscroll-behavior: contain; background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(16, 24, 40, .28); }
+.lwc-coupon-modal__header { display: flex; justify-content: space-between; gap: 16px; padding: 22px 22px 16px; border-bottom: 1px solid #e7eaed; }
+.lwc-coupon-modal__header h3 { margin: 0; font-size: 20px; }.lwc-coupon-modal__header p { margin: 5px 0 0; color: #667085; font-size: 13px; }.lwc-close-coupon-modal { width: 34px; height: 34px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 50%; background: #f2f4f5; color: #344054; font-size: 22px; cursor: pointer; }
+.lwc-coupon-modal__list { display: grid; gap: 10px; overflow: auto; padding: 18px 22px 22px; }.lwc-coupon-modal__list .lwc-checkout-coupon-option { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) 22px; align-items: center; gap: 12px; width: 100%; padding: 10px; border: 1px solid #dce3e6; border-radius: 9px; background: #fff; color: #1f2937; cursor: pointer; font: inherit; text-align: left; }.lwc-checkout-coupon-option:hover, .lwc-checkout-coupon-option:focus-within, .lwc-checkout-coupon-option.is-selected { border-color: #0f766e; background: #f7fcfb; outline: none; }.lwc-coupon-option-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }.lwc-checkout-coupon-option img { display: block; width: 64px; height: 48px; object-fit: cover; border-radius: 5px; background: #edf2f1; }.lwc-checkout-coupon-option__content { min-width: 0; }.lwc-checkout-coupon-option__content strong { display: block; font-size: 14px; }.lwc-checkout-coupon-option__content span { display: block; margin-top: 3px; color: #667085; font-size: 12px; line-height: 1.4; }.lwc-coupon-option-check { display: grid; width: 20px; height: 20px; place-items: center; border: 1.5px solid #98a2b3; border-radius: 4px; background: #fff; }.lwc-checkout-coupon-option.is-selected .lwc-coupon-option-check { border-color: #0f766e; background: #0f766e; }.lwc-checkout-coupon-option.is-selected .lwc-coupon-option-check::after { content: ''; width: 9px; height: 5px; margin-top: -2px; border: solid #fff; border-width: 0 0 2px 2px; transform: rotate(-45deg); }.lwc-coupon-option-status { position: absolute; right: 10px; bottom: 7px; max-width: 88px; color: #0f766e; font-size: 11px; font-style: normal; font-weight: 700; line-height: 1.2; text-align: right; }.lwc-coupon-option-status:empty { display: none; }.lwc-checkout-coupon-option.is-applied { cursor: default; opacity: .7; }
+.lwc-coupon-modal__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; border-top: 1px solid #e7eaed; background: #fff; }.lwc-coupon-modal__selection { color: #667085; font-size: 12px; }.lwc-add-selected-coupons { flex: 0 0 auto; min-width: 128px; padding: 10px 16px; border: 0; border-radius: 7px; background: #0f766e; color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }.lwc-add-selected-coupons:hover, .lwc-add-selected-coupons:focus { background: #115e59; }.lwc-add-selected-coupons:disabled { background: #d0d5dd; color: #667085; cursor: not-allowed; }
+.lwc-checkout-coupon-option.is-incompatible { cursor: default; opacity: .7; }.lwc-checkout-coupon-option.is-incompatible .lwc-coupon-option-status { color: #667085; }
+.lwc-checkout-coupon-option.is-expired { cursor: default; opacity: .62; }.lwc-checkout-coupon-option.is-expired img { filter: grayscale(1); }.lwc-checkout-coupon-option.is-expired .lwc-coupon-option-status { color: #b42318; }
+.lwc-coupon-modal__empty { margin: 0; padding: 18px; border: 1px dashed #d0d5dd; border-radius: 9px; background: #f8fafc; color: #667085; font-size: 14px; line-height: 1.5; text-align: center; }
+@media (max-width: 600px) { .lwc-coupon-modal { align-items: end; padding: 0; }.lwc-coupon-modal__panel { width: 100%; max-height: 82dvh; border-radius: 14px 14px 0 0; }.lwc-coupon-modal__header { padding: 20px 18px 14px; }.lwc-coupon-modal__list { padding: 14px 18px; }.lwc-coupon-modal__footer { padding: 12px 18px max(12px, env(safe-area-inset-bottom)); }.lwc-coupon-modal__selection { max-width: 150px; } }
+
+.lwc-promo-card img {
+	display: block;
+	width: 100%;
+	max-height: 240px;
+	object-fit: cover;
+}
+
+.lwc-promo-card-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 8px;
+	padding: 16px 18px 18px;
+}
+
+.lwc-promo-card-body strong {
+	display: block;
+	margin: 0;
+	color: var(--lwc-promo-accent, inherit);
+	font-family: inherit;
+	font-size: 18px;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.lwc-promo-card-body span {
+	display: block;
+	color: inherit;
+	font-size: 14px;
+	line-height: 1.5;
+	opacity: .76;
+}
+
+@media (max-width: 420px) {
+	.lwc-promo-dashboard-grid--account {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lwc-promo-card {
+		transition: none;
+	}
+
+	.lwc-promo-card:hover,
+	.lwc-promo-card:focus-visible {
+		transform: none;
+	}
+}
+
+/* Mobile checkout: WooCommerce gives the order summary sidebar
+ * (`.wc-block-checkout__sidebar`) `order:0` below its 700px breakpoint, so it
+ * renders *before* the main column. Its title then shows as a bare
+ * "Order summary" heading at the top of the checkout while the sidebar body
+ * stays collapsed — a redundant duplicate of the full order summary (which
+ * includes the promo picker) rendered at the bottom via the
+ * `checkout-order-summary-block-fill` wrapper inside the actions block.
+ *
+ * The breakpoint is mirrored as a container query on purpose: WooCommerce
+ * scopes its own layout rules to `@container (max-width: 699px)` against
+ * `.wp-block-woocommerce-checkout` (`container-type: inline-size`), which can
+ * disagree with a plain viewport media query (e.g. a 720px viewport with a
+ * 690px container). Matching the container query keeps both rules in sync.
+ */
+@container (max-width: 699px) {
+	.wc-block-checkout__sidebar .wc-block-components-checkout-order-summary__title {
+		display: none !important;
+	}
+}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1>Penanda Login untuk Promo — Pratinjau</h1>
+	<p class="lede">Tampilan nyata dari markup plugin. Pengunjung tanpa akun melihat ajakan login, bukan kolom kupon.</p>
+
+	<section>
+		<h2>1. Keranjang — tamu (server-rendered)</h2>
+		<div class="frame frame--cart">
+			<span class="pill">Guest</span>
+			<div class="summary-row"><span>Subtotal</span><span>Rp 1.500.000</span></div>
+			<div class="summary-row"><span>Pengiriman</span><span>Rp 35.000</span></div>
+			<div class="summary-row total"><span>Total</span><span>Rp 1.535.000</span></div>
+			<div class="lwc-checkout-account-promo lwc-guest-promo-login"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%</span><span class="lwc-checkout-account-promo__content"><strong>Promo khusus menantimu!</strong><span>Login atau buat akun gratis untuk melihat dan memakai kupon promo.</span></span><a class="lwc-checkout-account-promo__link" href="http://localhost/ddistillers/my-account/?redirect_to=http://localhost/ddistillers/checkout/">Login / Daftar</a></div>
+			<p class="note">Kolom kupon WooCommerce disembunyikan untuk tamu; ajakan login berdiri di tempat yang sama.</p>
+		</div>
+	</section>
+
+	<section>
+		<h2>2. Checkout Block — tamu (di-suntik JS)</h2>
+		<div class="frame frame--block">
+			<span class="pill">Guest</span>
+			<div class="summary-row"><span>Subtotal</span><span>Rp 1.500.000</span></div>
+			<div class="summary-row total"><span>Total</span><span>Rp 1.535.000</span></div>
+			<div class="lwc-checkout-account-promo lwc-guest-promo-login"><span class="lwc-checkout-account-promo__icon" aria-hidden="true">%</span><span class="lwc-checkout-account-promo__content"><strong>Promo khusus menantimu!</strong><span>Login atau buat akun gratis untuk melihat dan memakai kupon promo.</span></span><a class="lwc-checkout-account-promo__link" href="http://localhost/ddistillers/my-account/?redirect_to=http://localhost/ddistillers/checkout/">Login / Daftar</a></div>
+		</div>
+	</section>
+
+	<section>
+		<h2>3. My Account &rsaquo; Coupon — tamu</h2>
+		<div class="frame">
+			<div class="lwc-promo-dashboard lwc-promo-dashboard--guest"><div class="lwc-promo-dashboard-header"><h2>Coupons &amp; Promo</h2><p>Promo coupons are exclusive for registered customers.</p></div><p>Log in or create a free account to see and redeem the promos that are waiting for you.</p><p class="lwc-promo-dashboard-actions"><a class="button" href="http://localhost/ddistillers/my-account/?redirect_to=http://localhost/ddistillers/checkout/">Login / Register</a></p></div>
+		</div>
+	</section>
+
+	<section>
+		<h2>4. My Account &rsaquo; Coupon — pelanggan terdaftar</h2>
+		<div class="frame">
+			<div class="lwc-promo-dashboard"><div class="lwc-promo-dashboard-header"><h2>Coupons &amp; Promo</h2><p>Choose an available offer and it will be applied at checkout.</p></div><div class="lwc-promo-dashboard-grid lwc-promo-dashboard-grid--account" role="list"><a class="lwc-promo-card lwc-promo-card--account" role="listitem" href="http://localhost/ddistillers/checkout/" data-coupon="lwcsmoke86612"><img src="http://localhost/ddistillers/wp-content/plugins/lovecatz-woocommerce-complement/assets/2026_VOUCHER-REORDER_FINAL.webp" alt="Promo coupon image" loading="lazy" decoding="async" /><div class="lwc-promo-card-body"><strong>lwcsmoke86612</strong><span>Click to use this coupon at checkout.</span></div></a><a class="lwc-promo-card lwc-promo-card--account" role="listitem" href="http://localhost/ddistillers/checkout/" data-coupon="lwcdebug1"><img src="http://localhost/ddistillers/wp-content/plugins/lovecatz-woocommerce-complement/assets/2026_VOUCHER-REORDER_FINAL.webp" alt="Promo coupon image" loading="lazy" decoding="async" /><div class="lwc-promo-card-body"><strong>lwcdebug1</strong><span>Click to use this coupon at checkout.</span></div></a><a class="lwc-promo-card lwc-promo-card--account" role="listitem" href="http://localhost/ddistillers/checkout/" data-coupon="diskon50"><img src="http://localhost/ddistillers/wp-content/uploads/2026/08/Screenshot-2026-08-14-095450.png" alt="Promo coupon image" loading="lazy" decoding="async" /><div class="lwc-promo-card-body"><strong>diskon50</strong><span>Click to use this coupon at checkout.</span></div></a></div></div>
+		</div>
+	</section>
+
+	<p class="note">Tautan: <span class="link">http://localhost/ddistillers/my-account/</span> &rarr; redirect_to=<span class="link">http://localhost/ddistillers/checkout/</span></p>
+</div>
+</body>
+</html>

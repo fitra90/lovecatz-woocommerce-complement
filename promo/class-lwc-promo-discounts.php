@@ -109,6 +109,35 @@ class LWC_Promo_Discounts {
 		add_filter( 'gettext', array( $this, 'rename_admin_shipping_discount_total' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate_coupon_combination' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_error', array( $this, 'combination_error_message' ), 20, 3 );
+		// Discounts are reserved for registered customers, so the rule has to be
+		// enforced here where both the classic AJAX flow and the Store API funnel.
+		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'require_account_for_coupons' ), 5, 3 );
+		add_filter( 'woocommerce_coupon_error', array( $this, 'account_required_coupon_error' ), 5, 3 );
+		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'drop_guest_session_coupons' ), 5 );
+	}
+
+	/**
+	 * Whether the current visitor may use discounts at all.
+	 *
+	 * Coupons are a registered-customer benefit, so a visitor without an
+	 * account never passes coupon validation, no matter which surface applies
+	 * the code (cart AJAX, checkout block, Store API). Admin screens, admin
+	 * AJAX, WP-CLI and cron keep working with coupons because a signed-in
+	 * staffer is managing the order there, or a scheduled job is running
+	 * without a web request context.
+	 *
+	 * @return bool
+	 */
+	public static function discounts_require_account() {
+		if ( is_user_logged_in() ) {
+			return false;
+		}
+
+		if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/** Whether a coupon is configured to support combinations. */
@@ -167,6 +196,56 @@ class LWC_Promo_Discounts {
 		}
 
 		return $message;
+	}
+
+	/** Reject every coupon for a visitor who does not have an account. */
+	public function require_account_for_coupons( $valid, $coupon, $discounts ) {
+		unset( $coupon, $discounts );
+
+		return $valid && ! self::discounts_require_account();
+	}
+
+	/**
+	 * Explain a guest coupon rejection as an invitation to create an account.
+	 *
+	 * Plain text on purpose: the same message travels through the classic cart
+	 * notice and the Store API JSON response, where markup would be escaped and
+	 * shown to the customer verbatim.
+	 *
+	 * @param string   $error   Error message.
+	 * @param int      $code    Coupon error code.
+	 * @param WC_Coupon $coupon Coupon instance.
+	 * @return string
+	 */
+	public function account_required_coupon_error( $error, $code, $coupon ) {
+		if ( ! self::discounts_require_account() || ! $coupon instanceof WC_Coupon ) {
+			return $error;
+		}
+
+		return sprintf(
+			/* translators: %s: coupon code */
+			__( 'Coupons are available for registered customers only. Please log in or create an account to use "%s".', 'lovecatz-wc' ),
+			$coupon->get_code()
+		);
+	}
+
+	/**
+	 * Drop coupons that were applied before the customer logged out.
+	 *
+	 * Coupons restored from a session are not re-validated by WooCommerce, so a
+	 * shopper who logs out would keep a discount that was earned while
+	 * logged in. Removing them here keeps the cart total honest.
+	 *
+	 * @param WC_Cart $cart Current cart.
+	 */
+	public function drop_guest_session_coupons( $cart ) {
+		if ( ! $cart instanceof WC_Cart || ! self::discounts_require_account() ) {
+			return;
+		}
+
+		if ( $cart->get_applied_coupons() ) {
+			$cart->remove_coupons();
+		}
 	}
 
 	/** Determine whether an applied coupon conflicts with a candidate coupon. */
