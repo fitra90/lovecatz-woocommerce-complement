@@ -3,14 +3,14 @@
  * Schema-driven dummy payload generator for the J&T Cargo Sandbox console.
  *
  * Each interface a merchant wants to test from the console needs an accurate
- * field schema: the manual only documents `add_order` (3.4.1) and `orders`
- * (3.4.2) in full; the other 18 endpoints say "Dokumentasi: [Link]".
+ * field schema. Schemas are not guessed: they come from the official J&T Cargo
+ * Open Platform documentation (open.jtcargo.co.id) and from live call sites in
+ * the plugin. Interfaces the public site does not document stay schema-less —
+ * inventing fields would send J&T a guessed schema.
  *
- * This class owns a small registry of schemas. Schemas are not guessed: they
- * come from the official manual and from live call sites in the plugin. New
- * interfaces are added through the `lwc_jtc_payload_schemas` filter, so the
- * console button keeps working without editing this file when J&T publishes
- * a new endpoint or when a new schema is supplied.
+ * This class owns a small registry of schemas. New interfaces are added
+ * through the `lwc_jtc_payload_schemas` filter, so the console button keeps
+ * working without editing this file when J&T publishes a new endpoint.
  *
  * A schema is a flat map `key => field`. Each field carries:
  *
@@ -27,7 +27,7 @@
  * every length and enum constraint, recurses through nested objects, and
  * produces exactly one array element for arrays. The output is guaranteed
  * to pass `LWC_JTC_Order::validate_payload()` when the schema was derived
- * from the manual table.
+ * from the official field table.
  *
  * @package LoveCatzWC
  */
@@ -53,25 +53,121 @@ class LWC_JTC_Payload_Schema {
 				'fields'   => self::add_order_fields(),
 			),
 			'orders' => array(
-				// Manual 3.4.2 publishes the full Create Order table for Check
-				// Order by copy/paste, but every live Check Order uses only
-				// txlogisticId. Seed the minimum and let J&T's own response
-				// reveal the real contract.
+				// Official doc (checking order): command is required — 1 by
+				// customer order number, 2 by waybill, 3 by time range,
+				// 4 by internal order number. serialNumber is a plain string
+				// list holding the numbers for commands 1 and 2.
 				'type'     => self::TYPE_OBJECT,
 				'required' => true,
 				'fields'   => array(
-					'txlogisticId' => self::f( self::TYPE_STRING, true, 50, 'ID12345678' ),
+					'command'      => self::f( self::TYPE_NUMBER, true, 5, null, array( 1, 2, 3, 4 ) ),
+					'serialNumber' => self::f( self::TYPE_ARRAY, false, null, null, null, null, null, self::f( self::TYPE_STRING, true, 50, 'ID12345678' ) ),
 				),
 			),
 			'shipment_track' => array(
-				// Manual 3.5.1 has no field table. The only key the plugin
-				// uses to query tracking is billCode.
+				// Official doc (Logistics track query): billCodes, plural,
+				// comma separated, up to 30 waybills per request.
 				'type'     => self::TYPE_OBJECT,
 				'required' => true,
 				'fields'   => array(
-					'billCode' => self::f( self::TYPE_STRING, true, 50, '200012345678' ),
+					'billCodes' => self::f( self::TYPE_STRING, true, 500, '200012345678' ),
 				),
 			),
+			'cancel_order' => array(
+				// Official doc (cancel order): billCode, orderType,
+				// txlogisticId, and a cancellation reason are all required.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(
+					'billCode'     => self::f( self::TYPE_STRING, true, 50, '200012345678' ),
+					'orderType'    => self::f( self::TYPE_ENUM, true, 30, null, array( '1', '2' ) ),
+					'txlogisticId' => self::f( self::TYPE_STRING, true, 50, 'ID12345678' ),
+					'reason'       => self::f( self::TYPE_STRING, true, 50, 'Sandbox cancellation test' ),
+				),
+			),
+			'address' => array(
+				// Official doc (province,city,district inquiry): the only
+				// business parameter is customerCode, which LWC_JTC_API
+				// injects at send time — the sample body is therefore empty.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(),
+			),
+			'dispatch_code' => array(
+				// Official doc (10-character code inquiry): sender/receiver
+				// objects with prov/city/area/address; billCode optional.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(
+					'sender'   => self::f( self::TYPE_OBJECT, true, null, null, null, null, self::dispatch_code_party() ),
+					'receiver' => self::f( self::TYPE_OBJECT, true, null, null, null, null, self::dispatch_code_party() ),
+					'billCode' => self::f( self::TYPE_STRING, false, 30, '200012345678' ),
+				),
+			),
+			'delivery_sla' => array(
+				// Official doc (Freight aging inquiry): paymentType 1/2/3,
+				// expressType FT/AIR, origin and destination names, delivery
+				// type, and goods type. customerCode + digest are injected.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(
+					'paymentType'   => self::f( self::TYPE_NUMBER, true, 4, null, array( 1, 2, 3 ) ),
+					'expressType'   => self::f( self::TYPE_ENUM, true, 30, null, array( 'FT', 'AIR' ) ),
+					'deliveryType'  => self::f( self::TYPE_ENUM, true, 30, null, array( '101' ) ),
+					'goodsType'     => self::f( self::TYPE_ENUM, true, 30, null, self::goods_type_enum() ),
+					'weight'        => self::f( self::TYPE_STRING, true, 12, '11' ),
+					'totalQuantity' => self::f( self::TYPE_NUMBER, true, 4, 1 ),
+					'sendProv'      => self::f( self::TYPE_STRING, true, 32, 'DKI Jakarta' ),
+					'sendCity'      => self::f( self::TYPE_STRING, true, 32, 'Jakarta Utara' ),
+					'sendArea'      => self::f( self::TYPE_STRING, true, 32, 'Penjaringan' ),
+					'receiveProv'   => self::f( self::TYPE_STRING, true, 32, 'Banten' ),
+					'receiveCity'   => self::f( self::TYPE_STRING, true, 32, 'Kota Serang' ),
+					'receiveArea'   => self::f( self::TYPE_STRING, true, 32, 'Serang' ),
+				),
+			),
+			'subscribe_tracking' => array(
+				// Official doc (Logistics track subscription): Id is the api
+				// account id, list carries the trace nodes and the JT-prefixed
+				// waybill. The real Id must be filled in before sending.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(
+					'Id'   => self::f( self::TYPE_NUMBER, true, 20, 1 ),
+					'list' => self::f(
+						self::TYPE_OBJECT,
+						true,
+						null,
+						null,
+						null,
+						null,
+						array(
+							'traceNode'   => self::f( self::TYPE_STRING, true, 32, '1&3&4&5&10&11&12&13' ),
+							'waybillCode' => self::f( self::TYPE_STRING, true, 32, 'JT200012345678' ),
+						)
+					),
+				),
+			),
+			'batch_waybill_number' => array(
+				// Official doc (get batch billCode): the customer code field
+				// here is named "code" (not customerCode) plus the count num.
+				// Fill the real customer code before sending.
+				'type'     => self::TYPE_OBJECT,
+				'required' => true,
+				'fields'   => array(
+					'code' => self::f( self::TYPE_STRING, true, 30, 'J0086024191' ),
+					'num'  => self::f( self::TYPE_NUMBER, true, 6, 1 ),
+				),
+			),
+		);
+	}
+
+	/** Minimal sender/receiver party for the 10-character code inquiry. */
+	private static function dispatch_code_party() {
+		return array(
+			'prov'    => self::f( self::TYPE_STRING, true, 32, 'DKI Jakarta' ),
+			'city'    => self::f( self::TYPE_STRING, true, 32, 'Jakarta Utara' ),
+			'area'    => self::f( self::TYPE_STRING, true, 32, 'Penjaringan' ),
+			'address' => self::f( self::TYPE_STRING, true, 150, 'Jl. ABC No. 123' ),
 		);
 	}
 
@@ -112,7 +208,7 @@ class LWC_JTC_Payload_Schema {
 
 		return array(
 			'txlogisticId'  => self::f( self::TYPE_STRING, true, 50, 'ID12345678' ),
-			'expressType'   => self::f( self::TYPE_ENUM, true, 30, null, array( 'FT' ) ),
+			'expressType'   => self::f( self::TYPE_ENUM, true, 30, null, array( 'FT', 'AIR' ) ),
 			'orderType'     => self::f( self::TYPE_ENUM, true, 30, null, array( '1', '2' ) ),
 			'serviceType'   => self::f( self::TYPE_ENUM, true, 30, null, array( '01', '02' ) ),
 			'deliveryType'  => self::f( self::TYPE_ENUM, true, 30, null, array( '101' ) ),
@@ -128,6 +224,7 @@ class LWC_JTC_Payload_Schema {
 			'offerFee'      => self::f( self::TYPE_STRING, true, 12, '2500000' ),
 			'remark'        => self::f( self::TYPE_STRING, false, 200, 'Sandbox joint debugging test' ),
 			'items'         => self::f( self::TYPE_ARRAY, false, null, null, null, null, null, $item ),
+			'operateType'   => self::f( self::TYPE_NUMBER, true, 4, null, array( 1, 2 ) ),
 			'signReceipt'   => self::f( self::TYPE_NUMBER, false, 4, 0, array( 0, 1 ), 0 ),
 			'waybillNo'     => self::f( self::TYPE_STRING, false, 50, '200012345678' ),
 		);
@@ -237,7 +334,13 @@ class LWC_JTC_Payload_Schema {
 				$samples[ $slug ] = null;
 				continue;
 			}
-			$samples[ $slug ] = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT );
+			$json = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT );
+			// An object with no business parameters (e.g. the address inquiry)
+			// encodes as the array literal "[]"; the API expects a JSON object.
+			if ( '[]' === $json ) {
+				$json = '{}';
+			}
+			$samples[ $slug ] = $json;
 		}
 		return $samples;
 	}

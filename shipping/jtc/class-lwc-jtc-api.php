@@ -20,10 +20,12 @@ class LWC_JTC_API {
 			'orders' => 'order/getOrders', 'location' => 'location/getLocation',
 			'verify_waybill_account' => 'vip/checkCusPwd', 'out_of_area' => 'online/cover',
 			'delivery_range' => 'online/pca', 'network_info' => 'network/getInfo',
-			'delivery_sla' => 'order/agingCost/get', 'add_loose_order' => 'order/addLooseOrder',
+			// Official doc (Freight aging inquiry): agingCost/get, no order/ prefix.
+			'delivery_sla' => 'agingCost/get', 'add_loose_order' => 'order/addLooseOrder',
 			'subscribe_tracking' => 'trace/subscribe', 'waybill_balance' => 'ess/balance',
 			'save_real_name' => 'realName/saveOrUpdate', 'freight_calculation' => 'spmComCost/getComCost',
-			'batch_waybill_number' => 'order/getBatchBillCode', 'three_segment_code' => 'threeCode/getThreeSegmentCode',
+			// Official doc (get batch billCode): billCode/getBatchBillCode, no order/ prefix.
+			'batch_waybill_number' => 'billCode/getBatchBillCode', 'three_segment_code' => 'threeCode/getThreeSegmentCode',
 		);
 	}
 

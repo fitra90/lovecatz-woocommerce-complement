@@ -8,11 +8,11 @@
  *   txlogisticId  String(50)  Y  "Nomor order pelanggan"  <- customer order number
  *   customerCode  String(30)  Y  injected by LWC_JTC_API
  *   digest        String(30)  Y  injected by LWC_JTC_API (body signature, 3.3.2)
- *   expressType   String(30)  Y  FT : FastTrack
- *   orderType     String(30)  Y  1 : Non-VIP / 2 : VIP
+ *   expressType   String(30)  Y  FT : FastTrack / AIR
+ *   orderType     String(11)  Y  1 : Non-VIP / 2 : VIP
  *   serviceType   String(30)  Y  01 : Pick-Up / 02 : Drop Off
  *   deliveryType  String(30)  Y  101 : Pengiriman sampai tujuan
- *   payType       String(30)  Y  PP_PM / CC_CASH / PP_CASH
+ *   payType       String(30)  N  PP_PM / CC_CASH / PP_CASH
  *   sender        Object      Y  see manual [7]
  *   receiver      Object      Y  see manual [8]
  *   goodsType     String(30)  Y  bm000001 .. bm000011
@@ -20,12 +20,16 @@
  *   width         Int(6)      N  cm
  *   height        Int(6)      N  cm
  *   weight        String(12)  Y  KG, min 1 / max 9999.99
- *   totalQuantity Int(4)      N  jumlah KOLI (bukan jumlah barang)
- *   offerFee      String(12)  N  nilai barang (IDR)
+ *   totalQuantity Int(4)      N  jumlah KOLI 1..999 (bukan jumlah barang)
+ *   offerFee      String(12)  N  nilai barang / pertanggungan (IDR)
  *   remark        String(200) N
  *   items         Object[]    N  see manual [5]
+ *   operateType   Int(4)      Y  1 : Add / 2 : Modify
  *   signReceipt   Int(4)      N  0 : Tidak / 1 : Ya
  *   waybillNo     String(50)  N  pre-booked AWB
+ *
+ * The addOrder response returns data.billCode as a List<String> (one waybill
+ * per koli), so evaluate() accepts both a scalar and an array.
  *
  * Flow: build -> validate -> one canonical payload -> JSON -> digest -> POST.
  *
@@ -46,6 +50,9 @@ class LWC_JTC_Order {
 	const WEIGHT_MIN_KG = 1.0;
 	const WEIGHT_MAX_KG = 9999.99;
 
+	/** Official doc: totalQuantity is 1 <= pieces <= 999. */
+	const TOTAL_QUANTITY_MAX = 999;
+
 	/** Field limits declared by the manual. Values longer than this are rejected. */
 	const LIMITS = array(
 		'txlogisticId' => 50,
@@ -58,6 +65,7 @@ class LWC_JTC_Order {
 		'weight'       => 12,
 		'offerFee'     => 12,
 		'remark'       => 200,
+		'operateType'  => 4,
 		'waybillNo'    => 50,
 	);
 
@@ -168,6 +176,7 @@ class LWC_JTC_Order {
 			'weight'        => $weights['weight'],
 			'totalQuantity' => $quantity,
 			'offerFee'      => $value,
+			'operateType'   => self::operate_type( $order ),
 			'signReceipt'   => 0,
 		);
 
@@ -198,63 +207,6 @@ class LWC_JTC_Order {
 		 * @param WC_Order $order   Order.
 		 */
 		return (array) apply_filters( 'lwc_jtc_add_order_payload', $payload, $order );
-	}
-
-	/**
-	 * Dummy add_order payload for the Sandbox Test console.
-	 *
-	 * Only interfaces the manual documents in full get a sample: inventing
-	 * fields for the others would send J&T a guessed schema. Values are
-	 * obviously fictional and carry no credential - customerCode and digest are
-	 * added by LWC_JTC_API at send time.
-	 *
-	 * @return array
-	 */
-	public static function sample_payload() {
-		$sender = array(
-			'name'        => 'Kucing Oren',
-			'company'     => 'PT Kucing Sejahtera',
-			'postCode'    => '14450',
-			'mobile'      => '0821987654321',
-			'countryCode' => 'IDN',
-			'prov'        => 'DKI Jakarta',
-			'city'        => 'Jakarta Utara',
-			'area'        => 'Penjaringan',
-			'address'     => 'Jl. ABC No. 123',
-		);
-		$receiver             = $sender;
-		$receiver['name']     = 'Kucing Hitam';
-		$receiver['company']  = 'PT Kucing Bahagia';
-		$receiver['address']  = 'Jl. DEF No. 45';
-
-		return array(
-			'txlogisticId'  => 'ID12345678',
-			'expressType'   => 'FT',
-			'orderType'     => '1',
-			'serviceType'   => '01',
-			'deliveryType'  => '101',
-			'payType'       => 'PP_PM',
-			'sender'        => $sender,
-			'receiver'      => $receiver,
-			'goodsType'     => 'bm000007',
-			'length'        => 10,
-			'width'         => 10,
-			'height'        => 10,
-			'weight'        => '11',
-			'totalQuantity' => 1,
-			'offerFee'      => '2500000',
-			'remark'        => 'Sandbox joint debugging test',
-			'items'         => array(
-				array(
-					'itemType'      => 'bm000007',
-					'itemName'      => 'Whiskas',
-					'number'        => 1,
-					'itemValue'     => '100000',
-					'priceCurrency' => 'IDR',
-					'desc'          => 'Makanan kucing',
-				),
-			),
-		);
 	}
 
 	/**
@@ -297,6 +249,7 @@ class LWC_JTC_Order {
 			'goodsType'    => __( 'J&T Cargo: Jenis barang (goodsType) wajib diisi.', 'lovecatz-wc' ),
 			'weight'       => __( 'J&T Cargo: Berat total wajib diisi.', 'lovecatz-wc' ),
 			'offerFee'     => __( 'J&T Cargo: Nilai barang wajib diisi.', 'lovecatz-wc' ),
+			'operateType'  => __( 'J&T Cargo: Tipe operasi order (operateType) wajib diisi.', 'lovecatz-wc' ),
 		);
 		foreach ( $required as $field => $message ) {
 			if ( ! isset( $payload[ $field ] ) || '' === trim( (string) $payload[ $field ] ) ) {
@@ -336,6 +289,23 @@ class LWC_JTC_Order {
 		}
 		if ( isset( $payload['totalQuantity'] ) && ( ! is_numeric( $payload['totalQuantity'] ) || (int) $payload['totalQuantity'] < 1 ) ) {
 			return new WP_Error( 'lwc_jtc_invalid_quantity', __( 'J&T Cargo: jumlah koli minimal 1.', 'lovecatz-wc' ) );
+		}
+		if ( isset( $payload['totalQuantity'] ) && is_numeric( $payload['totalQuantity'] ) && (int) $payload['totalQuantity'] > self::TOTAL_QUANTITY_MAX ) {
+			return new WP_Error(
+				'lwc_jtc_long_quantity',
+				sprintf(
+					/* translators: %d: maximum number of packages allowed by J&T. */
+					__( 'J&T Cargo: jumlah koli melebihi batas maksimum %d.', 'lovecatz-wc' ),
+					self::TOTAL_QUANTITY_MAX
+				)
+			);
+		}
+
+		// Official doc: operateType is 1 (Add) or 2 (Modify). A missing or alien
+		// value would fail J&T-side validation, so reject it before any HTTP call.
+		$operate_type = isset( $payload['operateType'] ) ? (int) $payload['operateType'] : 0;
+		if ( ! in_array( $operate_type, array( 1, 2 ), true ) ) {
+			return new WP_Error( 'lwc_jtc_invalid_operate_type', __( 'J&T Cargo: operateType harus 1 (tambah order) atau 2 (ubah order).', 'lovecatz-wc' ) );
 		}
 
 		// 5. Sender and receiver.
@@ -455,7 +425,11 @@ class LWC_JTC_Order {
 			);
 		}
 
+		// Primary AWB keeps the existing display paths working (order list,
+		// label, metabox); the full per-koli list is kept alongside it.
+		$waybills = ! empty( $business['waybills'] ) ? array_values( $business['waybills'] ) : array( $awb );
 		$order->update_meta_data( '_lwc_jt_cargo_awb', $awb );
+		$order->update_meta_data( '_lwc_jt_cargo_awbs', $waybills );
 		$order->update_meta_data( '_lwc_jtc_txlogistic_id', $number );
 		if ( '' !== $business['sorting_code'] ) {
 			$order->update_meta_data( '_lwc_jt_cargo_three_segment', $business['sorting_code'] );
@@ -463,10 +437,10 @@ class LWC_JTC_Order {
 		$order->delete_meta_data( '_lwc_jt_cargo_create_error' );
 		$order->add_order_note(
 			sprintf(
-				/* translators: 1: environment, 2: AWB number, 3: customer order number. */
+				/* translators: 1: environment, 2: AWB number(s), 3: customer order number. */
 				__( 'J&T Cargo %1$s order created. AWB: %2$s (customer order number %3$s).', 'lovecatz-wc' ),
 				ucfirst( $environment ),
-				$awb,
+				implode( ', ', $waybills ),
 				$number
 			)
 		);
@@ -491,8 +465,13 @@ class LWC_JTC_Order {
 	 * HTTP 2xx is transport success only. A shipment is created when J&T also
 	 * reports business success AND returns a waybill number.
 	 *
+	 * The official addOrder contract declares data.billCode as List<String>:
+	 * one waybill per koli. A scalar is accepted for compatibility, but an
+	 * array is never cast blindly to a string — casting an array to a string
+	 * would store the literal word "Array" as the AWB.
+	 *
 	 * @param array $response Envelope from LWC_JTC_API.
-	 * @return array success, code, message, waybill, sorting_code.
+	 * @return array success, code, message, waybill, waybills, sorting_code.
 	 */
 	public static function evaluate( $response ) {
 		$result = array(
@@ -500,6 +479,7 @@ class LWC_JTC_Order {
 			'code'         => '',
 			'message'      => __( 'J&T Cargo: respons tidak dikenali.', 'lovecatz-wc' ),
 			'waybill'      => '',
+			'waybills'     => array(),
 			'sorting_code' => '',
 		);
 
@@ -536,13 +516,26 @@ class LWC_JTC_Order {
 		$data              = isset( $body['data'] ) && is_array( $body['data'] ) ? $body['data'] : array();
 
 		foreach ( array( 'billCode', 'bill_code', 'waybillNo' ) as $key ) {
-			if ( isset( $data[ $key ] ) && '' !== (string) $data[ $key ] ) {
-				$result['waybill'] = (string) $data[ $key ];
+			if ( ! isset( $data[ $key ] ) ) {
+				continue;
+			}
+			if ( is_array( $data[ $key ] ) ) {
+				$codes = array_values( array_filter( array_map( 'strval', $data[ $key ] ), 'strlen' ) );
+				if ( ! empty( $codes ) ) {
+					$result['waybills'] = $codes;
+					$result['waybill']  = $codes[0];
+					break;
+				}
+				continue;
+			}
+			if ( is_scalar( $data[ $key ] ) && '' !== (string) $data[ $key ] ) {
+				$result['waybill']  = (string) $data[ $key ];
+				$result['waybills'] = array( $result['waybill'] );
 				break;
 			}
 		}
 		foreach ( array( 'sortingCode', 'sorting_code', 'threeSegmentCode' ) as $key ) {
-			if ( isset( $data[ $key ] ) && '' !== (string) $data[ $key ] ) {
+			if ( isset( $data[ $key ] ) && is_scalar( $data[ $key ] ) && '' !== (string) $data[ $key ] ) {
 				$result['sorting_code'] = (string) $data[ $key ];
 				break;
 			}
@@ -642,7 +635,13 @@ class LWC_JTC_Order {
 		}
 
 		$state = (string) $order->get_shipping_state();
-		$city  = (string) $order->get_shipping_city();
+		if ( '' === $state ) {
+			// Admin-created (PO/DP) orders may carry only a billing address;
+			// city, address, name, and postcode already fall back to billing,
+			// so the province falls back the same way.
+			$state = (string) $order->get_billing_state();
+		}
+		$city = (string) $order->get_shipping_city();
 		if ( '' === $city ) {
 			$city = (string) $order->get_billing_city();
 		}
@@ -822,13 +821,31 @@ class LWC_JTC_Order {
 		return (string) apply_filters( 'lwc_jtc_goods_type', 'bm000007', $order );
 	}
 
+	/**
+	 * Official required operateType: 1 adds the order, 2 modifies it.
+	 *
+	 * This plugin always creates a fresh shipment, so the default is 1; the
+	 * filter exists for a future update flow, not for current callers.
+	 */
+	private static function operate_type( WC_Order $order ) {
+		return (int) apply_filters( 'lwc_jtc_operate_type', 1, $order );
+	}
+
 	/* ------------------------------------------------------------------ *
 	 * Sanitising helpers
 	 * ------------------------------------------------------------------ */
 
-	/** J&T party fields accept the phone as entered; only noise is removed. */
+	/**
+	 * Normalise a phone to the digits-only 62xx format the official examples use.
+	 *
+	 * J&T Cargo examples show "6213111111111": no plus sign. A leading trunk
+	 * zero is converted to the 62 country prefix; anything else is left alone.
+	 */
 	private static function phone( $phone ) {
-		$phone = preg_replace( '/[^0-9+]/', '', (string) $phone );
+		$phone = preg_replace( '/[^0-9]/', '', (string) $phone );
+		if ( 0 === strpos( $phone, '0' ) ) {
+			$phone = '62' . substr( $phone, 1 );
+		}
 		return self::clip( (string) $phone, self::PARTY_LIMITS['mobile'] );
 	}
 

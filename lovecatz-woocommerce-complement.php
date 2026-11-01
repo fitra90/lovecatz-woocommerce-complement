@@ -993,7 +993,8 @@ function lwc_jtc_track_order() {
 		wp_send_json_error( array( 'message' => __( 'J&T Cargo AWB is not assigned yet.', 'lovecatz-wc' ) ), 400 );
 	}
 
-	$result = LWC_JTC_API::request( 'shipment_track', array( 'billCode' => $awb ) );
+	// Official doc (Logistics track query): the request field is billCodes.
+	$result = LWC_JTC_API::request( 'shipment_track', array( 'billCodes' => $awb ) );
 
 	// Store the payload verbatim so the label and later views reuse it.
 	if ( ! is_wp_error( $result ) ) {
