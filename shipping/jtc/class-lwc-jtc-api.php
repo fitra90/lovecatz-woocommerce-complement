@@ -20,7 +20,10 @@ class LWC_JTC_API {
 			'orders' => 'order/getOrders', 'location' => 'location/getLocation',
 			'verify_waybill_account' => 'vip/checkCusPwd', 'out_of_area' => 'online/cover',
 			'delivery_range' => 'online/pca', 'network_info' => 'network/getInfo',
-			// Official doc (Freight aging inquiry): agingCost/get, no order/ prefix.
+			// Freight aging inquiry. The manual prints order/agingCost/get, but
+			// the sandbox live probe (2026-11-02) returned HTTP 500 for the
+			// order/-prefixed path and code:1 SUCCESS for agingCost/get — the
+			// manual URL is a typo.
 			'delivery_sla' => 'agingCost/get', 'add_loose_order' => 'order/addLooseOrder',
 			'subscribe_tracking' => 'trace/subscribe', 'waybill_balance' => 'ess/balance',
 			'save_real_name' => 'realName/saveOrUpdate', 'freight_calculation' => 'spmComCost/getComCost',
@@ -53,6 +56,53 @@ class LWC_JTC_API {
 			'batch_waybill_number' => __( 'Obtain Waybill Number', 'lovecatz-wc' ),
 			'three_segment_code' => __( 'Three Address Level Code Query', 'lovecatz-wc' ),
 		);
+	}
+
+	/**
+	 * The narrowed Sandbox test list for joint debugging.
+	 *
+	 * Only interfaces that the J&T Cargo integration manual (Jan 2025)
+	 * documents with a Sandbox URL are listed — nothing is invented:
+	 *
+	 * - Create Shipment   3.4.1 Create Order            order/addOrder
+	 * - Get Shipment      3.4.2 Check Order             order/getOrders
+	 *   Detail
+	 * - Cancel Shipment   3.4.3 Cancel Order            order/cancelOrder
+	 * - Rate Check        3.4.6 Freight Aging Inquiry   agingCost/get
+	 *   (the manual's only cost interface; it returns the estimated cost AND
+	 *   the estimated delivery time/SLA in one response)
+	 * - Tracking          3.5.1 Logistics Track Query   logistics/trace
+	 * - Print Label       3.4.5 Waybill Template        order/printOrder
+	 *                     Inquiry
+	 *
+	 * Requested scopes deliberately NOT in this list, per the manual:
+	 * - "Authentication API": no dedicated endpoint exists — authentication is
+	 *   the digest signing (manual 3.3), exercised by every signed request.
+	 * - "Service List": no such interface is documented; cost and SLA are one
+	 *   interface (Freight Aging Inquiry, covered by the Rate Check entry).
+	 * - "Webhook Status Update": webhooks (3.4.4 Order Status Return, 3.5.3
+	 *   Trajectory Return) are client-provided push URLs with nothing to hit,
+	 *   and 3.5.2 Logistics Track Subscription is explicitly "Tidak
+	 *   digunakan" — so trace/subscribe is excluded too.
+	 *
+	 * @return array Registry slug => test label.
+	 */
+	public static function get_test_interfaces() {
+		$tests = array(
+			'add_order'      => __( 'Create Shipment', 'lovecatz-wc' ),
+			'orders'         => __( 'Get Shipment Detail', 'lovecatz-wc' ),
+			'cancel_order'   => __( 'Cancel Shipment', 'lovecatz-wc' ),
+			'delivery_sla'   => __( 'Rate Check', 'lovecatz-wc' ),
+			'shipment_track' => __( 'Tracking', 'lovecatz-wc' ),
+			'print_order'    => __( 'Print Label', 'lovecatz-wc' ),
+		);
+
+		/**
+		 * Filter the narrowed Sandbox test list.
+		 *
+		 * @param array $tests Ordered map of registry slug => label.
+		 */
+		return (array) apply_filters( 'lwc_jtc_test_interfaces', $tests );
 	}
 
 	public static function get_endpoints( $environment = 'sandbox', $uuid = '' ) {

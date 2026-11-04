@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.1.0' );
+define( 'LWC_VERSION', '1.1.1' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -951,11 +951,32 @@ function lwc_jtc_sandbox_request() {
 	$progress = LWC_JTC_Account::record_sandbox_test_result( $interface, $result['http_status'], $result['business_success'], $result['business_code'] );
 	$result['progress'] = lwc_jtc_format_sandbox_progress( $progress );
 
+	// Flow chaining: a successful Create Shipment stores its real billCode
+	// and txlogisticId so the dependent samples (Get Shipment Detail, Cancel
+	// Shipment, Tracking) reuse them instead of manual placeholder values.
+	if ( 'add_order' === $interface && ! empty( $result['business_success'] ) ) {
+		$created = isset( $result['response']['data'] ) ? $result['response']['data'] : array();
+		if ( is_string( $created ) ) {
+			$decoded = json_decode( $created, true );
+			$created = is_array( $decoded ) ? $decoded : array();
+		}
+		LWC_JTC_Account::store_sandbox_chain(
+			isset( $created['billCode'] ) ? $created['billCode'] : '',
+			isset( $created['txlogisticId'] ) ? $created['txlogisticId'] : ''
+		);
+	}
+
+	// Fresh samples + chain state travel with every response so the console
+	// reflects a just-created order without a page reload.
+	$result['samples'] = class_exists( 'LWC_JTC_Payload_Schema' ) ? LWC_JTC_Payload_Schema::get_samples_for_console() : array();
+	$result['chain']   = LWC_JTC_Account::get_sandbox_chain();
+
 	// Structured, dynamic rendering of whatever the server returned. The raw
 	// payload stays untouched; only the presentation layer reads it.
 	if ( class_exists( 'LWC_JTC_Response_View' ) ) {
-		$labels = LWC_JTC_API::get_interface_labels();
-		$label  = isset( $labels[ $interface ] ) ? $labels[ $interface ] : $interface;
+		$test_labels = LWC_JTC_API::get_test_interfaces();
+		$labels      = LWC_JTC_API::get_interface_labels();
+		$label       = isset( $test_labels[ $interface ] ) ? $test_labels[ $interface ] : ( isset( $labels[ $interface ] ) ? $labels[ $interface ] : $interface );
 		$result['view_html'] = LWC_JTC_Response_View::render_response(
 			$interface,
 			$result,
@@ -1032,7 +1053,7 @@ function lwc_jtc_format_sandbox_progress( $progress ) {
 	$interfaces = array();
 	$completed  = 0;
 	$total_hits = 0;
-	foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) {
+	foreach ( LWC_JTC_API::get_test_interfaces() as $name => $label ) {
 		$item = isset( $progress['interfaces'][ $name ] ) && is_array( $progress['interfaces'][ $name ] ) ? $progress['interfaces'][ $name ] : array();
 		$successes = min( 3, isset( $item['successes'] ) ? absint( $item['successes'] ) : 0 );
 		$total_hits += $successes;

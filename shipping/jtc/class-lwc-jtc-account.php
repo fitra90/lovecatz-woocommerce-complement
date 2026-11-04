@@ -127,6 +127,34 @@ class LWC_JTC_Account {
 		return $progress;
 	}
 
+	/**
+	 * Persist the identifiers returned by the last successful Create Shipment.
+	 *
+	 * The dependent Sandbox tests (Get Shipment Detail, Cancel Shipment,
+	 * Tracking) operate on an order that must exist first, so their sample
+	 * payloads reuse these real values instead of inventing new ones.
+	 *
+	 * @param string $bill_code     AWB from the Create Shipment response.
+	 * @param string $txlogistic_id Customer order number that was accepted.
+	 */
+	public static function store_sandbox_chain( $bill_code, $txlogistic_id ) {
+		$chain = array(
+			'billCode'     => sanitize_text_field( (string) $bill_code ),
+			'txlogisticId' => sanitize_text_field( (string) $txlogistic_id ),
+			'created_at'   => current_time( 'mysql' ),
+		);
+		if ( '' === $chain['billCode'] && '' === $chain['txlogisticId'] ) {
+			return;
+		}
+		update_option( 'lwc_jtc_sandbox_chain', $chain, false );
+	}
+
+	/** Return the stored Create Shipment identifiers, or an empty array. */
+	public static function get_sandbox_chain() {
+		$chain = get_option( 'lwc_jtc_sandbox_chain', array() );
+		return is_array( $chain ) ? $chain : array();
+	}
+
 	/** Copy old Cargo options into its dedicated legacy table when present. */
 	public static function sync_from_options() {
 		$data = array(

@@ -446,6 +446,44 @@
         var interfaceLabels = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_interface_labels) || {};
         var sampleLabelTemplate = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_sample_label) || 'Isi contoh payload (%s)';
         var noSchemaTemplate = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_no_schema_label) || 'Tidak ada schema untuk %s';
+        var chainData = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_chain) || null;
+        var chainLabelTemplate = (window.lwcShippingSettings && window.lwcShippingSettings.jtc_chain_label) || 'Contoh payload memakai data Create Shipment terakhir — %s';
+        // Tests that operate on an order Create Shipment must have created.
+        var chainSlugs = ['orders', 'cancel_order', 'shipment_track'];
+
+        function updateChainNote() {
+            var note = $('#lwc-jtc-chain-note');
+            if (!note.length) {
+                return;
+            }
+            var slug = interfaceSelect.val();
+            var parts = [];
+            if (chainData && chainData.billCode) {
+                parts.push('billCode ' + chainData.billCode);
+            }
+            if (chainData && chainData.txlogisticId) {
+                parts.push('txlogisticId ' + chainData.txlogisticId);
+            }
+            if (!chainData || !parts.length || chainSlugs.indexOf(slug) === -1) {
+                note.prop('hidden', true).text('');
+                return;
+            }
+            if (chainData.created_at) {
+                parts.push(chainData.created_at);
+            }
+            note.text(chainLabelTemplate.replace('%s', parts.join(' · '))).prop('hidden', false);
+        }
+
+        function applyResponseData(data) {
+            if (data && data.samples) {
+                samples = data.samples;
+            }
+            if (data && typeof data.chain !== 'undefined') {
+                chainData = data.chain || null;
+            }
+            refreshSampleButton();
+            updateChainNote();
+        }
 
         function refreshSampleButton() {
             if (!sampleButton.length) {
@@ -505,8 +543,10 @@
 
         interfaceSelect.on('change', updateEndpoint);
         methodSelect.on('change', updateEndpoint);
+        interfaceSelect.on('change', updateChainNote);
         updateEndpoint();
         refreshSampleButton();
+        updateChainNote();
 
         interfaceSelect.on('change', refreshSampleButton);
 
@@ -547,6 +587,7 @@
                 }
             }).done(function (response) {
                 var data = response && response.data ? response.data : {};
+                applyResponseData(data);
                 updateProgress(data.progress);
                 if (!response.success) {
                     setProviderStatus(statusEl, 'request_failed', data.message || 'Sandbox request failed.');
@@ -562,6 +603,7 @@
                 viewOutput.html(data.view_html || '');
             }).fail(function (xhr) {
                 var data = xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : {};
+                applyResponseData(data);
                 updateProgress(data.progress);
                 setProviderStatus(statusEl, 'request_failed', data.message || 'Sandbox request failed.');
                 responseOutput.text(JSON.stringify(data, null, 2));

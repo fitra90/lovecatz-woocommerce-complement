@@ -314,7 +314,66 @@ class LWC_JTC_Payload_Schema {
 		if ( null === $schema ) {
 			return null;
 		}
-		return self::build( $schema, $interface );
+		$payload = self::build( $schema, $interface );
+
+		// The customer order number is the caller's own reference (manual
+		// 3.4.1: "Nomor order pelanggan"), so every generated Create Shipment
+		// sample carries a fresh id — reusing the static example would only
+		// reproduce the sandbox "duplicate order" error on every retest.
+		if ( 'add_order' === $interface && isset( $payload['txlogisticId'] ) ) {
+			$payload['txlogisticId'] = 'ID' . gmdate( 'ymdHis' );
+		}
+
+		// Flow chaining: when a real Create Shipment succeeded earlier, its
+		// actual identifiers replace the manual examples in the dependent
+		// samples, so the console tests the order it really created.
+		foreach ( self::chain_overrides( $interface ) as $key => $value ) {
+			$payload[ $key ] = $value;
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * Field overrides sourced from the last successful Create Shipment.
+	 *
+	 * Get Shipment Detail, Cancel Shipment and Tracking all operate on an
+	 * order that must exist first — their samples therefore reuse the stored
+	 * billCode/txlogisticId instead of inventing new ones. Interfaces with no
+	 * dependency return an empty map and keep the plain manual examples.
+	 *
+	 * @param string $interface Interface slug.
+	 * @return array Field name => chained value.
+	 */
+	private static function chain_overrides( $interface ) {
+		if ( ! class_exists( 'LWC_JTC_Account' ) ) {
+			return array();
+		}
+		$chain = LWC_JTC_Account::get_sandbox_chain();
+		if ( empty( $chain ) ) {
+			return array();
+		}
+		$bill = isset( $chain['billCode'] ) ? (string) $chain['billCode'] : '';
+		$tx   = isset( $chain['txlogisticId'] ) ? (string) $chain['txlogisticId'] : '';
+
+		switch ( $interface ) {
+			case 'orders':
+				// command 1 queries by customer order number.
+				return '' !== $tx ? array( 'serialNumber' => array( $tx ) ) : array();
+			case 'cancel_order':
+				$overrides = array();
+				if ( '' !== $bill ) {
+					$overrides['billCode'] = $bill;
+				}
+				if ( '' !== $tx ) {
+					$overrides['txlogisticId'] = $tx;
+				}
+				return $overrides;
+			case 'shipment_track':
+				return '' !== $bill ? array( 'billCodes' => $bill ) : array();
+			default:
+				return array();
+		}
 	}
 
 	/**

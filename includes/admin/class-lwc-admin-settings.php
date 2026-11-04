@@ -137,6 +137,8 @@ class LWC_Admin_Settings {
 				'jtc_samples'          => class_exists( 'LWC_JTC_Payload_Schema' ) ? LWC_JTC_Payload_Schema::get_samples_for_console() : array(),
 				'jtc_sample_label'     => __( 'Isi contoh payload (%s)', 'lovecatz-wc' ),
 				'jtc_no_schema_label'  => __( 'Tidak ada schema untuk %s', 'lovecatz-wc' ),
+				'jtc_chain'            => class_exists( 'LWC_JTC_Account' ) ? LWC_JTC_Account::get_sandbox_chain() : array(),
+				'jtc_chain_label'      => __( 'Contoh payload memakai data Create Shipment terakhir — %s', 'lovecatz-wc' ),
 				'jtc_interface_labels' => class_exists( 'LWC_JTC_API' ) ? LWC_JTC_API::get_interface_labels() : array(),
 			)
 		);
@@ -1417,29 +1419,31 @@ class LWC_Admin_Settings {
 		echo '</div>';
 	}
 
-	/** Render a whitelisted console for all J&T Cargo Sandbox interfaces. */
+	/** Render the narrowed J&T Cargo Sandbox console (documented joint-debugging tests). */
 	public function render_jtc_sandbox_console() {
 		if ( ! class_exists( 'LWC_JTC_API' ) || ! class_exists( 'LWC_JTC_Account' ) ) {
 			return;
 		}
 		$credentials = LWC_JTC_Account::get_credentials( 'sandbox' );
 		$endpoints   = LWC_JTC_API::get_endpoints( 'sandbox', $credentials['uuid'] );
-		$labels      = LWC_JTC_API::get_interface_labels();
+		$paths       = LWC_JTC_API::get_interface_paths();
+		$tests       = LWC_JTC_API::get_test_interfaces();
 		$progress    = function_exists( 'lwc_jtc_format_sandbox_progress' ) ? lwc_jtc_format_sandbox_progress( LWC_JTC_Account::get_sandbox_test_progress() ) : array();
 		$completed   = isset( $progress['completed_endpoints'] ) ? (int) $progress['completed_endpoints'] : 0;
 		$total_hits  = isset( $progress['successful_hits'] ) ? (int) $progress['successful_hits'] : 0;
 		?>
 		<div class="lwc-jtc-sandbox-console">
 			<div class="lwc-provider-status-list lwc-jtc-test-summary">
-				<div id="lwc-jtc-local-progress" class="lwc-provider-status" data-status="<?php echo 20 === $completed ? 'connected' : 'partial'; ?>"><span class="lwc-provider-status-dot"></span><strong><?php esc_html_e( 'Local test:', 'lovecatz-wc' ); ?></strong> <span class="lwc-provider-status-label"><?php echo esc_html( sprintf( __( '%1$d/20 endpoints complete · %2$d/60 successful API hits', 'lovecatz-wc' ), $completed, $total_hits ) ); ?></span></div>
+				<div id="lwc-jtc-local-progress" class="lwc-provider-status" data-status="<?php echo count( $tests ) === $completed ? 'connected' : 'partial'; ?>"><span class="lwc-provider-status-dot"></span><strong><?php esc_html_e( 'Local test:', 'lovecatz-wc' ); ?></strong> <span class="lwc-provider-status-label"><?php echo esc_html( sprintf( __( '%1$d/%2$d endpoints complete · %3$d/%4$d successful API hits', 'lovecatz-wc' ), $completed, count( $tests ), $total_hits, count( $tests ) * 3 ) ); ?></span></div>
 				<div class="lwc-provider-status" data-status="partial"><span class="lwc-provider-status-dot"></span><strong><?php esc_html_e( 'Production approval:', 'lovecatz-wc' ); ?></strong> <span class="lwc-provider-status-label"><?php esc_html_e( 'Awaiting confirmation from J&T Cargo', 'lovecatz-wc' ); ?></span></div>
 			</div>
 			<div class="lwc-jtc-console-grid">
 				<div class="lwc-jtc-console-field lwc-jtc-console-endpoint">
 					<label for="lwc-jtc-test-interface"><?php esc_html_e( 'API Interface', 'lovecatz-wc' ); ?></label>
 					<select id="lwc-jtc-test-interface">
-						<?php foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) : ?>
-							<option value="<?php echo esc_attr( $name ); ?>" data-url="<?php echo esc_attr( isset( $endpoints[ $name ] ) ? $endpoints[ $name ] : '' ); ?>"><?php echo esc_html( isset( $labels[ $name ] ) ? $labels[ $name ] : $name ); ?></option>
+						<?php foreach ( $tests as $name => $label ) : ?>
+							<?php $path = isset( $paths[ $name ] ) ? $paths[ $name ] : ''; ?>
+							<option value="<?php echo esc_attr( $name ); ?>" data-url="<?php echo esc_attr( isset( $endpoints[ $name ] ) ? $endpoints[ $name ] : '' ); ?>"><?php echo esc_html( $path ? sprintf( '%1$s — %2$s', $label, $path ) : $label ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</div>
@@ -1467,17 +1471,18 @@ class LWC_Admin_Settings {
 				<button type="button" class="button button-primary" id="lwc-jtc-send-test"><?php esc_html_e( 'Send Sandbox Request', 'lovecatz-wc' ); ?></button>
 				<button type="button" class="button" id="lwc-jtc-fill-sample" disabled><?php esc_html_e( 'Isi contoh payload', 'lovecatz-wc' ); ?></button>
 			</p>
-			<p class="description"><?php esc_html_e( 'Tombol contoh diisi dari schema tiap interface yang tercatat di LWC_JTC_Payload_Schema. Interface yang tidak memiliki schema akan otomatis nonaktif. Untuk menambah atau mengubah schema, gunakan filter lwc_jtc_payload_schemas. Untuk menguji data order sungguhan, gunakan tombol Create J&T Cargo Order di halaman order WooCommerce.', 'lovecatz-wc' ); ?></p>
+			<p id="lwc-jtc-chain-note" class="description" hidden></p>
+			<p class="description"><?php esc_html_e( 'Tombol contoh diisi dari schema tiap interface yang tercatat di LWC_JTC_Payload_Schema. Interface yang tidak memiliki schema akan otomatis nonaktif. Setelah Create Shipment sukses, billCode dan txlogisticId asli disimpan lalu dipakai otomatis oleh contoh payload Get Shipment Detail, Cancel Shipment, dan Tracking. Untuk menambah atau mengubah schema, gunakan filter lwc_jtc_payload_schemas. Untuk menguji data order sungguhan, gunakan tombol Create J&T Cargo Order di halaman order WooCommerce.', 'lovecatz-wc' ); ?></p>
 			<div id="lwc-jtc-test-status" class="lwc-provider-status" data-status="idle" aria-live="polite"><span class="lwc-provider-status-dot"></span><span class="lwc-provider-status-label"><?php esc_html_e( 'Ready', 'lovecatz-wc' ); ?></span></div>
 			<div class="lwc-jtc-progress-wrap">
 				<h3><?php esc_html_e( 'Three-hit Progress', 'lovecatz-wc' ); ?></h3>
 				<table class="widefat striped lwc-jtc-progress-table">
 					<thead><tr><th><?php esc_html_e( 'API Interface', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Successful', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Attempts', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Last Result', 'lovecatz-wc' ); ?></th><th><?php esc_html_e( 'Last Test', 'lovecatz-wc' ); ?></th></tr></thead>
 					<tbody>
-					<?php foreach ( LWC_JTC_API::get_interface_paths() as $name => $path ) : ?>
+					<?php foreach ( $tests as $name => $label ) : ?>
 						<?php $item = isset( $progress['interfaces'][ $name ] ) ? $progress['interfaces'][ $name ] : array( 'successes' => 0, 'attempts' => 0, 'last_http' => 0, 'last_business_code' => '', 'last_tested_at' => '' ); ?>
 						<tr data-interface="<?php echo esc_attr( $name ); ?>" data-complete="<?php echo 3 === (int) $item['successes'] ? 'yes' : 'no'; ?>">
-							<td><?php echo esc_html( isset( $labels[ $name ] ) ? $labels[ $name ] : $name ); ?></td>
+							<td><?php echo esc_html( $label ); ?></td>
 							<td class="lwc-jtc-progress-success"><strong><?php echo esc_html( (int) $item['successes'] . '/3' ); ?></strong></td>
 							<td class="lwc-jtc-progress-attempts"><?php echo esc_html( (int) $item['attempts'] ); ?></td>
 							<td class="lwc-jtc-progress-http"><?php echo $item['last_http'] ? esc_html( 'HTTP ' . (int) $item['last_http'] . ( $item['last_business_code'] ? ' · API ' . $item['last_business_code'] : '' ) ) : '—'; ?></td>
