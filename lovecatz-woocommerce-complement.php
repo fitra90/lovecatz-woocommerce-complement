@@ -3,7 +3,7 @@
  * Plugin Name: LoveCatz WooCommerce Complement
  * Plugin URI:  https://github.com/fitra90/lovecatz-woocommerce-complement
  * Description: A comprehensive complement for WooCommerce including currency conversion and courier integrations (starting with J&T Express).
- * Version:     1.1.1
+ * Version:     1.1.2
  * Author:      Fitra Fadilana
  * Author URI:  https://fitrafadilana.my.id
  * Text Domain: lovecatz-wc
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'LWC_VERSION', '1.1.1' );
+define( 'LWC_VERSION', '1.1.2' );
 define( 'LWC_PLUGIN_FILE', __FILE__ );
 define( 'LWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -165,6 +165,7 @@ function lwc_init() {
 	require_once LWC_PLUGIN_DIR . 'shipping/jtc/class-lwc-jtc-response-view.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/jt/class-lwc-jt-route-mapper.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/fedex/class-lwc-fedex-api.php';
+	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-general-settings.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-shipping-provider.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-courier-registry.php';
 	require_once LWC_PLUGIN_DIR . 'shipping/class-lwc-awb-automation.php';
@@ -193,6 +194,7 @@ function lwc_init() {
 	$core->init();
 	( new LWC_Order_List_Shipping() )->init();
 	( new LWC_Order_Shipping_Switcher() )->init();
+	( new LWC_Shipping_General_Settings() )->init();
 	LWC_Indonesia_Regions::init();
 	if ( class_exists( 'LWC_JTC_Label' ) ) {
 		LWC_JTC_Label::init();

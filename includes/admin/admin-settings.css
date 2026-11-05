@@ -549,3 +549,22 @@
 .lwc-shipping-provider-separator {
 	color: #a7aaad;
 }
+
+/* Shipping → General option list. */
+.lwc-shipping-general-options {
+	margin: 0;
+}
+
+.lwc-shipping-general-options label {
+	display: block;
+	margin: 0 0 12px;
+}
+
+.lwc-shipping-general-options label:last-child {
+	margin-bottom: 0;
+}
+
+.lwc-shipping-general-options .description {
+	display: block;
+	margin-left: 25px;
+}

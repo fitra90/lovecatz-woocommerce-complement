@@ -172,14 +172,14 @@ class LWC_Admin_Settings {
 			$active_tab = 'settings';
 		}
 
-		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'fedex';
+		$provider = isset( $_GET['provider'] ) ? sanitize_text_field( wp_unslash( $_GET['provider'] ) ) : 'general';
 		// Keep old bookmarked J&T URLs working while presenting both carriers as
 		// independent providers in the settings navigation.
 		if ( 'jt' === $provider ) {
 			$provider = 'jt_express';
 		}
-		if ( ! in_array( $provider, array( 'jt_express', 'jt_cargo', 'fedex', 'rayspeed' ), true ) ) {
-			$provider = 'fedex';
+		if ( ! in_array( $provider, array( 'general', 'jt_express', 'jt_cargo', 'fedex', 'rayspeed' ), true ) ) {
+			$provider = 'general';
 		}
 		$jtc_view = isset( $_GET['jtc_view'] ) && 'sandbox' === sanitize_key( wp_unslash( $_GET['jtc_view'] ) ) ? 'sandbox' : 'account';
 		?>
@@ -212,6 +212,7 @@ class LWC_Admin_Settings {
 			<?php elseif ( 'shipping' === $active_tab ) : ?>
 				<?php
 				$shipping_providers = array(
+					'general'    => __( 'General', 'lovecatz-wc' ),
 					'fedex'      => __( 'FedEx', 'lovecatz-wc' ),
 					'jt_express' => __( 'J&T Express', 'lovecatz-wc' ),
 					'jt_cargo'   => __( 'J&T Cargo', 'lovecatz-wc' ),
@@ -227,7 +228,12 @@ class LWC_Admin_Settings {
 					<?php endforeach; ?>
 				</nav>
 
-			<?php if ( 'jt_express' === $provider ) : ?>
+			<?php if ( 'general' === $provider ) : ?>
+					<div class="notice notice-info inline"><p><?php esc_html_e( 'These settings apply to every courier. Use the tabs to the right to configure individual shipping providers.', 'lovecatz-wc' ); ?></p></div>
+					<form method="post" action="options.php">
+						<?php settings_fields( 'lwc_shipping_general_options' ); do_settings_sections( 'lwc_shipping_general_options' ); submit_button(); ?>
+					</form>
+			<?php elseif ( 'jt_express' === $provider ) : ?>
 					<div class="notice notice-info inline"><p><?php esc_html_e( 'J&T Express is available only for domestic shipments within Indonesia.', 'lovecatz-wc' ); ?></p></div>
 					<form method="post" action="options.php">
 						<?php settings_fields( 'lwc_shipping_jt_express_options' ); do_settings_sections( 'lwc_shipping_jt_express_options' ); submit_button(); ?>
@@ -255,7 +261,7 @@ class LWC_Admin_Settings {
 						submit_button();
 						?>
 					</form>
-				<?php else : ?>
+				<?php elseif ( 'rayspeed' === $provider ) : ?>
 					<div class="notice notice-info inline"><p><?php esc_html_e( 'RaySpeed RETAIL Sandbox is offered only for shipping destinations outside Indonesia.', 'lovecatz-wc' ); ?></p></div>
 					<form method="post" action="options.php">
 						<?php settings_fields( 'lwc_shipping_rayspeed_options' ); do_settings_sections( 'lwc_shipping_rayspeed_options' ); submit_button(); ?>
@@ -303,6 +309,11 @@ class LWC_Admin_Settings {
 	 */
 	public function register_settings() {
 		LWC_Logger::log( 'Registering admin settings.', 'info' );
+
+		// Shipping → General: provider-independent checkout defaults.
+		if ( class_exists( 'LWC_Shipping_General_Settings' ) ) {
+			LWC_Shipping_General_Settings::register_settings();
+		}
 
 		// J&T Express owns its settings and credential contract.
 		$jt_group = 'lwc_shipping_jt_express_options';
